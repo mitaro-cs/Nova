@@ -17,6 +17,7 @@ pub mod hls;
 pub mod host;
 pub mod images;
 pub mod library;
+pub mod logs;
 mod lordfilm;
 pub mod media_meta;
 pub mod meta;
@@ -182,6 +183,7 @@ impl Running {
 
 pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<Running> {
     std::fs::create_dir_all(&opts.data).with_context(|| format!("каталог данных {}", opts.data.display()))?;
+    logs::attach(&opts.data);
     let db = db::Db::open(&opts.data.join("fsfy.db"))?;
     let images = images::Images::new(opts.data.join("images"))?;
     let http = reqwest::Client::builder()

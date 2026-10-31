@@ -16,11 +16,7 @@ const HELP: &str = "Nova - домашний кинотеатр
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,fsfy=info".into()),
-        )
-        .init();
+    fsfy::logs::init("info,fsfy=info");
     let mut args = std::env::args().skip(1);
     let cmd = args.next().unwrap_or_default();
     if cmd != "serve" {

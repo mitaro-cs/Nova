@@ -143,9 +143,7 @@ fn drag_drop(window: &tauri::Window, e: &tauri::DragDropEvent) {
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    fsfy::logs::init("info");
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
