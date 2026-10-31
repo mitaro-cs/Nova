@@ -713,7 +713,7 @@
         <ul class="cast">
           {#each castAll ? team : team.slice(0, 7) as p, i (i)}
             <li>
-              <a class="pl" href={personHref(p)} title="{p.name} - фильмография">
+              <a class="pl" href={personHref(p)} title="{p.orig ? `${p.name} (${p.orig})` : p.name} - фильмография">
                 <span class="ava" style:background={p.photo ? undefined : placeholder(p.name)}>
                   {#if p.photo}<img use:fadeIn src={artW(p.photo, 342)} alt="" loading="lazy" decoding="async" width="72" height="72" />{:else}{initials(p.name)}{/if}
                 </span>

@@ -4,7 +4,7 @@
   import { percent } from '$lib/library';
   import Icon from '$lib/ui/Icon.svelte';
   import type { IconName } from '$lib/ui/icons';
-  import type { Status } from './types';
+  import type { Health, Status } from './types';
 
   // Обзор для хоста: сводка «всё ли в порядке», чек-лист с пояснениями и ссылками, куда идти,
   // цифры с объяснением и кто сейчас смотрит. Показатели обновляются раз в 5 секунд без
@@ -20,6 +20,24 @@
   $effect(() => {
     api<unknown[]>('/api/admin/users').then((u) => (people = u.length), () => {});
   });
+
+  let health = $state<Health | null>(null);
+  let copiedErrors = $state(false);
+  $effect(() => {
+    const load = () => api<Health>('/api/admin/health').then((h) => (health = h), () => {});
+    load();
+    const t = setInterval(() => document.visibilityState === 'visible' && load(), 30000);
+    return () => clearInterval(t);
+  });
+  const when = (ms: number) => new Date(ms).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'medium' });
+  const upFor = (s: number) => (s >= 86400 ? `${Math.floor(s / 86400)} д ${Math.floor((s % 86400) / 3600)} ч` : s >= 3600 ? `${Math.floor(s / 3600)} ч ${Math.floor((s % 3600) / 60)} мин` : `${Math.floor(s / 60)} мин`);
+  async function copyErrors() {
+    if (!health) return;
+    const text = [`Nova ${health.version}, работает ${upFor(health.uptimeSec)}`, ...health.errors.map((e) => `${when(e.at)} ${e.level} ${e.target}: ${e.message}`)].join('\n');
+    await navigator.clipboard?.writeText(text).catch(() => {});
+    copiedErrors = true;
+    setTimeout(() => (copiedErrors = false), 1500);
+  }
 
   async function copy() {
     if (!status.publicUrl) return;
@@ -218,7 +236,54 @@
   {/if}
 </section>
 
+{#if health}
+  <section class="card pane" aria-label="Недавние ошибки">
+    <h3><Icon name="flag" size={18} /> Недавние ошибки</h3>
+    <p class="muted small">Версия {health.version}, работает {upFor(health.uptimeSec)}, база {size(health.dbBytes)}. Подробный журнал лежит в папке данных, в «logs».</p>
+    {#if health.errors.length}
+      <ul class="errors">
+        {#each health.errors as e, i (i)}
+          <li class:err={e.level === 'ERROR'}><time>{when(e.at)}</time><b>{e.level === 'ERROR' ? 'Ошибка' : 'Предупреждение'}</b><span>{e.target}: {e.message}</span></li>
+        {/each}
+      </ul>
+      <button class="btn sm" onclick={copyErrors}><Icon name={copiedErrors ? 'check' : 'copy'} size={15} /> {copiedErrors ? 'Скопировано' : 'Скопировать для отчёта'}</button>
+    {:else}
+      <p class="muted">Ошибок нет.</p>
+    {/if}
+  </section>
+{/if}
+
 <style>
+  .errors {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0 14px;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+  }
+  .errors li {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 4px 12px;
+    align-items: baseline;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .errors time {
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .errors b {
+    color: var(--warn);
+  }
+  .errors li.err b {
+    color: var(--danger);
+  }
+  .errors span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
   .summary {
     display: flex;
     align-items: center;

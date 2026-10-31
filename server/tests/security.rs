@@ -90,6 +90,29 @@ async fn two_step_login_journal_and_local_management() {
     drop(running);
 }
 
+/// «Управление → Обзор»: версия, время работы и недавние ошибки - только администратору.
+#[tokio::test(flavor = "multi_thread")]
+async fn health_is_for_managers_and_lists_recent_errors() {
+    fsfy::logs::init("info");
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let anna = signup(&public, "anna").await;
+    assert_eq!(anna.get("/api/admin/health").await.status(), 403, "зрителю - нет");
+
+    tracing::error!("проверка журнала http://secret.example/x?t=abc");
+    let h = host.json("/api/admin/health").await;
+    assert_eq!(h["version"], fsfy::VERSION);
+    assert!(h["uptimeSec"].as_i64().unwrap() >= 0);
+    assert!(h["dbBytes"].as_i64().unwrap() > 0);
+    let errors = h["errors"].as_array().unwrap();
+    let line =
+        errors.iter().find(|e| e["message"].as_str().unwrap().contains("проверка журнала")).expect("ошибка в журнале");
+    assert_eq!(line["level"], "ERROR");
+    assert!(!line["message"].as_str().unwrap().contains("secret.example"), "адреса вырезаются");
+    running.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn film_from_discover_in_chat() {
     let dir = tempfile::tempdir().unwrap();

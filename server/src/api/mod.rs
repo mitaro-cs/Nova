@@ -170,6 +170,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/rooms/{id}/signal", post(rooms::signal))
         // управление
         .route("/api/admin/status", get(admin::status))
+        .route("/api/admin/health", get(admin::health))
         .route("/api/admin/settings", get(admin::settings).put(admin::save_settings))
         .route("/api/admin/logins", get(admin::logins))
         .route("/api/admin/libraries", get(admin::libraries).post(admin::add_library))

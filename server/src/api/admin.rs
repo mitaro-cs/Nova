@@ -75,6 +75,22 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
     })))
 }
 
+/// Диагностика для «Обзора»: версия, время работы, размер базы и недавние предупреждения и ошибки
+/// (из журнала приложения, без адресов и секретов).
+pub async fn health(State(app): State<Arc<App>>, _m: Manager) -> Out {
+    let db_bytes = ["fsfy.db", "fsfy.db-wal"]
+        .iter()
+        .filter_map(|n| std::fs::metadata(app.data.join(n)).ok())
+        .map(|m| m.len() as i64)
+        .sum::<i64>();
+    Ok(Json(json!({
+        "version": crate::VERSION,
+        "uptimeSec": crate::uptime_secs(),
+        "dbBytes": db_bytes,
+        "errors": crate::logs::recent(30),
+    })))
+}
+
 /// Своя папка для фильмов: создать (если нет) и подключить.
 pub async fn inbox(State(app): State<Arc<App>>, _m: Manager) -> Out {
     let dir = crate::library::inbox::folder(&app).map_err(|e| ApiError::bad("inbox", e.to_string()))?;

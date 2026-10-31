@@ -76,6 +76,8 @@ export interface Person {
   role: string | null;
   job: 'director' | 'writer' | 'creator' | 'actor' | string;
   photo: string | null;
+  /** Оригинальное написание, когда `name` переведён на русский. */
+  orig?: string | null;
 }
 
 export interface Progress {
@@ -368,7 +370,7 @@ export interface ExtDetail {
   countries: string[];
   languages: string[];
   aka: string[];
-  people: { name: string; job: string; role: string | null; photo: string | null }[];
+  people: { name: string; orig?: string | null; id?: string | null; job: string; role: string | null; photo: string | null }[];
   gallery: string[];
   similar: ExtCard[];
   localCard: Card | null;

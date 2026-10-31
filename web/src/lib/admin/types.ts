@@ -6,6 +6,15 @@ export interface UpdateInfo {
   checkedAt: number | null;
 }
 
+/** `GET /api/admin/health`: диагностика приложения. */
+export interface Health {
+  version: string;
+  uptimeSec: number;
+  dbBytes: number;
+  /** Последние предупреждения и ошибки, новые первыми (время - мс Unix). */
+  errors: { at: number; level: 'WARN' | 'ERROR'; target: string; message: string }[];
+}
+
 export interface Status {
   system?: { supported: boolean; sampledAt: number; cpu: number | null; memoryUsed: number | null; memoryTotal: number | null; diskFree: number | null; diskTotal: number | null };
   version: string;

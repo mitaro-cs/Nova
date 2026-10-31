@@ -181,7 +181,15 @@ impl Running {
     }
 }
 
+static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Сколько секунд работает сервер (с первого `start`).
+pub fn uptime_secs() -> i64 {
+    STARTED.get().map_or(0, |t| t.elapsed().as_secs() as i64)
+}
+
 pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<Running> {
+    STARTED.get_or_init(std::time::Instant::now);
     std::fs::create_dir_all(&opts.data).with_context(|| format!("каталог данных {}", opts.data.display()))?;
     logs::attach(&opts.data);
     let db = db::Db::open(&opts.data.join("fsfy.db"))?;

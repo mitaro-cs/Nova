@@ -26,6 +26,8 @@
   };
 
   const name = $derived(page.url.searchParams.get('name') ?? '');
+  /** Русское имя из ссылки, когда Викиданные его не отдали. */
+  const nameRuLink = $derived(page.url.searchParams.get('ru'));
   const pid = $derived(page.url.searchParams.get('id') ?? '');
   const role = $derived(page.url.searchParams.get('role') === 'actor' ? 'actor' : 'director');
   let d = $state<Director | null>(null);
@@ -128,7 +130,7 @@
         </span>
         <div class="who">
           <small>{role === 'actor' ? 'Актёр' : 'Режиссёр'}</small>
-          <h1>{d?.info?.nameRu ?? name}</h1>
+          <h1>{d?.info?.nameRu ?? nameRuLink ?? name}</h1>
           {#if d?.imdbName && d.imdbName !== name}<p class="orig">{d.imdbName}</p>{/if}
           {#if d}
             <p class="facts">
