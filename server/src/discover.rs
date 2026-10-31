@@ -118,7 +118,7 @@ pub async fn search_cached(app: &Arc<App>, key: &str, src: &Src) -> anyhow::Resu
     let imdb = Imdb::new(app.http.clone());
     let items = parse_chart(&fetch_feed(&imdb, src, "USER_RATING_COUNT").await?);
     upsert(app, &items)?;
-    app.posters_kick.notify_one();
+    app.kick_ext();
     let ids: Vec<String> = items.into_iter().map(|e| e.id).collect();
     if !ids.is_empty() {
         app.db.with(|c| {
@@ -403,7 +403,7 @@ pub async fn refresh(app: &Arc<App>) -> anyhow::Result<usize> {
     if done > 0 {
         app.db.set_setting("discover.at", &now_ms().to_string())?;
         app.db.set_setting("discover.feeds", &FEEDS.len().to_string())?;
-        app.posters_kick.notify_one();
+        app.kick_ext();
         Ok(done)
     } else {
         Err(last.unwrap_or_else(|| anyhow::anyhow!("IMDb ничего не вернул")))
@@ -434,6 +434,61 @@ pub async fn posters(app: Arc<App>) {
             let _ = tokio::time::timeout(Duration::from_secs(3600), app.posters_kick.notified()).await;
         } else {
             tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+    }
+}
+
+/// Русское название фильма ищем заново не раньше чем через 30 суток.
+pub const TITLES_RETRY_MS: i64 = 30 * 86_400_000;
+
+/// Фильмы ленты, которым ещё надо поискать русское название: нет кириллицы в названии, нет русской
+/// записи (`title_localizations`), не искали недавно. Сначала - из подборок по порядку.
+pub fn pending_titles(db: &crate::db::Db, limit: i64, now: i64) -> rusqlite::Result<Vec<String>> {
+    db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT e.id FROM ext_titles e
+             WHERE e.title NOT GLOB '*[а-яА-ЯёЁ]*'
+               AND NOT EXISTS (SELECT 1 FROM title_localizations l WHERE l.id = e.id)
+               AND (e.ru_at IS NULL OR e.ru_at < ?1 - ?2)
+             ORDER BY (SELECT MIN(pos) FROM ext_charts ch WHERE ch.ext_id = e.id) IS NULL,
+                      (SELECT MIN(pos) FROM ext_charts ch WHERE ch.ext_id = e.id), e.updated_at DESC
+             LIMIT ?3",
+        )?;
+        let r = st.query_map(params![now, TITLES_RETRY_MS, limit], |r| r.get(0))?;
+        r.collect()
+    })
+}
+
+/// Запомнить, что русское название этих фильмов искали (нашлось или нет).
+pub fn mark_tried(db: &crate::db::Db, ids: &[String], now: i64) -> rusqlite::Result<()> {
+    let list = serde_json::to_string(ids).unwrap_or_else(|_| "[]".into());
+    db.with(|c| {
+        c.execute("UPDATE ext_titles SET ru_at = ?1 WHERE id IN (SELECT value FROM json_each(?2))", params![now, list])
+            .map(|_| ())
+    })
+}
+
+/// Русские названия подборок и поиска: пачками по 65, через существующий `catalog_search::localize`
+/// (Викиданные -> `title_localizations`). Пустая настройка `names.wikidata.sparql` выключает запросы.
+pub async fn titles_ru(app: Arc<App>) {
+    tokio::time::sleep(Duration::from_secs(20)).await;
+    loop {
+        let enabled = app.db.setting("names.wikidata.sparql").is_none_or(|v| !v.is_empty());
+        let todo = if enabled { pending_titles(&app.db, 65, now_ms()).unwrap_or_default() } else { vec![] };
+        if todo.is_empty() {
+            let _ = tokio::time::timeout(Duration::from_secs(3600), app.titles_kick.notified()).await;
+            continue;
+        }
+        match crate::catalog_search::localize(&app, &todo).await {
+            Ok(()) => {
+                let _ = mark_tried(&app.db, &todo, now_ms());
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            Err(e) => {
+                // Сеть недоступна: не помечаем (не искали), повторим не скоро.
+                tracing::debug!(error = %e, "русские названия ленты");
+                tokio::time::sleep(Duration::from_secs(300)).await;
+            }
         }
     }
 }
@@ -575,7 +630,7 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
                     params![url, id],
                 )
             })?;
-            app.posters_kick.notify_one();
+            app.kick_ext();
         }
     }
     let mut extra = json!({"tagline":d.tagline,"age":d.age,"countries":d.countries,"languages":d.languages,"releaseDate":d.release_date,"aka":d.aka,
@@ -607,7 +662,7 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
                     params![json!(items.iter().map(|e| &e.id).collect::<Vec<_>>()).to_string(), id],
                 )
             });
-            a.posters_kick.notify_one();
+            a.kick_ext();
         }
         a.detail_jobs.lock().remove(&rich_job);
     });
@@ -751,6 +806,43 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn add_ext(db: &crate::db::Db, id: &str, title: &str, ru_at: Option<i64>) {
+        db.with(|c| {
+            c.execute(
+                "INSERT INTO ext_titles (id, kind, title, updated_at, ru_at) VALUES (?, 'movie', ?, 0, ?)",
+                params![id, title, ru_at],
+            )
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn pending_titles_skip_cyrillic_localized_and_recent() {
+        let db = crate::db::Db::memory().unwrap();
+        let now = 100 * TITLES_RETRY_MS;
+        add_ext(&db, "tt9000001", "Ghost Rider", None);
+        add_ext(&db, "tt9000002", "Дьявол носит Prada 2", None);
+        add_ext(&db, "tt9000003", "Street Fighter", None);
+        db.with(|c| c.execute("INSERT INTO title_localizations VALUES ('tt9000003', 'Уличный боец', '{}', 0)", []))
+            .unwrap();
+        add_ext(&db, "tt9000004", "Winter", Some(now - 1000));
+        add_ext(&db, "tt9000005", "Marble Hall Murders", Some(now - TITLES_RETRY_MS - 1));
+        let mut got = pending_titles(&db, 100, now).unwrap();
+        got.sort();
+        assert_eq!(got, ["tt9000001", "tt9000005"]);
+    }
+
+    #[test]
+    fn mark_tried_sets_ru_at() {
+        let db = crate::db::Db::memory().unwrap();
+        add_ext(&db, "tt9000001", "Ghost Rider", None);
+        mark_tried(&db, &["tt9000001".to_string()], 12345).unwrap();
+        let at: Option<i64> =
+            db.with(|c| c.query_row("SELECT ru_at FROM ext_titles WHERE id = 'tt9000001'", [], |r| r.get(0))).unwrap();
+        assert_eq!(at, Some(12345));
+        assert!(pending_titles(&db, 10, 12346).unwrap().is_empty());
+    }
 
     #[test]
     fn genre_queries() {

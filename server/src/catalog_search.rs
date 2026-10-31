@@ -281,7 +281,7 @@ async fn search_full(app: &Arc<App>, query: &str) -> anyhow::Result<Vec<String>>
     ids.retain(|i| seen.insert(i.clone()));
     ids.truncate(80);
     let _ = localize(app, &ids).await;
-    app.posters_kick.notify_one();
+    app.kick_ext();
     if !ids.is_empty() {
         app.db.with(|c|c.execute("INSERT INTO catalog_search_cache VALUES(?,?,?) ON CONFLICT(query) DO UPDATE SET ids=excluded.ids,at=excluded.at",params![key,json!(ids).to_string(),crate::util::now_ms()]))?;
     }

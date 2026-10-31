@@ -71,6 +71,8 @@ pub struct App {
     /// Лента IMDb: обновить подборки / докачать постеры.
     pub discover_kick: Notify,
     pub posters_kick: Notify,
+    /// Появились фильмы ленты: поискать русские названия.
+    pub titles_kick: Notify,
     pub access: access::Access,
     pub login_limit: auth::Limiter,
     pub signup_limit: auth::Limiter,
@@ -99,6 +101,12 @@ pub struct App {
 impl App {
     pub fn kick_probe(&self) {
         self.probe_kick.notify_one();
+    }
+
+    /// В ленте появились фильмы: докачать постеры и найти русские названия.
+    pub fn kick_ext(&self) {
+        self.posters_kick.notify_one();
+        self.titles_kick.notify_one();
     }
 
     pub fn reload_tools(&self) {
@@ -233,6 +241,7 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
         probe_kick: Notify::new(),
         discover_kick: Notify::new(),
         posters_kick: Notify::new(),
+        titles_kick: Notify::new(),
         access: access::Access::default(),
         login_limit: auth::Limiter::new(10, 10 * 60 * 1000),
         signup_limit: auth::Limiter::new(5, 10 * 60 * 1000),
@@ -267,6 +276,7 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
     tokio::spawn(copy::janitor(app.clone()));
     tokio::spawn(discover::worker(app.clone()));
     tokio::spawn(discover::posters(app.clone()));
+    tokio::spawn(discover::titles_ru(app.clone()));
     tokio::spawn(discover::shrink_posters(app.clone()));
     tokio::spawn(rooms::janitor(app.clone()));
     tokio::spawn(api::backfill_link_thumbs(app.clone()));
