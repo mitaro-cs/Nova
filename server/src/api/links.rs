@@ -638,6 +638,15 @@ pub async fn search(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<Sear
     Ok(Json(json!(items)))
 }
 
+/// Состояние источников видео для зрителя: кто сейчас отвечает (без счётчиков ошибок и времени).
+pub async fn sources_status(_v: Viewer) -> ApiResult<Json<Value>> {
+    let list: Vec<Value> = crate::video_health::snapshot()
+        .into_iter()
+        .map(|s| json!({"site": s.site, "label": s.label, "state": s.state}))
+        .collect();
+    Ok(Json(json!(list)))
+}
+
 /// «Это не тот фильм»: видео по ссылке оказалось другим (ролик с похожим названием, трейлер).
 /// Адрес - в чёрный список поиска для всех, ссылка у фильма удаляется (решать может любой зритель:
 /// неверное видео неверно для всех).

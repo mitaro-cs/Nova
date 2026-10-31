@@ -32,6 +32,7 @@ pub mod taste;
 pub mod themes;
 pub mod totp;
 pub mod util;
+pub mod video_health;
 pub mod video_search;
 mod video_sources;
 pub mod web;

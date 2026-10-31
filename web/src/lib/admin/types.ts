@@ -13,6 +13,8 @@ export interface Health {
   dbBytes: number;
   /** Последние предупреждения и ошибки, новые первыми (время - мс Unix). */
   errors: { at: number; level: 'WARN' | 'ERROR'; target: string; message: string }[];
+  /** Источники видео: `down` - выключен на 10 минут после трёх ошибок подряд. */
+  sources: { site: string; label: string; state: 'ok' | 'down' | 'unknown'; fails: number; ok_ms: number | null }[];
 }
 
 export interface Status {

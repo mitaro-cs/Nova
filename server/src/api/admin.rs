@@ -88,6 +88,7 @@ pub async fn health(State(app): State<Arc<App>>, _m: Manager) -> Out {
         "uptimeSec": crate::uptime_secs(),
         "dbBytes": db_bytes,
         "errors": crate::logs::recent(30),
+        "sources": crate::video_health::snapshot(),
     })))
 }
 

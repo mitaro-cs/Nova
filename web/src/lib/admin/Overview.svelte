@@ -240,6 +240,10 @@
   <section class="card pane" aria-label="Недавние ошибки">
     <h3><Icon name="flag" size={18} /> Недавние ошибки</h3>
     <p class="muted small">Версия {health.version}, работает {upFor(health.uptimeSec)}, база {size(health.dbBytes)}. Подробный журнал лежит в папке данных, в «logs».</p>
+    <p class="small">
+      Источники видео:
+      {#each health.sources as s, i (s.site)}{i ? ', ' : ' '}{s.label} - {s.state === 'ok' ? 'отвечает' : s.state === 'down' ? 'выключен на 10 минут' : 'ещё не проверялся'}{/each}.
+    </p>
     {#if health.errors.length}
       <ul class="errors">
         {#each health.errors as e, i (i)}

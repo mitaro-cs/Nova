@@ -229,6 +229,18 @@ pub fn matches(
     }
     true
 }
+/// Запрос к источнику с учётом здоровья: выключен (три ошибки подряд) - пропускаем без ожидания,
+/// иначе запоминаем, ответил ли он и за сколько.
+async fn tracked(site: &str, work: impl std::future::Future<Output = Option<Vec<Value>>>) -> Option<Vec<Value>> {
+    if crate::video_health::open(site) {
+        return None;
+    }
+    let started = std::time::Instant::now();
+    let result = work.await;
+    crate::video_health::record(site, result.is_some(), started.elapsed().as_millis() as u64);
+    result
+}
+
 /// Подпись подходит, если совпало любое из названий (русское, оригинальное, прокатные).
 pub fn any_name_matches(
     label: &str,
@@ -324,24 +336,30 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         if !enabled("rutube") {
             return None;
         }
-        get(app, Url::parse_with_params("https://rutube.ru/api/search/video/", &[("query", query)]).ok()?)
-            .await
-            .map(|v| parse_rutube(&v))
+        tracked("rutube", async {
+            get(app, Url::parse_with_params("https://rutube.ru/api/search/video/", &[("query", query)]).ok()?)
+                .await
+                .map(|v| parse_rutube(&v))
+        })
+        .await
     };
     let vk = async {
         if !enabled("vk") || token.is_empty() {
             return None;
         }
-        get(
-            app,
-            Url::parse_with_params(
-                "https://api.vk.com/method/video.search",
-                &[("q", query), ("count", "30"), ("adult", "0"), ("access_token", token.as_str()), ("v", "5.199")],
+        tracked("vk", async {
+            get(
+                app,
+                Url::parse_with_params(
+                    "https://api.vk.com/method/video.search",
+                    &[("q", query), ("count", "30"), ("adult", "0"), ("access_token", token.as_str()), ("v", "5.199")],
+                )
+                .ok()?,
             )
-            .ok()?,
-        )
+            .await
+            .map(|v| parse_vk(&v))
+        })
         .await
-        .map(|v| parse_vk(&v))
     };
     // Dailymotion проверен отдельно: metadata доступна, но CDN может запретить нативный поток.
     // Не выдаём такой результат за рабочую альтернативу; явная ссылка поддерживается отдельно.
@@ -354,25 +372,34 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         if !enabled("archive") || q.mode.as_deref() == Some("trailer") || q.season.is_some() {
             return None;
         }
-        tokio::time::timeout(Duration::from_secs(5), archive(app, archive_title)).await.ok().flatten()
+        tracked("archive", async {
+            tokio::time::timeout(Duration::from_secs(5), archive(app, archive_title)).await.ok().flatten()
+        })
+        .await
     };
     let peer = async {
         if !enabled("peertube") {
             return None;
         }
-        tokio::time::timeout(Duration::from_secs(6), crate::video_sources::peertube(app, query, q.min.unwrap_or(0)))
-            .await
-            .ok()
-            .flatten()
+        tracked("peertube", async {
+            tokio::time::timeout(Duration::from_secs(6), crate::video_sources::peertube(app, query, q.min.unwrap_or(0)))
+                .await
+                .ok()
+                .flatten()
+        })
+        .await
     };
     let wiki = async {
         if !enabled("commons") || q.season.is_some() || q.mode.as_deref() == Some("trailer") {
             return None;
         }
-        tokio::time::timeout(Duration::from_secs(5), crate::video_sources::commons(app, archive_title))
-            .await
-            .ok()
-            .flatten()
+        tracked("commons", async {
+            tokio::time::timeout(Duration::from_secs(5), crate::video_sources::commons(app, archive_title))
+                .await
+                .ok()
+                .flatten()
+        })
+        .await
     };
     let lord = async {
         if !enabled("lordfilm") {
@@ -382,16 +409,19 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
             return Some(vec![]);
         }
         let (name, year) = expected.as_ref().map(|(name, _, year)| (name.as_str(), *year)).unwrap_or((query, None));
-        if let (Some(season), Some(episode)) = (q.season, q.episode) {
-            return tokio::time::timeout(
-                Duration::from_secs(15),
-                crate::lordfilm::search_episode(name, year, season, episode),
-            )
-            .await
-            .ok()
-            .flatten();
-        }
-        tokio::time::timeout(Duration::from_secs(10), crate::lordfilm::search(name, year)).await.ok().flatten()
+        tracked("lordfilm", async {
+            if let (Some(season), Some(episode)) = (q.season, q.episode) {
+                return tokio::time::timeout(
+                    Duration::from_secs(15),
+                    crate::lordfilm::search_episode(name, year, season, episode),
+                )
+                .await
+                .ok()
+                .flatten();
+            }
+            tokio::time::timeout(Duration::from_secs(10), crate::lordfilm::search(name, year)).await.ok().flatten()
+        })
+        .await
     };
     let (ru, vk, open, peer, wiki, lord) = tokio::join!(ru, vk, open, peer, wiki, lord);
     if ru.is_none() && vk.is_none() && open.is_none() && peer.is_none() && wiki.is_none() && lord.is_none() {

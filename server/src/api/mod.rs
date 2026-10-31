@@ -114,6 +114,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/discover/refresh", post(discover::refresh))
         .route("/api/links", get(links::list).post(links::add))
         .route("/api/links/search", get(links::search))
+        .route("/api/sources/status", get(links::sources_status))
         .route("/api/admin/video-source", post(links::import_source))
         .route("/api/links/thumbnail", get(links::thumbnail))
         .route("/api/links/{id}", get(links::one).delete(links::delete))

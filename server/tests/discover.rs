@@ -627,6 +627,26 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
     running.shutdown().await;
 }
 
+/// Состояние источников видео: зрителю - без подробностей, администратору - с числом ошибок.
+#[tokio::test(flavor = "multi_thread")]
+async fn sources_status_for_viewers_and_health_for_managers() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let mut anna = Client::new(public);
+    anna.send("POST", "/api/auth/register", json!({"name": "Анна", "login": "anna", "password": "пароль-12345"})).await;
+    let list = anna.json("/api/sources/status").await;
+    let sites: Vec<&str> = list.as_array().unwrap().iter().map(|s| s["site"].as_str().unwrap()).collect();
+    assert_eq!(sites, ["lordfilm", "rutube", "vk", "archive", "peertube", "commons"]);
+    assert_eq!(list[0]["label"], "LordFilm");
+    assert!(["ok", "down", "unknown"].contains(&list[0]["state"].as_str().unwrap()));
+    assert!(list[0].get("fails").is_none(), "зрителю - без подробностей");
+    let health = host.json("/api/admin/health").await;
+    assert!(health["sources"][0].get("fails").is_some(), "администратору - с числом ошибок");
+    assert_eq!(anna.get("/api/sources/status").await.status(), 200);
+    running.shutdown().await;
+}
+
 /// Режиссёр на карточке своего фильма - по-русски: из кэша имён, иначе транслитерация.
 #[tokio::test(flavor = "multi_thread")]
 async fn own_card_director_is_russian() {
