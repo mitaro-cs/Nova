@@ -84,6 +84,8 @@ pub struct App {
     pub playback: Mutex<HashMap<i64, api::play::PlayStat>>,
     /// Замер скорости - не чаще 20 раз в минуту на профиль.
     pub speed_limit: auth::Limiter,
+    /// Сообщения об ошибках интерфейса - не больше 20 в минуту на профиль.
+    pub diag_limit: auth::Limiter,
     /// Перекодирование нагружает процессор - одновременно немного.
     pub transcode: Arc<Semaphore>,
     pub remux: Arc<Semaphore>,
@@ -240,6 +242,7 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
         entries: Mutex::default(),
         playback: Mutex::default(),
         speed_limit: auth::Limiter::new(20, 60 * 1000),
+        diag_limit: auth::Limiter::new(20, 60 * 1000),
         transcode: Arc::new(Semaphore::new(2)),
         remux: Arc::new(Semaphore::new(8)),
         hls: hls::Hls::default(),

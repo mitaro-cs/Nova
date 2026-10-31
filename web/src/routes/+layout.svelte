@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import Loading from '$lib/ui/Loading.svelte';
   import { applyMotion } from '$lib/motion';
+  import { installDiag } from '$lib/diag';
   import { page, navigating } from '$app/state';
   import Ask from '$lib/ui/Ask.svelte';
   import Header from '$lib/ui/Header.svelte';
@@ -59,6 +60,8 @@
   // отклик на нажатие), а появление новой задано в app.css и у героя фильма.
   const leaving = $derived(!!navigating.to);
   $effect(() => applyMotion());
+  // Необработанные ошибки страницы - в журнал приложения («Управление → Обзор»).
+  $effect(() => installDiag());
 
   // Окно приложения хоста: перетаскивают файлы - подсказка, бросили - что сделано.
   let dragging = $state(false);

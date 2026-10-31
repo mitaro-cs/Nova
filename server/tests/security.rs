@@ -113,6 +113,39 @@ async fn health_is_for_managers_and_lists_recent_errors() {
     running.shutdown().await;
 }
 
+/// Ошибки интерфейса зрителей попадают в журнал: без адресов, с ограничением частоты.
+#[tokio::test(flavor = "multi_thread")]
+async fn client_log_is_limited_and_sanitized() {
+    fsfy::logs::init("info");
+    let dir = tempfile::tempdir().unwrap();
+    let (running, _host) = common::start(dir.path()).await;
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let mut guest = Client::new(public.clone());
+    let r = guest.send("POST", "/api/diag/client", json!({"kind": "error", "message": "x", "where": "/"})).await;
+    assert_eq!(r.status(), 401, "без входа - нет");
+
+    let mut anna = signup(&public, "anna").await;
+    let body = json!({"kind": "error", "message": format!("сбой интерфейса http://secret.example/p?t=abc {}", "я".repeat(2000)), "where": "/watch/1"});
+    let r = anna.send("POST", "/api/diag/client", body).await;
+    assert_eq!(r.status(), 204);
+    let h = _host.json("/api/admin/health").await;
+    let line = h["errors"].as_array().unwrap().iter().find(|e| e["target"] == "client").expect("запись клиента");
+    let text = line["message"].as_str().unwrap();
+    assert!(
+        text.contains("сбой интерфейса") && !text.contains("secret.example") && text.chars().count() <= 500,
+        "{text}"
+    );
+    let bad = anna.send("POST", "/api/diag/client", json!({"kind": "nonsense", "message": "x", "where": ""})).await;
+    assert_eq!(bad.status(), 400, "неизвестный вид");
+
+    for _ in 0..25 {
+        anna.send("POST", "/api/diag/client", json!({"kind": "error", "message": "ещё", "where": "/"})).await;
+    }
+    let r = anna.send("POST", "/api/diag/client", json!({"kind": "error", "message": "ещё", "where": "/"})).await;
+    assert_eq!(r.status(), 429, "после 20 в минуту - ограничение");
+    running.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn film_from_discover_in_chat() {
     let dir = tempfile::tempdir().unwrap();
