@@ -83,7 +83,9 @@
       title: status.scan.error ? 'Ошибка в папках' : status.titles ? 'Папки с фильмами подключены' : 'Фильмов пока нет',
       text: status.scan.error
         ? status.scan.error
-        : status.titles
+        : status.scan.running && status.scan.progress
+          ? `Идёт проверка папок: проверено файлов ${status.scan.progress}.`
+          : status.titles
           ? `${status.titles} фильмов и сериалов, ${status.files} файлов (${size(status.size)}). Новое в папках появляется само.`
           : 'Добавьте папку с фильмами или перетащите файлы в окно Nova - они появятся на сайте сами.',
       href: '?tab=folders',

@@ -27,7 +27,7 @@ export interface Status {
   size: number;
   metaPending: number;
   unprobed: number;
-  scan: { running: boolean; at: number | null; error: string | null; last: { files: number; added: number; missing: number; titles: number } | null };
+  scan: { running: boolean; at: number | null; error: string | null; progress: number | null; last: { files: number; added: number; missing: number; titles: number } | null };
   meta: { running: boolean; error: string | null; done: number };
   ffmpeg: boolean;
   ffprobe: boolean;

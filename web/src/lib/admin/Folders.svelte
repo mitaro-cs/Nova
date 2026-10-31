@@ -96,7 +96,7 @@
 <div class="head">
   <h3>Папки на сайте</h3>
   <span class="muted small">
-    {#if status.scan.running}Просматриваем…{:else if status.scan.at}Проверено {ago(status.scan.at)}{/if}
+    {#if status.scan.running}Просматриваем…{#if status.scan.progress} проверено файлов: {status.scan.progress}{/if}{:else if status.scan.at}Проверено {ago(status.scan.at)}{/if}
   </span>
   <button class="btn sm" onclick={rescan} disabled={status.scan.running}><Icon name="refresh" size={15} /> Обновить</button>
 </div>

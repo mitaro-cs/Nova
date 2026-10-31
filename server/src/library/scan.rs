@@ -45,6 +45,12 @@ pub fn title_key(kind: &str, title: &str, year: Option<i32>) -> String {
 }
 
 pub fn scan(db: &Db, images: &Images) -> anyhow::Result<ScanStats> {
+    scan_with(db, images, &|_| {})
+}
+
+/// Обход с отчётом о ходе: `progress(n)` - сколько видеофайлов проверено (после каждых 25 и в конце).
+/// Сколько их всего, заранее неизвестно (отдельный обход дважды нагрузил бы медленный диск).
+pub fn scan_with(db: &Db, images: &Images, progress: &dyn Fn(usize)) -> anyhow::Result<ScanStats> {
     let libs: Vec<(i64, String, String)> = db.with(|c| {
         let mut st = c.prepare("SELECT id, path, kind FROM libraries ORDER BY id")?;
         let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
@@ -107,6 +113,9 @@ pub fn scan(db: &Db, images: &Images) -> anyhow::Result<ScanStats> {
                 continue;
             };
             stats.files += 1;
+            if stats.files % 25 == 0 {
+                progress(stats.files);
+            }
             if !seen.insert(key.clone()) {
                 continue; // папка внутри другой библиотеки
             }
@@ -130,6 +139,7 @@ pub fn scan(db: &Db, images: &Images) -> anyhow::Result<ScanStats> {
         }
     }
 
+    progress(stats.files);
     let gone: Vec<i64> = existing.iter().filter(|(p, e)| !e.missing && !seen.contains(*p)).map(|(_, e)| e.id).collect();
     stats.missing = gone.len();
     db.tx(|tx| {
@@ -296,6 +306,27 @@ mod tests {
         scan(&db, &images).unwrap();
         let missing: i64 = db.with(|c| c.query_row("SELECT SUM(missing) FROM files", [], |r| r.get(0))).unwrap();
         assert_eq!(missing, 0);
+    }
+
+    #[test]
+    fn scan_reports_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("media");
+        for i in 0..60 {
+            let d = root.join(format!("Фильм {i} ({})", 1960 + i));
+            fs::create_dir_all(&d).unwrap();
+            fs::write(d.join("movie.mp4"), b"x").unwrap();
+        }
+        let db = Db::memory().unwrap();
+        let images = Images::new(dir.path().join("img")).unwrap();
+        lib(&db, &root, "movies");
+        let seen = std::cell::RefCell::new(Vec::new());
+        let stats = scan_with(&db, &images, &|n| seen.borrow_mut().push(n)).unwrap();
+        let seen = seen.into_inner();
+        assert_eq!(stats.files, 60);
+        assert!(seen.len() >= 2, "отчётов: {seen:?}");
+        assert!(seen.windows(2).all(|w| w[0] <= w[1]), "не убывает: {seen:?}");
+        assert_eq!(*seen.last().unwrap(), 60, "последний отчёт - все файлы");
     }
 
     #[test]

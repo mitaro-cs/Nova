@@ -1,7 +1,7 @@
 //! Фоновые задачи библиотеки: обход папок и разбор файлов через ffprobe.
 
 use super::probe;
-use super::scan::{scan, ScanStats};
+use super::scan::{scan_with, ScanStats};
 use crate::App;
 use rusqlite::{params, OptionalExtension};
 use std::path::PathBuf;
@@ -14,17 +14,27 @@ pub struct ScanState {
     pub last: Option<ScanStats>,
     pub at: Option<i64>,
     pub error: Option<String>,
+    /// Во время обхода: сколько видеофайлов уже проверено (всего заранее неизвестно).
+    pub progress: Option<usize>,
 }
 
 /// Обход раз в 10 минут и по просьбе (новая папка, кнопка «Обновить»).
 pub async fn scan_worker(app: Arc<App>) {
     loop {
-        app.scan_state.lock().running = true;
+        {
+            let mut st = app.scan_state.lock();
+            st.running = true;
+            st.progress = Some(0);
+        }
         let a = app.clone();
-        let res = tokio::task::spawn_blocking(move || scan(&a.db, &a.images)).await;
+        let res = tokio::task::spawn_blocking(move || {
+            scan_with(&a.db, &a.images, &|n| a.scan_state.lock().progress = Some(n))
+        })
+        .await;
         {
             let mut st = app.scan_state.lock();
             st.running = false;
+            st.progress = None;
             st.at = Some(crate::util::now_ms());
             match res {
                 Ok(Ok(stats)) => {
