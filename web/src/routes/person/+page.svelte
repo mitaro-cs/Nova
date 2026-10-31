@@ -126,7 +126,7 @@
       <div class="veil" aria-hidden="true"></div>
       <div class="head">
         <span class="ph" style:background={d?.photo ? undefined : placeholder(name)}>
-          {#if d?.photo}<img use:fadeIn src={artW(d.photo, 640)} alt={name} width="400" height="400" decoding="async" />{:else if d}{initials(name)}{/if}
+          {#if d?.photo}<img use:fadeIn src={artW(d.photo, 640)} alt={d?.info?.nameRu ?? nameRuLink ?? name} width="400" height="400" decoding="async" />{:else if d}{initials(name)}{/if}
         </span>
         <div class="who">
           <small>{role === 'actor' ? 'Актёр' : 'Режиссёр'}</small>
