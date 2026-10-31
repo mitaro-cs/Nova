@@ -9,7 +9,8 @@
   import Modal from '$lib/ui/Modal.svelte';
   import { untrack } from 'svelte';
   import { progressSync } from '$lib/progressSync.svelte';
-  import { searchLordfilm, isLordfilm, sourceName } from '$lib/links/search';
+  import { searchLordfilm, searchVideos, isLordfilm, sourceName } from '$lib/links/search';
+  import { rankFound } from '$lib/links/best';
   import { localized } from '$lib/localized.svelte';
   import { fadeIn } from '$lib/ui/fade';
   import { goto } from '$app/navigation';
@@ -231,10 +232,24 @@
     online = null;
     episodeFinding = true;
     sourceError = false;
-    void searchLordfilm(params, controller.signal)
-      .then(items => { if (!controller.signal.aborted) online = items; })
-      .catch(() => { if (!controller.signal.aborted) { online = []; sourceError = true; } })
-      .finally(() => { if (!controller.signal.aborted) episodeFinding = false; });
+    // LordFilm - первым; не нашёл или не ответил - сразу остальные источники параллельно, без нажатия.
+    const runtimeSec = (d.runtime ?? 0) * 60;
+    void (async () => {
+      const first = await searchLordfilm(params, controller.signal).catch(() => null);
+      if (controller.signal.aborted) return;
+      if (first?.length) { online = rankFound(first, runtimeSec); return; }
+      const others = new URLSearchParams(params);
+      others.set('min', String(isSeries ? 15 * 60 : 40 * 60));
+      const found = await searchVideos(others, (items) => {
+        if (controller.signal.aborted || !items.length) return;
+        online = rankFound(items, runtimeSec);
+        episodeFinding = false;
+      }, controller.signal, true).catch(() => null);
+      if (controller.signal.aborted) return;
+      online = found ? rankFound(found, runtimeSec) : [];
+      // Ошибка - только если не ответил ни один источник.
+      sourceError = first === null && found === null;
+    })().finally(() => { if (!controller.signal.aborted) episodeFinding = false; });
     // Источник молчит - не держим кнопку заблокированной: даём искать вручную.
     const timer = setTimeout(() => {
       if (controller.signal.aborted) return;
