@@ -644,6 +644,13 @@ CREATE TABLE person_names (
   at INTEGER NOT NULL
 );
 "#,
+    // 26 (alpha 0.7.2): когда искали русское название фильма ленты (NULL - ещё нет) и оригинальное
+    // написание имени человека (по нему карточки находят русское имя режиссёра).
+    r#"
+ALTER TABLE ext_titles ADD COLUMN ru_at INTEGER;
+ALTER TABLE person_names ADD COLUMN orig TEXT;
+CREATE INDEX person_names_orig ON person_names(orig);
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции
@@ -841,6 +848,17 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migration_26_adds_columns() {
+        let db = Db::memory().unwrap();
+        db.with(|c| {
+            c.prepare("SELECT ru_at FROM ext_titles LIMIT 0")?;
+            c.prepare("SELECT orig FROM person_names LIMIT 0")?;
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn migrates_and_keeps_settings() {
