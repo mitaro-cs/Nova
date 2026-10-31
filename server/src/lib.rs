@@ -21,6 +21,7 @@ mod lordfilm;
 pub mod media_meta;
 pub mod meta;
 pub mod monitor;
+pub mod names;
 pub mod outbound;
 pub mod release;
 pub mod rooms;
