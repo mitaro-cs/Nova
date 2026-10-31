@@ -81,6 +81,7 @@ impl Kp {
                     job: job.into(),
                     photo: text(&p["photo"]),
                     id: None,
+                    orig: None,
                 });
             }
         }

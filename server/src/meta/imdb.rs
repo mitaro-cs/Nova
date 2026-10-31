@@ -215,7 +215,7 @@ pub fn parse_details(t: &Value, x: &Value) -> Details {
             if let Some(name) = text(&c["name"]["nameText"]["text"]) {
                 let photo = text(&c["name"]["primaryImage"]["url"]).map(|u| sized(&u, 128));
                 let id = text(&c["name"]["id"]).filter(|i| i.starts_with("nm"));
-                people.push(Person { name, role: None, job: job.into(), photo, id });
+                people.push(Person { name, role: None, job: job.into(), photo, id, orig: None });
             }
         }
     }
@@ -227,6 +227,7 @@ pub fn parse_details(t: &Value, x: &Value) -> Details {
                 job: "actor".into(),
                 photo: text(&c["name"]["primaryImage"]["url"]).map(|u| sized(&u, 128)),
                 id: text(&c["name"]["id"]).filter(|i| i.starts_with("nm")),
+                orig: None,
             })
         })
         .collect();

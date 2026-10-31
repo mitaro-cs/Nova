@@ -119,6 +119,7 @@ impl Tmdb {
                 job: "actor".into(),
                 photo: self.img("w185", &c["profile_path"]),
                 id: None,
+                orig: None,
             })
             .collect();
         let directors: Vec<Person> = if series {
@@ -127,7 +128,7 @@ impl Tmdb {
                 .into_iter()
                 .flatten()
                 .filter_map(|c| text(&c["name"]))
-                .map(|name| Person { name, role: None, job: "creator".into(), photo: None, id: None })
+                .map(|name| Person { name, role: None, job: "creator".into(), photo: None, id: None, orig: None })
                 .collect()
         } else {
             v["credits"]["crew"]
@@ -136,7 +137,7 @@ impl Tmdb {
                 .flatten()
                 .filter(|c| c["job"] == "Director")
                 .filter_map(|c| text(&c["name"]))
-                .map(|name| Person { name, role: None, job: "director".into(), photo: None, id: None })
+                .map(|name| Person { name, role: None, job: "director".into(), photo: None, id: None, orig: None })
                 .collect()
         };
         people.splice(0..0, directors);

@@ -35,6 +35,9 @@ pub struct Person {
     /// Id человека на IMDb («nm…») - для страницы режиссёра (у старых описаний нет).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// Оригинальное написание, когда `name` переведён на русский (`names::localize`); в базе не хранится.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orig: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

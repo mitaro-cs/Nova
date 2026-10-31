@@ -101,6 +101,61 @@ pub async fn wikidata_ru(
     Ok(parse_wikidata(&v))
 }
 
+/// Транслитерацию пора перепроверить в Викиданных.
+pub fn due(c: &Cached, now: i64) -> bool {
+    c.source == "translit" && now - c.at > RETRY_MS
+}
+
+/// Русские имена людей и персонажей на странице фильма (настройка `names.wikidata.sparql`).
+pub async fn localize(app: &crate::App, people: &mut [crate::meta::Person]) {
+    let endpoint = app.db.setting("names.wikidata.sparql").unwrap_or_else(|| WIKIDATA.to_string());
+    localize_with(&app.db, &app.http, &endpoint, people).await;
+}
+
+/// Имя человека - из кэша или Викиданных (один запрос на всех, до 3 с), иначе транслитерация; роль -
+/// транслитерация. Оригинал - в `orig`. Сбой сети не мешает: останется транслитерация.
+pub async fn localize_with(db: &Db, http: &reqwest::Client, endpoint: &str, people: &mut [crate::meta::Person]) {
+    let mut names: HashMap<String, String> = HashMap::new();
+    for p in people.iter().filter(|p| has_latin(&p.name)) {
+        if let Some(id) = p.id.as_ref().filter(|i| valid_id(i)) {
+            names.entry(id.clone()).or_insert_with(|| p.name.clone());
+        }
+    }
+    let ids: Vec<String> = names.keys().cloned().collect();
+    let mut known = cached(db, &ids);
+    let now = now_ms();
+    let stale: Vec<String> = ids.iter().filter(|i| known.get(*i).is_none_or(|c| due(c, now))).cloned().collect();
+    if !stale.is_empty() {
+        let found = wikidata_ru(http, endpoint, &stale).await.unwrap_or_default();
+        let mut rows: Vec<(String, String, &str)> = Vec::new();
+        for id in &stale {
+            if let Some(ru) = found.get(id) {
+                rows.push((id.clone(), ru.clone(), "wikidata"));
+            } else if let Some(old) = known.get(id) {
+                rows.push((id.clone(), old.ru.clone(), "translit"));
+            } else {
+                rows.push((id.clone(), translit(&names[id]), "translit"));
+            }
+        }
+        if store(db, &rows).is_ok() {
+            for (id, ru, source) in rows {
+                known.insert(id, Cached { ru, source: source.into(), at: now });
+            }
+        }
+    }
+    for p in people.iter_mut() {
+        if has_latin(&p.name) {
+            let ru = p.id.as_ref().and_then(|i| known.get(i)).map(|c| c.ru.clone()).unwrap_or_else(|| translit(&p.name));
+            if ru != p.name {
+                p.orig = Some(std::mem::replace(&mut p.name, ru));
+            }
+        }
+        if let Some(role) = p.role.as_mut().filter(|r| has_latin(r)) {
+            *role = translit(role);
+        }
+    }
+}
+
 pub fn has_latin(s: &str) -> bool {
     s.chars().any(|c| c.is_ascii_alphabetic())
 }
@@ -269,6 +324,58 @@ mod tests {
         let m = parse_wikidata(&v);
         assert_eq!(m["nm0331516"], "Райан Гослинг");
         assert!(!m.contains_key("nm0001"));
+    }
+
+    fn person(name: &str, role: Option<&str>, id: Option<&str>) -> crate::meta::Person {
+        crate::meta::Person {
+            name: name.into(),
+            role: role.map(String::from),
+            job: "actor".into(),
+            id: id.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn localize_uses_cache_then_translit() {
+        let db = crate::db::Db::memory().unwrap();
+        store(&db, &[("nm0331516".into(), "Райан Гослинг".into(), "wikidata")]).unwrap();
+        let mut people = vec![
+            person("Ryan Gosling", Some("Neil Armstrong"), Some("nm0331516")),
+            person("Kyle Chandler", Some("Deke Slayton"), Some("nm0151419")),
+            person("Tom Hardy", None, None),
+        ];
+        localize_with(&db, &reqwest::Client::new(), "", &mut people).await;
+        assert_eq!(people[0].name, "Райан Гослинг");
+        assert_eq!(people[0].orig.as_deref(), Some("Ryan Gosling"));
+        assert_eq!(people[0].role.as_deref(), Some("Нил Армстронг"));
+        assert_eq!(people[1].name, "Кайл Чандлер");
+        assert_eq!(people[2].name, "Том Харди");
+        assert_eq!(people[2].orig.as_deref(), Some("Tom Hardy"));
+        let got = cached(&db, &["nm0151419".into()]);
+        assert_eq!(got["nm0151419"].source, "translit");
+    }
+
+    #[tokio::test]
+    async fn localize_skips_cyrillic_and_other_scripts() {
+        let db = crate::db::Db::memory().unwrap();
+        let mut people = vec![person("Тим Роббинс", None, Some("nm0000209")), person("봉준호", None, None)];
+        localize_with(&db, &reqwest::Client::new(), "", &mut people).await;
+        assert_eq!(people[0].name, "Тим Роббинс");
+        assert!(people[0].orig.is_none());
+        assert_eq!(people[1].name, "봉준호");
+        assert!(people[1].orig.is_none());
+    }
+
+    #[test]
+    fn translit_is_retried_after_a_day() {
+        let now = 10 * RETRY_MS;
+        let old = Cached { ru: "x".into(), source: "translit".into(), at: now - RETRY_MS - 1 };
+        let fresh = Cached { ru: "x".into(), source: "translit".into(), at: now - 1000 };
+        let wiki = Cached { ru: "x".into(), source: "wikidata".into(), at: 0 };
+        assert!(due(&old, now));
+        assert!(!due(&fresh, now));
+        assert!(!due(&wiki, now));
     }
 
     #[test]

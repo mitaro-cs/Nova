@@ -516,6 +516,7 @@ pub async fn edit_title(
                         job: "director".into(),
                         photo: None,
                         id: None,
+                        orig: None,
                     },
                 );
             }
