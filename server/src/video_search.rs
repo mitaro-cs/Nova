@@ -229,6 +229,63 @@ pub fn matches(
     }
     true
 }
+/// Запрос, который сама строит страница фильма из ленты (`provider=lordfilm`, название, `extId`):
+/// ключ кэша совпадает, поэтому прогретый ответ страница получает сразу.
+pub fn warm_query(title: &str, ext_id: &str) -> SearchQuery {
+    SearchQuery {
+        q: title.to_string(),
+        provider: Some("lordfilm".into()),
+        title_id: None,
+        ext_id: Some(ext_id.to_string()),
+        season: None,
+        episode: None,
+        mode: None,
+        min: None,
+    }
+}
+
+/// Что прогревать: фильмы из «Хочу» и «Смотрю» (сначала свежие отметки), у которых нет сохранённой
+/// ссылки и нет копии на сервисе: (id, название, как его видит страница).
+pub fn warm_candidates(db: &crate::db::Db, limit: i64) -> rusqlite::Result<Vec<(String, String)>> {
+    db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT e.id, COALESCE((SELECT l.title FROM title_localizations l WHERE l.id = e.id), e.title)
+             FROM ext_titles e JOIN ext_marks m ON m.ext_id = e.id
+             WHERE e.kind = 'movie' AND m.status IN ('want', 'watching')
+               AND NOT EXISTS (SELECT 1 FROM links k WHERE k.ext_id = e.id)
+               AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.imdb_id = e.id)
+             GROUP BY e.id ORDER BY MAX(m.at) DESC LIMIT ?1",
+        )?;
+        let r = st.query_map([limit], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        r.collect()
+    })
+}
+
+/// Фоновый прогрев кэша поиска: раз в 10 минут (первый раз через 2 минуты после запуска) не больше 20
+/// фильмов, по одному, с паузой 3 с, и только когда никто не смотрит (нет свежего прогресса за 60 с).
+pub async fn warm(app: Arc<App>) {
+    tokio::time::sleep(Duration::from_secs(120)).await;
+    loop {
+        let watching: bool = app
+            .db
+            .with(|c| {
+                c.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM progress2 WHERE updated_at > ?1)",
+                    [util::now_ms() - 60_000],
+                    |r| r.get(0),
+                )
+            })
+            .unwrap_or(false);
+        if !watching {
+            for (id, title) in warm_candidates(&app.db, 20).unwrap_or_default() {
+                let _ = find(&app, &warm_query(&title, &id)).await;
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(600)).await;
+    }
+}
+
 /// Запрос к источнику с учётом здоровья: выключен (три ошибки подряд) - пропускаем без ожидания,
 /// иначе запоминаем, ответил ли он и за сколько.
 async fn tracked(site: &str, work: impl std::future::Future<Output = Option<Vec<Value>>>) -> Option<Vec<Value>> {
@@ -534,6 +591,45 @@ mod tests {
         drop(second);
         assert!(weak.upgrade().is_none());
     }
+    #[test]
+    fn warm_query_matches_page_query() {
+        let q = warm_query("Первый человек", "tt1213641");
+        assert_eq!(q.q, "Первый человек");
+        assert_eq!(q.ext_id.as_deref(), Some("tt1213641"));
+        assert_eq!(q.provider.as_deref(), Some("lordfilm"));
+        assert!(
+            q.title_id.is_none() && q.season.is_none() && q.episode.is_none() && q.mode.is_none() && q.min.is_none()
+        );
+    }
+
+    #[test]
+    fn warm_candidates_are_wanted_movies_without_links_or_local_copy() {
+        let db = crate::db::Db::memory().unwrap();
+        db.with(|c| {
+            c.execute_batch(
+                "PRAGMA foreign_keys=OFF;
+                 INSERT INTO ext_titles (id, kind, title, updated_at) VALUES
+                   ('tt9000001','movie','Хочу фильм',0), ('tt9000002','series','Хочу сериал',0),
+                   ('tt9000003','movie','Есть ссылка',0), ('tt9000004','movie','Есть у нас',0),
+                   ('tt9000005','movie','Смотрю фильм',0), ('tt9000006','movie','Просто в ленте',0);
+                 INSERT INTO ext_marks (profile_id, ext_id, status, at) VALUES
+                   (1,'tt9000001','want',30), (1,'tt9000002','want',30), (1,'tt9000003','want',30),
+                   (1,'tt9000004','want',30), (1,'tt9000005','watching',40);
+                 INSERT INTO links (ext_id, kind, url, label, added_at) VALUES ('tt9000003','direct','https://example.com/a.mp4','x',0);
+                 INSERT INTO titles (kind, key, title, imdb_id, added_at, updated_at) VALUES ('movie','k','Есть у нас','tt9000004',0,0);",
+            )
+        })
+        .unwrap();
+        let got = warm_candidates(&db, 10).unwrap();
+        assert_eq!(
+            got,
+            [
+                ("tt9000005".to_string(), "Смотрю фильм".to_string()),
+                ("tt9000001".to_string(), "Хочу фильм".to_string())
+            ]
+        );
+    }
+
     #[test]
     fn cache_ttl_by_result() {
         assert_eq!(ttl(&Ok(vec![json!({"url": "x"})])), 3_600_000, "находки - час");
