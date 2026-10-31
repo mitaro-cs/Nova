@@ -32,20 +32,70 @@ pub fn cached(db: &Db, ids: &[String]) -> HashMap<String, Cached> {
     out
 }
 
-/// Записать (id, русское имя, источник).
-pub fn store(db: &Db, rows: &[(String, String, &str)]) -> anyhow::Result<()> {
+/// Записать (id, русское имя, источник, оригинальное написание).
+pub fn store(db: &Db, rows: &[(String, String, &str, String)]) -> anyhow::Result<()> {
     let at = now_ms();
     db.tx(|tx| {
-        for (id, ru, source) in rows {
+        for (id, ru, source, orig) in rows {
             tx.execute(
-                "INSERT INTO person_names (id, ru, source, at) VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(id) DO UPDATE SET ru = ?2, source = ?3, at = ?4",
-                params![id, ru, source, at],
+                "INSERT INTO person_names (id, ru, source, at, orig) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(id) DO UPDATE SET ru = ?2, source = ?3, at = ?4, orig = ?5",
+                params![id, ru, source, at, orig],
             )?;
         }
         Ok(())
     })?;
     Ok(())
+}
+
+/// Режиссёры своих фильмов с латинским именем и id IMDb, которых ещё нет в кэше имён: (id, имя).
+pub fn pending_directors(db: &Db, limit: i64) -> rusqlite::Result<Vec<(String, String)>> {
+    db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT DISTINCT json_extract(p.value, '$.id'), json_extract(p.value, '$.name')
+             FROM titles t, json_each(t.people) p
+             WHERE json_extract(p.value, '$.job') = 'director'
+               AND json_extract(p.value, '$.id') LIKE 'nm%'
+               AND json_extract(p.value, '$.name') GLOB '*[A-Za-z]*'
+               AND NOT EXISTS (SELECT 1 FROM person_names n WHERE n.id = json_extract(p.value, '$.id'))
+             LIMIT ?1",
+        )?;
+        let r = st.query_map([limit], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        r.collect()
+    })
+}
+
+/// Фоновый прогрев кэша имён режиссёров своих фильмов: к первому показу карточки там уже русское
+/// имя из Викиданных, а не транслитерация. По 50 за раз, пауза между проходами.
+pub async fn warm_directors(app: std::sync::Arc<crate::App>) {
+    tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+    loop {
+        let endpoint = app.db.setting("names.wikidata.sparql").unwrap_or_else(|| WIKIDATA.to_string());
+        let todo = if endpoint.is_empty() { vec![] } else { pending_directors(&app.db, 50).unwrap_or_default() };
+        if todo.is_empty() {
+            tokio::time::sleep(std::time::Duration::from_secs(900)).await;
+            continue;
+        }
+        let mut people: Vec<crate::meta::Person> = todo
+            .into_iter()
+            .map(|(id, name)| crate::meta::Person { name, job: "director".into(), id: Some(id), ..Default::default() })
+            .collect();
+        localize_with(&app.db, &app.http, &endpoint, &mut people).await;
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    }
+}
+
+/// Имя режиссёра на карточке по-русски без сетевых запросов: из кэша по оригинальному написанию,
+/// иначе транслитерация. Кириллица возвращается как есть.
+pub fn ru_director(db: &Db, name: &str) -> String {
+    if !has_latin(name) {
+        return name.to_string();
+    }
+    let hit: Option<String> = db
+        .with(|c| c.query_row("SELECT ru FROM person_names WHERE orig = ?1 LIMIT 1", [name], |r| r.get(0)).optional())
+        .ok()
+        .flatten();
+    hit.unwrap_or_else(|| translit(name))
 }
 
 /// Адрес SPARQL Викиданных; настройка `names.wikidata.sparql`: пустая - Викиданные выключены.
@@ -127,18 +177,19 @@ pub async fn localize_with(db: &Db, http: &reqwest::Client, endpoint: &str, peop
     let stale: Vec<String> = ids.iter().filter(|i| known.get(*i).is_none_or(|c| due(c, now))).cloned().collect();
     if !stale.is_empty() {
         let found = wikidata_ru(http, endpoint, &stale).await.unwrap_or_default();
-        let mut rows: Vec<(String, String, &str)> = Vec::new();
+        let mut rows: Vec<(String, String, &str, String)> = Vec::new();
         for id in &stale {
+            let orig = names[id].clone();
             if let Some(ru) = found.get(id) {
-                rows.push((id.clone(), ru.clone(), "wikidata"));
+                rows.push((id.clone(), ru.clone(), "wikidata", orig));
             } else if let Some(old) = known.get(id) {
-                rows.push((id.clone(), old.ru.clone(), "translit"));
+                rows.push((id.clone(), old.ru.clone(), "translit", orig));
             } else {
-                rows.push((id.clone(), translit(&names[id]), "translit"));
+                rows.push((id.clone(), translit(&orig), "translit", orig));
             }
         }
         if store(db, &rows).is_ok() {
-            for (id, ru, source) in rows {
+            for (id, ru, source, _) in rows {
                 known.insert(id, Cached { ru, source: source.into(), at: now });
             }
         }
@@ -404,8 +455,8 @@ mod tests {
     #[test]
     fn person_names_roundtrip() {
         let db = crate::db::Db::memory().unwrap();
-        store(&db, &[("nm1".into(), "Райан Гослинг".into(), "wikidata")]).unwrap();
-        store(&db, &[("nm1".into(), "Райан Гослинг".into(), "translit")]).unwrap();
+        store(&db, &[("nm1".into(), "Райан Гослинг".into(), "wikidata", "Ryan Gosling".into())]).unwrap();
+        store(&db, &[("nm1".into(), "Райан Гослинг".into(), "translit", "Ryan Gosling".into())]).unwrap();
         let got = cached(&db, &["nm1".into(), "nm2".into()]);
         assert_eq!(got.len(), 1);
         assert_eq!(got["nm1"].source, "translit");
@@ -443,7 +494,7 @@ mod tests {
     #[tokio::test]
     async fn localize_uses_cache_then_translit() {
         let db = crate::db::Db::memory().unwrap();
-        store(&db, &[("nm0331516".into(), "Райан Гослинг".into(), "wikidata")]).unwrap();
+        store(&db, &[("nm0331516".into(), "Райан Гослинг".into(), "wikidata", "Ryan Gosling".into())]).unwrap();
         let mut people = vec![
             person("Ryan Gosling", Some("Neil Armstrong"), Some("nm0331516")),
             person("Kyle Chandler", Some("Deke Slayton"), Some("nm0151419")),
@@ -469,6 +520,40 @@ mod tests {
         assert!(people[0].orig.is_none());
         assert_eq!(people[1].name, "봉준호");
         assert!(people[1].orig.is_none());
+    }
+
+    #[test]
+    fn pending_directors_lists_only_uncached_latin_ones() {
+        let db = crate::db::Db::memory().unwrap();
+        let people =
+            |name: &str, id: &str| serde_json::json!([{"name": name, "job": "director", "id": id}]).to_string();
+        db.with(|c| {
+            for (key, p) in [
+                ("a", people("Damien Chazelle", "nm2467416")),
+                ("b", people("Kyle Chandler", "nm0151419")),
+                ("c", people("Тим Роббинс", "nm0000209")),
+                ("d", serde_json::json!([{"name": "Tom Hardy", "job": "director"}]).to_string()),
+            ] {
+                c.execute(
+                    "INSERT INTO titles(kind,key,title,people,added_at,updated_at) VALUES('movie',?,?,?,0,0)",
+                    params![key, key, p],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        store(&db, &[("nm0151419".into(), "Кайл Чендлер".into(), "wikidata", "Kyle Chandler".into())]).unwrap();
+        let got = pending_directors(&db, 10).unwrap();
+        assert_eq!(got, [("nm2467416".to_string(), "Damien Chazelle".to_string())]);
+    }
+
+    #[test]
+    fn ru_director_uses_cache_then_translit() {
+        let db = crate::db::Db::memory().unwrap();
+        store(&db, &[("nm2467416".into(), "Дэмьен Шазелл".into(), "wikidata", "Damien Chazelle".into())]).unwrap();
+        assert_eq!(ru_director(&db, "Damien Chazelle"), "Дэмьен Шазелл");
+        assert_eq!(ru_director(&db, "Kyle Chandler"), "Кайл Чандлер");
+        assert_eq!(ru_director(&db, "Тим Роббинс"), "Тим Роббинс");
     }
 
     #[test]

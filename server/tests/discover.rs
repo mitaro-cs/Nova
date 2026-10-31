@@ -627,6 +627,49 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
     running.shutdown().await;
 }
 
+/// Режиссёр на карточке своего фильма - по-русски: из кэша имён, иначе транслитерация.
+#[tokio::test(flavor = "multi_thread")]
+async fn own_card_director_is_russian() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO person_names (id, ru, source, at, orig) VALUES ('nm2467416', 'Дэмьен Шазелл', 'wikidata', 0, 'Damien Chazelle')",
+                [],
+            )
+        })
+        .unwrap();
+    let mut ids = vec![];
+    for (key, director) in [("la-la", "Damien Chazelle"), ("other", "Kyle Chandler")] {
+        let people = json!([{"name": director, "job": "director"}]);
+        let id: i64 = running
+            .app
+            .db
+            .with(|c| {
+                c.execute(
+                    "INSERT INTO titles(kind,key,title,people,added_at,updated_at) VALUES('movie',?,?,?,0,0)",
+                    rusqlite::params![key, key, people.to_string()],
+                )?;
+                let id = c.last_insert_rowid();
+                c.execute(
+                    "INSERT INTO files(title_id,path,size,mtime,added_at) VALUES(?,?,1048576,0,0)",
+                    rusqlite::params![id, format!("{key}.mp4")],
+                )?;
+                Ok(id)
+            })
+            .unwrap();
+        ids.push(id);
+    }
+    let a = host.json(&format!("/api/titles/{}", ids[0])).await;
+    assert_eq!(a["card"]["director"], "Дэмьен Шазелл", "из кэша");
+    let b = host.json(&format!("/api/titles/{}", ids[1])).await;
+    assert_eq!(b["card"]["director"], "Кайл Чандлер", "транслитерация без кэша");
+    running.shutdown().await;
+}
+
 /// Первая загрузка «Обзора» лёгкая: в ряду не больше 20 карточек, вся подборка - отдельным запросом.
 #[tokio::test(flavor = "multi_thread")]
 async fn feed_rows_are_capped_and_full_chart_stays_available() {

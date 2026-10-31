@@ -300,7 +300,10 @@ pub const CARD_COLS: &str = "t.id, t.kind, t.title, t.original_title, t.year, CO
     (SELECT COUNT(*) FROM files f WHERE f.title_id = t.id AND f.missing = 0),
     (SELECT COUNT(DISTINCT f.season) FROM files f WHERE f.title_id = t.id AND f.missing = 0),
     json_extract(t.countries, '$[0]'),
-    (SELECT json_extract(value, '$.name') FROM json_each(t.people) WHERE json_extract(value, '$.job') = 'director' LIMIT 1),
+    -- Режиссёр: русское имя из кэша `person_names`, нет в кэше - как записано (латиницу `card` транслитерирует).
+    (SELECT COALESCE((SELECT pn.ru FROM person_names pn WHERE pn.orig = json_extract(value, '$.name') LIMIT 1),
+                     json_extract(value, '$.name'))
+       FROM json_each(t.people) WHERE json_extract(value, '$.job') = 'director' LIMIT 1),
     t.accent,
     COALESCE(t.backdrop_sm, (SELECT f.still FROM files f WHERE f.title_id = t.id AND f.still IS NOT NULL ORDER BY f.season, f.episode LIMIT 1), t.backdrop)";
 
@@ -330,7 +333,13 @@ pub fn card(r: &Row) -> rusqlite::Result<Card> {
         my_rating: None,
         match_pct: None,
         country: r.get(17)?,
-        director: r.get(18)?,
+        director: r.get::<_, Option<String>>(18)?.map(|d| {
+            if crate::names::has_latin(&d) {
+                crate::names::translit(&d)
+            } else {
+                d
+            }
+        }),
         accent: r.get(19)?,
         backdrop_small: img(r.get(20)?),
         status: None,
