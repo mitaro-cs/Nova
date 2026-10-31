@@ -144,21 +144,16 @@
   /* Подвал всегда ниже первого экрана: пока страница грузится, он не прыгает вниз (CLS). */
   main {
     min-height: 100dvh;
-    transition:
-      opacity 0.2s ease-out,
-      transform 0.2s ease-out;
+    transition: opacity 0.18s ease-out;
   }
   main.leaving {
-    opacity: 0.45;
-    transform: scale(0.99);
-    transform-origin: 50% 35%;
+    opacity: 0.55;
   }
   :global(.no-motion) main {
     transition: none;
   }
   :global(.no-motion) main.leaving {
     opacity: 1;
-    transform: none;
   }
   footer {
     display: grid;

@@ -575,8 +575,8 @@
      площадь, видеокарту хоста не грузит (на всю страницу размытие убрали в 0.6). */
   .pill {
     background: rgba(255, 255, 255, 0.1);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
-    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.22);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.28),
@@ -594,8 +594,8 @@
   .pill a { min-width:0; }
   .right .round {
     background: rgba(255, 255, 255, 0.1);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
-    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.22);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.28),

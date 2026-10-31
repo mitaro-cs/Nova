@@ -387,15 +387,15 @@ select.input option {
 
 /* ---------- движение: только transform и opacity (видеокарте легко, вёрстка не прыгает) ---------- */
 
-/* Страница появляется мягко - при каждом переходе. */
+/* Страница появляется мягко - при каждом переходе. Только прозрачность: сдвиг всей длинной страницы
+   (она бывает в несколько тысяч пикселей) заставлял видеокарту перерисовывать её целиком - выходили рывки. */
 .page,
 .home {
-  animation: page-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: page-in 0.32s ease-out both;
 }
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
   }
 }
 /* Карточки-панели (профиль, управление, списки) всплывают по очереди. */
@@ -443,24 +443,8 @@ select.input option {
     transform: translateY(6px);
   }
 }
-/* Разделы листа (страница фильма, сериала, человека), ряды и панели проявляются при прокрутке - там,
-   где браузер умеет анимацию по прокрутке (Chromium, окно на Windows); иначе просто стоят на месте. */
-@supports (animation-timeline: view()) {
-  .block,
-  .shelf,
-  .account-grid > *,
-  .legal-links {
-    animation: reveal linear both;
-    animation-timeline: view();
-    animation-range: entry 0% entry 38%;
-  }
-  @keyframes reveal {
-    from {
-      opacity: 0;
-      transform: translateY(26px);
-    }
-  }
-}
+/* Появление разделов при прокрутке (animation-timeline: view()) убрано: сдвиг каждого раздела под
+   колесом мыши выглядел рывками (0.6.10). */
 /* Цвет фильма на главной: кадр героя ставит --tone на <html>, фон страницы плавно перетекает в новый цвет. */
 @property --tone {
   syntax: '<color>';
@@ -471,16 +455,6 @@ select.input option {
    только как цвет краёв кадра героя и равен фону страницы. */
 :root {
   --tone-dark: var(--bg);
-}
-/* Заставка входа: пока идут буквы, страница скрыта и чуть увеличена, потом плавно ложится на место. */
-.intro-reveal main {
-  animation: intro-page 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 1.7s both;
-}
-@keyframes intro-page {
-  from {
-    opacity: 0;
-    transform: scale(1.05);
-  }
 }
 /* Значок пустого экрана чуть покачивается. */
 .empty > svg:first-child {

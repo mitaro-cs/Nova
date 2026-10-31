@@ -57,10 +57,11 @@
   const sectionResumes = $derived(resumes.filter((r) => tab === 'home' ? true : tab === 'anime' ? isAnime(r.card ?? r.ext!) : (r.card ?? r.ext)?.kind === (tab === 'series' ? 'series' : 'movie')));
   // Тема недели: ряд под «Продолжить» и пара кадров в герое.
   let theme = $state<{ key: string; title: string; subtitle: string; items: ExtCard[] } | null>(null);
+  let themeSettled = $state(false);
   $effect(() => {
     void extSheet.version;
     let live = true;
-    api<NonNullable<typeof theme>>('/api/theme').then((t) => { if (live) theme = t; }, () => {});
+    api<NonNullable<typeof theme>>('/api/theme').then((t) => { if (live) { theme = t; themeSettled = true; } }, () => { if (live) themeSettled = true; });
     return () => { live = false; };
   });
   let feedFailed = $state(false);
@@ -83,8 +84,12 @@
   const imdb = $derived(feed ? feed.rows.filter((r) => tab === 'home' ? !r.key.startsWith('anime_') : tab === 'anime' ? r.key.startsWith('anime_') : r.key.endsWith(tab === 'series' ? '_series' : '_movies')) : []);
   // Герой: сначала своё (с местом, где остановились), потом ваши «Смотрю» и «Хочу» из Обзора, потом
   // тема недели и популярное IMDb - без повторов и брошенного.
+  // Пока не пришли «Смотрю/Хочу» и тема недели, первым слайдом был бы случайный фильм, а через
+  // мгновение - другой (слайд «перескакивал»): ждём, чтобы порядок сразу был окончательным.
+  const heroReady = $derived(marks !== null && themeSettled);
   const showcase = $derived.by(() => {
     const local = hero.slice(0, 3).map((card) => ({ card }));
+    if (!heroReady) return local;
     const ok = (e: ExtCard) => e.mark !== 'dropped' && !e.local;
     const saved = marks ? [...marks.watching, ...marks.want].flatMap((m) => (m.ext && ok(m.ext) ? [m.ext] : [])) : [];
     const themed = (theme?.items ?? []).filter(ok).slice(0, 2);
@@ -171,7 +176,9 @@
     </div>
   {:else}
     {#if tab === 'home'}
-      {#if showcase.length}<Showcase items={showcase} />{:else}
+      {#if showcase.length}<Showcase items={showcase} />{:else if !heroReady}
+        <div class="ph-hero wait"><Loading label="Собираем ваш кинотеатр" /></div>
+      {:else}
         <section class="welcome">
           <span class="eyebrow">ВАШ ДОМАШНИЙ КИНОТЕАТР</span>
           <h1>Что посмотрим сегодня?</h1>
@@ -254,6 +261,8 @@
 
 <style>
   .ph-hero { display: grid; place-items: center; background: #000; }
+  /* Ожидание героя - той же высоты, что и сам герой (ничего не сдвигается, когда он появится). */
+  .ph-hero.wait { min-height: clamp(520px, 78svh, 860px); }
   .homepage .rows { margin-top: 0; padding-top: 12px; }
   .welcome { min-height: 430px; padding: calc(var(--header) + 80px) var(--gutter) 48px; background: radial-gradient(ellipse at 80% 20%, #37302566, transparent 65%); }
   .welcome h1 { font-size: clamp(32px, 4vw, 64px); letter-spacing: -.04em; margin: 18px 0; }

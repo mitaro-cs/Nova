@@ -126,15 +126,6 @@
     object-position: center 28%;
     animation: shot-in 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
-  /* Переход к фильму: весь верх появляется сразу (кадр медленно «осаживается»), блоки всплывают по очереди. */
-  .rwh {
-    animation: hero-open 0.5s ease-out both;
-  }
-  @keyframes hero-open {
-    from {
-      opacity: 0;
-    }
-  }
   .shot img.tall {
     filter: blur(6px);
     transform: scale(1.06);
@@ -534,7 +525,7 @@
     }
   }
 
-  :global(.no-motion) :is(.rwh, .shot img, .shot .ph, .poster, .text, .go, .pills, .plate) {
+  :global(.no-motion) :is(.shot img, .shot .ph, .poster, .text, .go, .pills, .plate) {
     animation: none;
   }
 </style>
