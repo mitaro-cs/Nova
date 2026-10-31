@@ -48,6 +48,59 @@ pub fn store(db: &Db, rows: &[(String, String, &str)]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Адрес SPARQL Викиданных; настройка `names.wikidata.sparql`: пустая - Викиданные выключены.
+pub const WIKIDATA: &str = "https://query.wikidata.org/sparql";
+
+/// «nm» и цифры - только такие id попадают в запрос.
+pub fn valid_id(id: &str) -> bool {
+    id.len() >= 3 && id.len() <= 12 && id.starts_with("nm") && id[2..].bytes().all(|b| b.is_ascii_digit())
+}
+
+pub fn sparql(ids: &[String]) -> String {
+    let values: Vec<String> = ids.iter().filter(|i| valid_id(i)).map(|i| format!("\"{i}\"")).collect();
+    format!(
+        "SELECT ?imdb ?ru WHERE {{ VALUES ?imdb {{ {} }} ?item wdt:P345 ?imdb. \
+         ?item rdfs:label ?ru FILTER(LANG(?ru) = \"ru\") }}",
+        values.join(" ")
+    )
+}
+
+/// id IMDb -> русская метка (метка без кириллицы - не перевод).
+pub fn parse_wikidata(v: &serde_json::Value) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for b in v["results"]["bindings"].as_array().into_iter().flatten() {
+        if let (Some(id), Some(ru)) = (b["imdb"]["value"].as_str(), b["ru"]["value"].as_str()) {
+            if valid_id(id) && crate::ruwiki::has_cyrillic(ru) {
+                out.insert(id.to_string(), ru.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Русские имена людей по id IMDb одним запросом (до 3 секунд). Пустой адрес - сразу пустой ответ.
+pub async fn wikidata_ru(
+    http: &reqwest::Client,
+    endpoint: &str,
+    ids: &[String],
+) -> anyhow::Result<HashMap<String, String>> {
+    if endpoint.is_empty() || !ids.iter().any(|i| valid_id(i)) {
+        return Ok(HashMap::new());
+    }
+    let url = reqwest::Url::parse_with_params(endpoint, &[("query", sparql(ids))])?;
+    let v: serde_json::Value = http
+        .get(url)
+        .header("user-agent", concat!("Nova/", env!("CARGO_PKG_VERSION"), " (home cinema)"))
+        .header("accept", "application/sparql-results+json")
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(parse_wikidata(&v))
+}
+
 pub fn has_latin(s: &str) -> bool {
     s.chars().any(|c| c.is_ascii_alphabetic())
 }
@@ -198,6 +251,24 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert_eq!(got["nm1"].source, "translit");
         assert_eq!(got["nm1"].ru, "Райан Гослинг");
+    }
+
+    #[test]
+    fn only_nm_ids_reach_sparql() {
+        let q = sparql(&["nm0331516".into(), "nm1\" } DROP".into(), "tt0111161".into()]);
+        assert!(q.contains("\"nm0331516\""));
+        assert!(!q.contains("DROP"));
+        assert!(!q.contains("tt0111161"));
+    }
+
+    #[test]
+    fn wikidata_answer_is_parsed() {
+        let v = serde_json::json!({"results": {"bindings": [
+            {"imdb": {"value": "nm0331516"}, "ru": {"value": "Райан Гослинг"}},
+            {"imdb": {"value": "nm0001"}, "ru": {"value": "Ryan X"}}]}});
+        let m = parse_wikidata(&v);
+        assert_eq!(m["nm0331516"], "Райан Гослинг");
+        assert!(!m.contains_key("nm0001"));
     }
 
     #[test]
