@@ -627,6 +627,20 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
     running.shutdown().await;
 }
 
+/// Фильма из ленты ещё нет в базе (страницу только открыли): отзывы - пустой список, а не 404.
+#[tokio::test(flavor = "multi_thread")]
+async fn ext_reviews_of_unknown_title_is_empty() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let r = host.get("/api/discover/title/tt0000001/reviews").await;
+    assert_eq!(r.status(), 200);
+    let v: Value = r.json().await.unwrap();
+    assert_eq!(v["items"], json!([]));
+    assert_eq!(v["votes"], 0);
+    assert_eq!(host.get("/api/discover/title/bad/reviews").await.status(), 404, "неверный id - по-прежнему 404");
+    running.shutdown().await;
+}
+
 /// Имена людей и персонажей на страницах фильма - по-русски, в базе остаются оригинальные.
 #[tokio::test(flavor = "multi_thread")]
 async fn people_on_film_pages_are_russian() {

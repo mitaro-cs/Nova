@@ -184,8 +184,14 @@ pub async fn reviews(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>
 }
 
 pub async fn ext_reviews(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let t = target_ext(&app, &v, &id)?;
-    Ok(Json(reviews_of(&app, &v, &t)?))
+    match target_ext(&app, &v, &id) {
+        Ok(t) => Ok(Json(reviews_of(&app, &v, &t)?)),
+        // Страницу фильма из ленты открыли раньше, чем он записан в базу: отзывов ещё нет.
+        Err(e) if e.status == axum::http::StatusCode::NOT_FOUND && crate::discover::valid_id(&id) => {
+            Ok(Json(json!({ "average": null, "votes": 0, "total": 0, "items": [], "canWrite": !v.profile.kids })))
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[derive(Deserialize)]

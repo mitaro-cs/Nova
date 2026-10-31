@@ -24,12 +24,14 @@
   );
   let replacement = $state<string | null>(null);
   let loaded = $state(false);
-  const source = $derived(replacement ?? c.poster);
-  $effect(() => { void c.poster; void card?.id; replacement = null; loaded = false; });
+  // Запасной адрес тоже не дал картинку: остаётся заглушка с названием, без битого <img>.
+  let failed = $state(false);
+  const source = $derived(failed ? null : (replacement ?? c.poster));
+  $effect(() => { void c.poster; void card?.id; replacement = null; loaded = false; failed = false; });
   function retryImage() {
     const fallback = card ? `/api/discover/poster/${card.id}` : null;
     if (fallback && source !== fallback) replacement = fallback;
-    else loaded = false;
+    else { loaded = false; failed = true; }
   }
 </script>
 
