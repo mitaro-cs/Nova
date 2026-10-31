@@ -635,6 +635,15 @@ CREATE TABLE liked_people (
   PRIMARY KEY (profile_id, name, role)
 );
 "#,
+    // 25 (alpha 0.7.2): русские имена людей фильмов (Викиданные или транслитерация), по id IMDb «nm…».
+    r#"
+CREATE TABLE person_names (
+  id TEXT PRIMARY KEY,
+  ru TEXT NOT NULL,
+  source TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

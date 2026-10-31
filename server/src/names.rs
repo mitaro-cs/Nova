@@ -1,6 +1,53 @@
 //! Русские имена людей и персонажей: IMDb отдаёт латиницу. Перевод накладывается при отдаче
 //! страницы (в базе остаются оригинальные имена): кэш `person_names` -> Викиданные -> транслитерация.
 
+use crate::db::Db;
+use crate::util::now_ms;
+use rusqlite::{params, OptionalExtension};
+use std::collections::HashMap;
+
+/// Транслитерация - временная: через сутки её заменяет перевод из Викиданных, если он появился.
+pub const RETRY_MS: i64 = 86_400_000;
+
+pub struct Cached {
+    pub ru: String,
+    /// `wikidata` или `translit`.
+    pub source: String,
+    pub at: i64,
+}
+
+/// Что уже известно по id людей («nm…»).
+pub fn cached(db: &Db, ids: &[String]) -> HashMap<String, Cached> {
+    let mut out = HashMap::new();
+    for id in ids {
+        let row = db.with(|c| {
+            c.prepare_cached("SELECT ru, source, at FROM person_names WHERE id = ?")?
+                .query_row([id], |r| Ok(Cached { ru: r.get(0)?, source: r.get(1)?, at: r.get(2)? }))
+                .optional()
+        });
+        if let Ok(Some(c)) = row {
+            out.insert(id.clone(), c);
+        }
+    }
+    out
+}
+
+/// Записать (id, русское имя, источник).
+pub fn store(db: &Db, rows: &[(String, String, &str)]) -> anyhow::Result<()> {
+    let at = now_ms();
+    db.tx(|tx| {
+        for (id, ru, source) in rows {
+            tx.execute(
+                "INSERT INTO person_names (id, ru, source, at) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO UPDATE SET ru = ?2, source = ?3, at = ?4",
+                params![id, ru, source, at],
+            )?;
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn has_latin(s: &str) -> bool {
     s.chars().any(|c| c.is_ascii_alphabetic())
 }
@@ -141,6 +188,17 @@ pub fn translit(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn person_names_roundtrip() {
+        let db = crate::db::Db::memory().unwrap();
+        store(&db, &[("nm1".into(), "Райан Гослинг".into(), "wikidata")]).unwrap();
+        store(&db, &[("nm1".into(), "Райан Гослинг".into(), "translit")]).unwrap();
+        let got = cached(&db, &["nm1".into(), "nm2".into()]);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got["nm1"].source, "translit");
+        assert_eq!(got["nm1"].ru, "Райан Гослинг");
+    }
 
     #[test]
     fn translit_known_names() {
