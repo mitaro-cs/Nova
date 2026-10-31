@@ -323,11 +323,24 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
     })?;
     let x: Value = extra.and_then(|e| serde_json::from_str(&e).ok()).unwrap_or(Value::Null);
     let img = crate::media_meta::existing_image;
-    let people: Vec<Value> = x["people"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|p| json!({"name": p["name"], "job": p["job"], "role": p["role"], "photo": img(&p["photo"]), "id": p["id"]}))
+    let raw: Vec<&Value> = x["people"].as_array().into_iter().flatten().collect();
+    let mut team: Vec<crate::meta::Person> = raw
+        .iter()
+        .map(|p| crate::meta::Person {
+            name: p["name"].as_str().unwrap_or_default().into(),
+            role: p["role"].as_str().map(String::from),
+            job: p["job"].as_str().unwrap_or_default().into(),
+            id: p["id"].as_str().map(String::from),
+            ..Default::default()
+        })
+        .collect();
+    crate::names::localize(&app, &mut team).await;
+    let people: Vec<Value> = team
+        .iter()
+        .zip(&raw)
+        .map(|(p, raw)| {
+            json!({"name": p.name, "orig": p.orig, "job": p.job, "role": p.role, "photo": img(&raw["photo"]), "id": p.id})
+        })
         .collect();
     let gallery: Vec<String> = x["gallery"].as_array().into_iter().flatten().filter_map(img).collect();
     let similar = ext_cards(

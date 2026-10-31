@@ -445,6 +445,7 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) 
         )
     })?;
     let mut people: Vec<crate::meta::Person> = serde_json::from_str(&people).unwrap_or_default();
+    crate::names::localize(&app, &mut people).await;
     for p in &mut people {
         p.photo = img(p.photo.take());
     }

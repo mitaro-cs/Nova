@@ -627,6 +627,68 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
     running.shutdown().await;
 }
 
+/// Имена людей и персонажей на страницах фильма - по-русски, в базе остаются оригинальные.
+#[tokio::test(flavor = "multi_thread")]
+async fn people_on_film_pages_are_russian() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let app = running.app.clone();
+    app.db.set_setting("names.wikidata.sparql", "").unwrap();
+    app.db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO person_names (id, ru, source, at) VALUES ('nm0331516', 'Райан Гослинг', 'wikidata', 0)",
+                [],
+            )
+        })
+        .unwrap();
+    let people = json!([
+        {"name": "Ryan Gosling", "job": "actor", "role": "Neil Armstrong", "id": "nm0331516"},
+        {"name": "Kyle Chandler", "job": "actor", "role": "Deke Slayton", "id": "nm0151419"},
+    ]);
+
+    // Фильм из ленты: люди лежат в `ext_titles.extra`.
+    fsfy::discover::upsert(&app, &[ext("tt2543164", "Первый человек", false)]).unwrap();
+    app.db
+        .with(|c| {
+            c.execute(
+                "UPDATE ext_titles SET extra = ?, detailed = ? WHERE id = 'tt2543164'",
+                rusqlite::params![json!({"people": people}).to_string(), fsfy::discover::DETAILED],
+            )
+        })
+        .unwrap();
+    let page = host.json("/api/discover/title/tt2543164").await;
+    assert_eq!(page["people"][0]["name"], "Райан Гослинг");
+    assert_eq!(page["people"][0]["orig"], "Ryan Gosling");
+    assert_eq!(page["people"][0]["role"], "Нил Армстронг");
+    assert_eq!(page["people"][1]["name"], "Кайл Чандлер");
+    let stored: String =
+        app.db.with(|c| c.query_row("SELECT extra FROM ext_titles WHERE id = 'tt2543164'", [], |r| r.get(0))).unwrap();
+    assert!(stored.contains("Ryan Gosling"), "в базе - оригинал");
+
+    // Свой фильм: люди лежат в `titles.people`.
+    let id: i64 = app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO titles(kind,key,title,people,added_at,updated_at) VALUES('movie','first-man','Первый человек',?,0,0)",
+                [people.to_string()],
+            )?;
+            let id = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO files(title_id,path,size,mtime,added_at) VALUES(?,'first-man.mp4',1048576,0,0)",
+                [id],
+            )?;
+            Ok(id)
+        })
+        .unwrap();
+    let own = host.json(&format!("/api/titles/{id}")).await;
+    assert_eq!(own["people"][0]["name"], "Райан Гослинг");
+    assert_eq!(own["people"][0]["orig"], "Ryan Gosling");
+    assert_eq!(own["people"][1]["role"], "Дик Слейтон");
+    running.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "requires live series page and external player"]
 async fn admin_imports_real_series_playlist() {
