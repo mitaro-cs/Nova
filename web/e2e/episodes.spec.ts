@@ -20,7 +20,7 @@ test('будущая серия показывает год выхода без 
   await expect(episodes.locator('img[src*="old-frame"]')).toHaveCount(0);
 });
 
-test('фильм: другие источники запрашиваются только после пустого LordFilm и нажатия', async ({page}) => {
+test('фильм: другие источники запрашиваются сами, но только после пустого LordFilm', async ({page}) => {
   const id='tt7654322';
   const card={id,kind:'movie',title:'Тестовый фильм',original:null,year:2024,rating:8,poster:null,genres:[],local:null,mark:null,wished:false};
   const backdrop='/api/discover/art?url=https%3A%2F%2Fm.media-amazon.com%2Fimages%2Fbanner.jpg';
@@ -49,15 +49,16 @@ test('фильм: другие источники запрашиваются т�
     await expect(page.locator('.rwh .poster')).toBeVisible();
   }
   await expect.poll(()=>providers).toEqual(['lordfilm']);
+  // Пока LordFilm не ответил, других источников не трогаем и ручной кнопки ещё нет.
   await expect(page.getByRole('button',{name:'Найти на другом источнике',exact:true})).toHaveCount(0);
   await expect(page.locator('img[src*="media-amazon.com"]').first()).toBeAttached();
   finish();
-  const fallback=page.getByRole('button',{name:'Найти на другом источнике',exact:true}).filter({visible:true}).first();
-  await expect(fallback).toBeVisible();
-  expect(providers).toEqual(['lordfilm']);
-  await fallback.click();
+  // LordFilm пуст - остальные источники запрашиваются сами, без нажатия.
   await expect.poll(()=>providers.includes('rutube')).toBe(true);
   expect(providers.filter(p=>p==='lordfilm')).toHaveLength(1);
+  // Нигде не нашлось - остаётся ручная кнопка.
+  const fallback=page.getByRole('button',{name:'Найти на другом источнике',exact:true}).filter({visible:true}).first();
+  await expect(fallback).toBeVisible();
 });
 
 test('автопоиск серии не сохраняет источник предыдущего эпизода', async ({page}) => {

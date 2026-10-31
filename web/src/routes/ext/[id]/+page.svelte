@@ -11,6 +11,7 @@
   import { progressSync } from '$lib/progressSync.svelte';
   import { searchLordfilm, searchVideos, isLordfilm, sourceName } from '$lib/links/search';
   import { rankFound } from '$lib/links/best';
+  import SourceStatus from '$lib/links/SourceStatus.svelte';
   import { localized } from '$lib/localized.svelte';
   import { fadeIn } from '$lib/ui/fade';
   import { goto } from '$app/navigation';
@@ -214,7 +215,10 @@
   let epsSettled = $state(false);
   let episodeFinding = $state(false);
   let sourceError = $state(false);
+  // «Повторить»: поиск источников заново (эффект ниже зависит от этого счётчика).
+  let retryKey = $state(0);
   $effect(() => {
+    void retryKey;
     const saved = episodeLinks.some(l => l.preferred || isLordfilm(l.url));
     // Серии ещё грузятся - ждём; не нашлось ни одной - ищем сериал по названию (иначе кнопка «горела» вечно).
     if (!d || c?.local || (isSeries && !selected && !epsSettled) || saved) {
@@ -814,7 +818,11 @@
     {#if sourceMissing}
       <section class="block" aria-label="Другие источники">
         <p class="muted">{sourceError ? 'Не удалось проверить доступность видео.' : isSeries ? 'Этой серии пока нет в нашей базе.' : 'Этого фильма пока нет в нашей базе.'}</p>
-        <button class="btn" onclick={() => (finding = true)}><Icon name="search" size={16} /> Найти на другом источнике</button>
+        <SourceStatus title={c.title} original={c.original} year={c.year} />
+        <div class="retry">
+          <button class="btn" onclick={() => retryKey++}><Icon name="refresh" size={16} /> Повторить</button>
+          <button class="btn" onclick={() => (finding = true)}><Icon name="search" size={16} /> Найти на другом источнике</button>
+        </div>
       </section>
     {/if}
     {#if session.me?.manage && d}<section class="block" aria-label="Управление источником"><button class="btn sm" onclick={() => (finding = true)}>Источники видео</button></section>{/if}
@@ -831,6 +839,7 @@
 {/if}
 
 <style>
+  .retry { display: flex; flex-wrap: wrap; gap: 8px; }
   .cinema-stage { height: clamp(260px,60svh,680px); position: relative; margin: 0 calc(-1 * var(--gutter)) 32px; }
   .cinema-stage img { position:absolute; inset:0; width:100%; max-width:none; height:100%; object-fit:cover; object-position:center 30%; }
   .cinema-details { display: grid; grid-template-columns: minmax(90px,auto) minmax(0,1fr); gap: 10px 18px; font-size: 13px; padding-top: 18px; border-top: 1px solid var(--line); margin: 20px 0 0; }
