@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 
-const ROW: i64 = 40;
+const ROW: i64 = 20;
 
 pub(super) fn ext_cards(
     app: &App,

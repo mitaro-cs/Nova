@@ -627,6 +627,35 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
     running.shutdown().await;
 }
 
+/// Первая загрузка «Обзора» лёгкая: в ряду не больше 20 карточек, вся подборка - отдельным запросом.
+#[tokio::test(flavor = "multi_thread")]
+async fn feed_rows_are_capped_and_full_chart_stays_available() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let items: Vec<_> = (0..60).map(|i| ext(&format!("tt90000{i:02}"), &format!("Фильм {i}"), false)).collect();
+    fsfy::discover::upsert(&running.app, &items).unwrap();
+    running
+        .app
+        .db
+        .with(|c| {
+            for i in 0..60 {
+                c.execute(
+                    "INSERT INTO ext_charts VALUES ('top_movies', ?, ?)",
+                    rusqlite::params![i, format!("tt90000{i:02}")],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let feed = host.json("/api/discover").await;
+    let row = feed["rows"].as_array().unwrap().iter().find(|r| r["key"] == "top_movies").expect("ряд");
+    assert_eq!(row["items"].as_array().unwrap().len(), 20, "в ряду - первые 20");
+    assert_eq!(row["items"][0]["title"], "Фильм 0", "порядок подборки сохранён");
+    let full = host.json("/api/discover/chart/top_movies").await;
+    assert_eq!(full["items"].as_array().unwrap().len(), 60, "вся подборка - отдельным запросом");
+    running.shutdown().await;
+}
+
 /// Фильма из ленты ещё нет в базе (страницу только открыли): отзывы - пустой список, а не 404.
 #[tokio::test(flavor = "multi_thread")]
 async fn ext_reviews_of_unknown_title_is_empty() {
