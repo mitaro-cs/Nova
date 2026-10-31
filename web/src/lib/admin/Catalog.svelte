@@ -31,7 +31,10 @@
 
   let rows = $state<Row[]>([]);
   let q = $state('');
-  let filter = $state('');
+  // Фильтр можно задать в адресе: `?tab=catalog&filter=none` - только фильмы без описания (ссылка из «Обзора»).
+  const FILTERS = ['none', 'pending', 'manual', 'hidden'];
+  const fromUrl = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('filter');
+  let filter = $state(fromUrl && FILTERS.includes(fromUrl) ? fromUrl : '');
   let error = $state('');
 
   let editing = $state<Row | null>(null);

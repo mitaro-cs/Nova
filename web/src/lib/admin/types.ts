@@ -26,6 +26,8 @@ export interface Status {
   files: number;
   size: number;
   metaPending: number;
+  /** Свои фильмы с файлами, которым описание не нашлось. */
+  unmatched: number;
   unprobed: number;
   scan: { running: boolean; at: number | null; error: string | null; progress: number | null; last: { files: number; added: number; missing: number; titles: number } | null };
   meta: { running: boolean; error: string | null; done: number };

@@ -92,15 +92,23 @@
       action: status.titles ? 'Папки' : 'Добавить папку',
     },
     {
-      ok: status.meta.error ? false : status.metaPending ? null : true,
+      ok: status.meta.error ? false : status.metaPending || status.unmatched ? null : true,
       icon: 'image',
-      title: status.meta.error ? 'Описания не загружаются' : status.metaPending ? 'Загружаем описания' : 'Описания загружены',
+      title: status.meta.error
+        ? 'Описания не загружаются'
+        : status.metaPending
+          ? 'Загружаем описания'
+          : status.unmatched
+            ? 'Есть фильмы без описания'
+            : 'Описания загружены',
       text: status.meta.error
         ? status.meta.error
         : status.metaPending
           ? `Осталось ${status.metaPending}: постеры, кадры, актёры и сюжет по-русски подтягиваются в фоне.`
-          : 'У всех фильмов есть постер, описание и оценки.',
-      href: '?tab=catalog',
+          : status.unmatched
+            ? `У ${status.unmatched} фильмов описание не нашлось: откройте «Каталог» и выберите верное.`
+            : 'У всех фильмов есть постер, описание и оценки.',
+      href: status.unmatched && !status.metaPending ? '?tab=catalog&filter=none' : '?tab=catalog',
       action: 'Каталог',
     },
     {

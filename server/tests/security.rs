@@ -113,6 +113,42 @@ async fn health_is_for_managers_and_lists_recent_errors() {
     running.shutdown().await;
 }
 
+/// «Обзор» считает свои фильмы, которым описание не нашлось (с файлами, не скрытые).
+#[tokio::test(flavor = "multi_thread")]
+async fn status_counts_unmatched_titles() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    running
+        .app
+        .db
+        .with(|c| {
+            for (key, status, hidden, with_file) in [
+                ("a", "none", 0, true),
+                ("b", "matched", 0, true),
+                ("c", "none", 1, true),
+                ("d", "none", 0, false),
+                ("e", "none", 0, true),
+            ] {
+                c.execute(
+                    "INSERT INTO titles(kind,key,title,meta_status,hidden,added_at,updated_at) VALUES('movie',?,?,?,?,0,0)",
+                    rusqlite::params![key, key, status, hidden],
+                )?;
+                if with_file {
+                    let id = c.last_insert_rowid();
+                    c.execute(
+                        "INSERT INTO files(title_id,path,size,mtime,added_at) VALUES(?,?,1,0,0)",
+                        rusqlite::params![id, format!("{key}.mp4")],
+                    )?;
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    let st = host.json("/api/admin/status").await;
+    assert_eq!(st["unmatched"], 2, "a и e: описание не найдено, есть файл, не скрыты");
+    running.shutdown().await;
+}
+
 /// Ошибки интерфейса зрителей попадают в журнал: без адресов, с ограничением частоты.
 #[tokio::test(flavor = "multi_thread")]
 async fn client_log_is_limited_and_sanitized() {

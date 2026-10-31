@@ -23,15 +23,17 @@ fn ok() -> Out {
 }
 
 pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
-    let (titles, files, size, pending, unprobed): (i64, i64, i64, i64, i64) = app.db.with(|c| {
+    let (titles, files, size, pending, unprobed, unmatched): (i64, i64, i64, i64, i64, i64) = app.db.with(|c| {
         c.query_row(
             "SELECT (SELECT COUNT(*) FROM titles t WHERE EXISTS (SELECT 1 FROM files f WHERE f.title_id = t.id AND f.missing = 0)),
                     (SELECT COUNT(*) FROM files WHERE missing = 0),
                     (SELECT COALESCE(SUM(size), 0) FROM files WHERE missing = 0),
                     (SELECT COUNT(*) FROM titles WHERE meta_status = 'pending' AND locked = 0),
-                    (SELECT COUNT(*) FROM files WHERE probe IS NULL AND missing = 0)",
+                    (SELECT COUNT(*) FROM files WHERE probe IS NULL AND missing = 0),
+                    (SELECT COUNT(*) FROM titles t WHERE t.meta_status = 'none' AND t.hidden = 0
+                       AND EXISTS (SELECT 1 FROM files f WHERE f.title_id = t.id AND f.missing = 0))",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         )
     })?;
     // «Сейчас смотрят»: прогресс за последнюю минуту (плеер шлёт его раз в 10 с).
@@ -63,7 +65,7 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
         "update": app.host.update_info(),
         "ports": {"public": app.ports.0, "window": app.ports.1},
         "titles": titles, "files": files, "size": size,
-        "metaPending": pending, "unprobed": unprobed,
+        "metaPending": pending, "unprobed": unprobed, "unmatched": unmatched,
         "scan": *app.scan_state.lock(),
         "meta": *app.meta_state.lock(),
         "ffmpeg": tools.ffmpeg.is_some(), "ffprobe": tools.ffprobe.is_some(),
