@@ -14,11 +14,13 @@ use std::{
 };
 type SearchResult = Result<Vec<Value>, String>;
 type Cache = Mutex<HashMap<String, (i64, SearchResult)>>;
+/// Сколько хранить ответ поиска: находки - час, пустой ответ - полчаса (на сайтах появляются новые
+/// выпуски), ошибка - несколько секунд (не считается «не нашли»).
 fn ttl(result: &SearchResult) -> i64 {
-    if result.is_ok() {
-        600_000
-    } else {
-        5_000
+    match result {
+        Ok(items) if !items.is_empty() => 3_600_000,
+        Ok(_) => 1_800_000,
+        Err(_) => 5_000,
     }
 }
 fn cached(key: &str) -> Option<anyhow::Result<Vec<Value>>> {
@@ -214,7 +216,10 @@ pub fn matches(
     } else if let Some(y) = year {
         let years = years();
         let found = years.find_iter(label).filter_map(|m| m.as_str().parse::<i64>().ok()).collect::<Vec<_>>();
-        if !found.is_empty() && !found.contains(&y) {
+        // Год на сайте и в IMDb часто расходится на 1 (фестиваль против проката): у названий из двух и
+        // более слов допускаем ± 1, у однословных - только точный год.
+        let close = |v: &i64| if words.len() >= 2 { (*v - y).abs() <= 1 } else { *v == y };
+        if !found.is_empty() && !found.iter().any(close) {
             return false;
         }
         // Одно общее слово не отличает фильм от ролика про животных, игры и т.п.
@@ -224,6 +229,23 @@ pub fn matches(
     }
     true
 }
+/// Подпись подходит, если совпало любое из названий (русское, оригинальное, прокатные).
+pub fn any_name_matches(
+    label: &str,
+    names: &[&str],
+    season: Option<i64>,
+    episode: Option<i64>,
+    year: Option<i64>,
+    trailer: bool,
+) -> bool {
+    names.iter().filter(|n| !n.trim().is_empty()).any(|n| matches(label, n, season, episode, year, trailer))
+}
+
+/// Прокатные названия (`aka`) из JSON-списка в базе: до трёх.
+fn aka_names(json: Option<String>) -> Vec<String> {
+    json.and_then(|j| serde_json::from_str::<Vec<String>>(&j).ok()).unwrap_or_default().into_iter().take(3).collect()
+}
+
 pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>> {
     let query = q.q.trim();
     let provider = q.provider.as_deref();
@@ -282,6 +304,21 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         app.db.with(|c|c.query_row("SELECT COALESCE((SELECT title FROM title_localizations WHERE id=e.id),title),original,year FROM ext_titles e WHERE id=?",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional())?
     } else {
         None
+    };
+    // Прокатные названия (aka): на сайтах фильм часто записан не так, как в IMDb.
+    let aka: Vec<String> = if let Some(id) = q.title_id {
+        aka_names(app.db.with(|c| c.query_row("SELECT aka FROM titles WHERE id=?", [id], |r| r.get(0)).optional())?)
+    } else if let Some(id) = &q.ext_id {
+        aka_names(
+            app.db
+                .with(|c| {
+                    c.query_row("SELECT json_extract(extra, '$.aka') FROM ext_titles WHERE id=?", [id], |r| r.get(0))
+                        .optional()
+                })?
+                .flatten(),
+        )
+    } else {
+        vec![]
     };
     let ru = async {
         if !enabled("rutube") {
@@ -375,10 +412,11 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         .filter(|i| {
             let label = i["label"].as_str().unwrap_or("");
             if let Some((title, original, year)) = &expected {
-                matches(label, title, q.season, q.episode, *year, q.mode.as_deref() == Some("trailer"))
-                    || original.as_ref().filter(|name| !name.trim().is_empty()).is_some_and(|name| {
-                        matches(label, name, q.season, q.episode, *year, q.mode.as_deref() == Some("trailer"))
-                    })
+                let names: Vec<&str> = std::iter::once(title.as_str())
+                    .chain(original.as_deref())
+                    .chain(aka.iter().map(String::as_str))
+                    .collect();
+                any_name_matches(label, &names, q.season, q.episode, *year, q.mode.as_deref() == Some("trailer"))
             } else {
                 q.mode.as_deref() != Some("trailer")
             }
@@ -466,6 +504,32 @@ mod tests {
         drop(second);
         assert!(weak.upgrade().is_none());
     }
+    #[test]
+    fn cache_ttl_by_result() {
+        assert_eq!(ttl(&Ok(vec![json!({"url": "x"})])), 3_600_000, "находки - час");
+        assert_eq!(ttl(&Ok(vec![])), 1_800_000, "пусто - полчаса");
+        assert_eq!(ttl(&Err("x".into())), 5_000, "ошибка - коротко");
+    }
+
+    #[test]
+    fn year_off_by_one_matches_for_multi_word_titles() {
+        assert!(matches("Первый человек (2019)", "Первый человек", None, None, Some(2018), false));
+        assert!(matches("Первый человек (2017)", "Первый человек", None, None, Some(2018), false));
+        assert!(!matches("Первый человек (2020)", "Первый человек", None, None, Some(2018), false));
+        // Однословное название - по-прежнему только точный год.
+        assert!(!matches("Мышь про животных 2025", "Мышь", None, None, Some(2024), false));
+        assert!(!matches("Смешные домашние животные 2025", "Животные", None, None, Some(2026), false));
+    }
+
+    #[test]
+    fn any_name_matches_uses_release_names() {
+        let names = ["Человек на Луне", "First Man", "Первый человек"];
+        assert!(any_name_matches("Первый человек (2018, 1080p)", &names, None, None, Some(2018), false));
+        assert!(any_name_matches("First Man (2018)", &names, None, None, Some(2018), false));
+        assert!(!any_name_matches("Новый Человек-паук (2012)", &names, None, None, Some(2018), false));
+        assert!(!any_name_matches("Первый человек (2018)", &[], None, None, Some(2018), false));
+    }
+
     #[test]
     fn correct_episode_and_movie() {
         assert!(!matches("Принц Персии — русский трейлер", "", None, None, None, true));
