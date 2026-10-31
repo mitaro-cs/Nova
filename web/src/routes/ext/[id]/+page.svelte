@@ -1,5 +1,6 @@
 <script lang="ts">
   import { countriesRu, languagesRu } from '$lib/countries';
+  import { akaShown } from '$lib/aka';
   import { MediaQuery } from 'svelte/reactivity';
   import MobileHero from '$lib/title/MobileHero.svelte';
   import RewindHero from '$lib/title/RewindHero.svelte';
@@ -785,10 +786,10 @@
         <h2 id="s-details">Детали</h2>
         <dl>
           {#if d.countries.length}<dt>Страна</dt><dd>{countriesRu(d.countries).join(', ')}</dd>{/if}
-          {#if d.languages.length}<dt>Язык</dt><dd>{d.languages.slice(0, 3).join(', ')}</dd>{/if}
+          {#if d.languages.length}<dt>Язык</dt><dd>{languagesRu(d.languages).slice(0, 3).join(', ')}</dd>{/if}
           {#if d.releaseDate}<dt>Премьера</dt><dd>{date(d.releaseDate)}</dd>{/if}
           {#if c.original}<dt>Оригинал</dt><dd>{c.original}</dd>{/if}
-          {#if d.aka.length}<dt>Также</dt><dd>{d.aka.slice(0, 4).join(', ')}</dd>{/if}
+          {#if akaShown(d.aka, null).length}<dt>Также</dt><dd>{akaShown(d.aka, null).join(', ')}</dd>{/if}
           {#if d.votes}<dt>Оценок IMDb</dt><dd>{d.votes.toLocaleString('ru-RU')}</dd>{/if}
         </dl>
 

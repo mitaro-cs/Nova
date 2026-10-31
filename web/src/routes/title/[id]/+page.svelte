@@ -1,5 +1,6 @@
 <script lang="ts">
   import { countriesRu, languagesRu } from '$lib/countries';
+  import { akaShown } from '$lib/aka';
   import { MediaQuery } from 'svelte/reactivity';
   import MobileHero from '$lib/title/MobileHero.svelte';
   import RewindHero from '$lib/title/RewindHero.svelte';
@@ -602,10 +603,10 @@
       <h2 id="s-details">Детали</h2>
       <dl>
         {#if t.countries.length}<dt>Страна</dt><dd>{countriesRu(t.countries).join(', ')}</dd>{/if}
-        {#if t.languages.length}<dt>Язык</dt><dd>{t.languages.slice(0, 3).join(', ')}</dd>{/if}
+        {#if t.languages.length}<dt>Язык</dt><dd>{languagesRu(t.languages).slice(0, 3).join(', ')}</dd>{/if}
         {#if t.releaseDate}<dt>Премьера</dt><dd>{date(t.releaseDate)}</dd>{/if}
         {#if c.originalTitle && c.originalTitle !== c.title}<dt>Оригинал</dt><dd>{c.originalTitle}</dd>{/if}
-        {#if t.aka.length}<dt>Также</dt><dd>{t.aka.slice(0, 4).join(', ')}</dd>{/if}
+        {#if akaShown(t.aka, null).length}<dt>Также</dt><dd>{akaShown(t.aka, null).join(', ')}</dd>{/if}
         {#if isSeries}<dt>На сайте</dt><dd>{count(t.files.length, 'серия', 'серии', 'серий')}</dd>{/if}
       </dl>
       <div class="links">

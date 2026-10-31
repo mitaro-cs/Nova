@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { fadeIn } from '$lib/ui/fade';
   import { fitTitle } from '$lib/ui/fitTitle';
+  import { localized } from '$lib/localized.svelte';
   import { artSet, artW, placeholder } from '$lib/ui/art';
   import Icon from '$lib/ui/Icon.svelte';
 
@@ -81,7 +82,7 @@
           {#if age}<b class="age">{age}</b>{/if}
         </p>
       {/if}
-      {#if tagline}<p class="tag">{tagline}</p>{/if}
+      {#if localized(tagline)}<p class="tag">{localized(tagline)}</p>{/if}
       {#if overview}<p class="ov selectable">{overview}</p>{/if}
       {@render under?.()}
     </div>
