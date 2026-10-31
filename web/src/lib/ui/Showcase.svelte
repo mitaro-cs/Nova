@@ -127,12 +127,12 @@
   /* «Кинозал+» (alpha 0.5): кадр почти на весь экран, слева - надпись цветом фильма, крупное название,
      оценка, описание и две капсулы; справа внизу - точки. Затемнение только слева и снизу. */
   .showcase { position: relative; min-height: clamp(520px, 78svh, 860px); isolation: isolate; display: flex; align-items: flex-end; padding: calc(var(--header) + 36px) var(--gutter) clamp(48px, 9vh, 100px); overflow: hidden; }
-  /* Кадр - справа, на 78% ширины: слева он растворяется в цвет фильма (--tone, тот же, что у фона страницы). */
-  .stage { position: absolute; inset: 0 0 0 auto; width: 78%; z-index: -2; }
+  /* Кадр - на всю ширину, слева его плавно гасит затемнение (края кадра не видно). */
+  .stage { position: absolute; inset: 0; z-index: -2; }
   .backdrop { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: center 30%; }
   .shade { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
   .stage .backdrop { animation: drift 14s ease-out both; }
-  .shade { background: linear-gradient(90deg, var(--tone-dark) 0%, color-mix(in srgb, var(--tone-dark) 90%, transparent) 22%, color-mix(in srgb, var(--tone-dark) 45%, transparent) 44%, transparent 68%), linear-gradient(0deg, var(--tone-dark) 0%, color-mix(in srgb, var(--tone-dark) 50%, transparent) 22%, transparent 50%); }
+  .shade { background: linear-gradient(90deg, var(--tone-dark) 0%, color-mix(in srgb, var(--tone-dark) 92%, transparent) 14%, color-mix(in srgb, var(--tone-dark) 70%, transparent) 30%, color-mix(in srgb, var(--tone-dark) 30%, transparent) 50%, transparent 72%), linear-gradient(0deg, var(--tone-dark) 0%, color-mix(in srgb, var(--tone-dark) 50%, transparent) 22%, transparent 50%); }
   .copies { display: grid; max-width: min(46vw, 620px); }
   .copy { grid-area: 1 / 1; align-self: end; }
   @keyframes feature-in { from { opacity: 0; transform: translateY(14px); } }
