@@ -107,7 +107,13 @@
   }
 </script>
 
-<div class="page">
+<div class="rw-page">
+  <header class="rw-head">
+    <div>
+      <h1>Обзор</h1>
+      <p>Что смотрит мир кино - и чего у вас пока нет.</p>
+    </div>
+  </header>
   <div class="top">
     <form class="find" role="search" onsubmit={submit}>
       <Icon name="search" size={20} />
