@@ -373,7 +373,8 @@
     padding: 16px;
     border: 1px solid var(--line);
     border-radius: 18px;
-    background: #0b0b0d;
+    background: var(--surface-2);
+    align-self: start;
     animation: card-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--i, 0) * 30ms) both;
     transition: border-color 0.2s ease, transform 0.2s ease;
   }

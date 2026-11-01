@@ -54,9 +54,15 @@
   });
 </script>
 
-<div class="page admin">
+<div class="rw-page admin">
+  <header class="rw-head">
+    <div>
+      <h1>Управление</h1>
+      {#if status}<p>Nova {status.version}</p>{/if}
+    </div>
+  </header>
+  <div class="cols">
   <aside>
-    <h1>Управление</h1>
     <nav>
       {#each TABS as [id, label, icon] (id)}
         <a href="?tab={id}" class:on={tab === id} data-sveltekit-replacestate data-sveltekit-noscroll>
@@ -68,9 +74,9 @@
     </nav>
     {#if status}<a class="faint ver" href="?tab=version">Версия {status.version}</a>{/if}
   </aside>
-  <section>
-    <header class="tab-head">
-      <h2>{info.title}</h2>
+  <section class="rw-plate" aria-label={info.title}>
+    <header class="tab-head rw-block">
+      <h2 class="rw-h2">{info.title}</h2>
       <p>{info.text}</p>
       <ul aria-label="Что здесь можно сделать">{#each info.can as c (c)}<li><Icon name="check" size={14} /> {c}</li>{/each}</ul>
     </header>
@@ -87,24 +93,19 @@
       {/if}
     {/if}
   </section>
+  </div>
 </div>
 
 <style>
-  .admin {
+  .cols {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 32px;
-    max-width: 1200px;
-    margin: 0 auto;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: calc(28 * var(--rw));
+    align-items: start;
   }
   aside {
     position: sticky;
     top: calc(var(--header) + 24px);
-    align-self: start;
-  }
-  h1 {
-    font-size: 26px;
-    margin-bottom: 18px;
   }
   nav {
     display: grid;
@@ -115,7 +116,8 @@
     align-items: center;
     gap: 12px;
     padding: 8px 10px;
-    border-radius: 12px;
+    border: 1px solid transparent;
+    border-radius: 14px;
     color: var(--muted);
     font-weight: 600;
     font-size: 14px;
@@ -129,20 +131,22 @@
     height: 34px;
     display: grid;
     place-items: center;
-    border-radius: 10px;
+    border-radius: 50%;
     background: var(--surface);
   }
   nav a.on {
     color: var(--text);
+    background: var(--sheet);
+    border-color: var(--sheet-line);
   }
   nav a.on .ic {
-    background: var(--accent-grad);
-    color: var(--on-accent);
+    background: #fff;
+    color: #000;
   }
   .ver {
     display: block;
     font-size: 12px;
-    margin-top: 18px;
+    margin: 18px 0 0 10px;
   }
   .new {
     width: 8px;
@@ -151,9 +155,12 @@
     border-radius: 50%;
     background: #ff5c7a;
   }
+  section {
+    min-width: 0;
+  }
   @media (max-width: 860px) {
-    .admin {
-      /* minmax(0, …): лента разделов прокручивается, а не распирает страницу. */
+    /* minmax(0, …): лента разделов прокручивается, а не распирает страницу. */
+    .cols {
       grid-template-columns: minmax(0, 1fr);
       gap: 18px;
     }
@@ -169,18 +176,11 @@
     nav a {
       white-space: nowrap;
     }
-    .ver {
+    .ver,
+    .lbl small {
       display: none;
     }
   }
-
-  .admin { max-width: 1800px; grid-template-columns: 240px minmax(0, 1fr); gap: 28px; }
-  aside { padding: 22px 16px; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); }
-  h1 { padding-left: 10px; font-size: 23px; }
-  nav a { padding: 10px; border: 1px solid transparent; }
-  nav a.on { background: #c4ceef12; border-color: #c4ceef26; }
-  section { min-width: 0; }
-  @media(max-width: 860px) { .admin { grid-template-columns: minmax(0, 1fr); } aside { padding: 16px; } nav { margin: 0; padding: 0; } }
 
   /* Подпись под пунктом меню и шапка раздела с пояснением. */
   .lbl {
@@ -195,18 +195,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .tab-head {
-    margin-bottom: 18px;
-    padding: 4px 2px 16px;
-    border-bottom: 1px solid var(--line);
-  }
-  .tab-head h2 {
-    margin: 0 0 6px;
-    font-size: 26px;
-  }
   .tab-head p {
     max-width: 72ch;
-    margin: 0 0 10px;
+    margin: -8px 0 12px;
     color: var(--muted);
   }
   .tab-head ul {
@@ -223,10 +214,5 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-  }
-  @media (max-width: 860px) {
-    .lbl small {
-      display: none;
-    }
   }
 </style>

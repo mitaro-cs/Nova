@@ -78,18 +78,19 @@
   letter-spacing: -0.01em;
 }
 
-/* Внутри плиты карточки в рамках (`.card`, `.pane`) - не отдельные коробки, а разделы с линиями. */
-.rw-plate .card,
-.rw-plate .pane {
+/* Внутри плиты секции в рамках (`.pane`, обычно `card pane`) - не отдельные коробки, а разделы с
+   линиями. Одиночный `.card` (плитка выбора, строка списка) остаётся плиткой - на палитре плиты.
+   Двойной `.pane` - чтобы перебить собственные отступы компонентов (у них класс + хеш Svelte). */
+.rw-plate .pane.pane {
   background: none;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  margin-inline: 0;
   padding-inline: 0;
+  padding-block: max(22px, calc(40 * var(--rw)));
   border-bottom: 1px solid var(--sheet-line);
-  border-radius: 0;
 }
-.rw-plate .card:last-child,
-.rw-plate .pane:last-child {
+.rw-plate .pane.pane:last-child {
   border-bottom: 0;
 }
