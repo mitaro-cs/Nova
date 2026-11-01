@@ -1,20 +1,23 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import type { Component } from 'svelte';
   import { page, navigating } from '$app/state';
-  import { post } from '$lib/api';
   import { session } from '$lib/session.svelte';
   import { TABS, tabOf } from '$lib/library';
   import { badges, watchBadges } from '$lib/social/badges.svelte';
   import Avatar from './Avatar.svelte';
   import Icon from './Icon.svelte';
-  import type { IconName } from './icons';
   import Logo from './Logo.svelte';
 
   // Шапка как у Apple TV: стеклянная капсула разделов по центру (поиск - в ней же), слева знак,
   // справа «добавить» и аватар. Люди, Чаты и Списки - в меню аватара (значок на нём - есть
   // непрочитанное или просьбы дружбы). На телефоне то же меню открывается из нижней панели.
   let scrolled = $state(false);
-  let menu = $state<'' | 'top' | 'tab'>('');
+  let menu = $state<'' | 'top' | 'bell'>('');
+  // Лист колокольчика (телефон) грузится по нажатию: бюджет JS главной.
+  let Menu = $state<Component<any> | null>(null);
+  $effect(() => {
+    if (menu && !Menu) void import('./HeaderMenu.svelte').then((m) => (Menu = m.default));
+  });
 
   const navigationUrl = $derived(navigating.to?.url ?? page.url);
   const path = $derived(navigationUrl.pathname);
@@ -46,24 +49,9 @@
     menu = '';
   });
 
-  async function logout() {
-    await post('/api/auth/logout').catch(() => {});
-    session.me = null;
-    goto('/login');
-  }
-
-  type Item = { href: string; icon: IconName; label: string; count?: number; dot?: boolean };
-  const items = $derived<Item[]>([
-    ...(profile ? [{ href: `/people/${profile.id}`, icon: 'user' as const, label: 'Моя страница' }] : []),
-    { href: '/people', icon: 'users', label: 'Люди', dot: badges.requests > 0 },
-    { href: '/chats', icon: 'mail', label: 'Чаты', count: badges.unread },
-    { href: '/lists', icon: 'list', label: 'Списки' },
-  ]);
-  const more = $derived<Item[]>([
-    { href: '/profile', icon: 'image', label: 'Профиль и оформление' },
-    ...(session.me?.manage ? [{ href: '/admin', icon: 'sliders' as const, label: 'Управление' }] : []),
-  ]);
-  const inMenu = $derived(['/people', '/chats', '/lists', '/profile'].some((p) => path.startsWith(p)));
+  // Вкладка «Профиль» на телефоне: своя страница, оформление, люди, чаты и управление.
+  const inProfile = $derived(['/people', '/chats', '/profile', '/admin'].some((p) => path.startsWith(p)));
+  const news = $derived(badges.requests + badges.unread + (session.me?.manage ? badges.wishes : 0));
 </script>
 
 <header class:scrolled class:home={path === "/"} class:detail={path.startsWith("/title/") || path.startsWith("/ext/")}>
@@ -78,6 +66,9 @@
   </nav>
 
   <div class="right">
+    <button class="round bell" aria-label={news ? `Уведомления: ${news}` : 'Уведомления'} aria-expanded={menu === 'bell'} onclick={() => (menu = menu ? '' : 'bell')}>
+      <Icon name="bell" size={24} />{#if news}<i class="dot"></i>{/if}
+    </button>
     <a class="round find-m" href="/search" aria-label="Поиск" title="Поиск"><Icon name="search" size={21} /></a>
     {#if session.me?.manage}
       {#if badges.wishes}
@@ -102,53 +93,21 @@
 </header>
 
 {#if menu}
-  <button class="scrim" class:dim={menu === 'tab'} aria-label="Закрыть меню" onclick={() => (menu = '')}></button>
-  <div class="menu" class:sheet={menu === 'tab'} role="menu" aria-label="Меню">
-    <a class="who" href={profile ? `/people/${profile.id}` : '/profile'} role="menuitem">
-      <Avatar avatar={profile?.avatar ?? 0} photo={profile?.photo} size={44} />
-      <span>
-        <b>{session.me?.user.name}</b>
-        <span class="muted">@{session.me?.user.login}</span>
-      </span>
-    </a>
-    {#each items as it, k (it.href)}
-      <a href={it.href} role="menuitem" class:on={path.startsWith(it.href)} style:--k={k}>
-        <span class="ic"><Icon name={it.icon} size={19} />{#if it.dot}<i class="dot"></i>{/if}</span>
-        <span class="lbl">{it.label}</span>
-        {#if it.count}<i class="cnt">{it.count}</i>{/if}
-      </a>
-    {/each}
-    <hr />
-    {#each more as it, k (it.href)}
-      <a href={it.href} role="menuitem" class:on={path.startsWith(it.href)} style:--k={k + items.length}>
-        <span class="ic"><Icon name={it.icon} size={19} /></span><span class="lbl">{it.label}</span>
-      </a>
-    {/each}
-    <button role="menuitem" onclick={() => { menu = ''; window.dispatchEvent(new Event('nova-room-link')); }} style:--k={items.length + more.length}>
-      <span class="ic"><Icon name="party" size={19} /></span><span class="lbl">Комната по ссылке</span>
-    </button>
-    <button role="menuitem" onclick={() => { menu = ''; window.dispatchEvent(new Event('nova-tour')); }} style:--k={items.length + more.length + 1}>
-      <span class="ic"><Icon name="sparkle" size={19} /></span><span class="lbl">Экскурсия по Nova</span>
-    </button>
-    {#if !session.me?.window}
-      <button role="menuitem" onclick={logout} style:--k={items.length + more.length + 2}>
-        <span class="ic"><Icon name="logout" size={19} /></span><span class="lbl">Выйти</span>
-      </button>
-    {/if}
-  </div>
+  <button class="scrim" aria-label="Закрыть меню" onclick={() => (menu = '')}></button>
+  {#if Menu}<Menu kind={menu} {path} close={() => (menu = '')} />{/if}
 {/if}
 
-<!-- Телефон и планшет: главные разделы внизу, под большим пальцем; «Я» - то же меню. -->
+<!-- Телефон и планшет: пять вкладок внизу, под большим пальцем (как в Кинопоиске). Фильмы, сериалы,
+     аниме и обзор - полосой разделов на главной; люди, чаты и списки - в «Профиле» и «Моём». -->
 <nav class="tabs" aria-label="Разделы">
-  <a href="/" class:on={path === '/' && tab === 'home'}><Icon name="home" size={22} /><span>Главная</span></a>
-  <a href="/?tab=movies" class:on={tab === 'movies'}><Icon name="film" size={22} /><span>Фильмы</span></a>
-  <a href="/?tab=series" class:on={tab === 'series'}><Icon name="tv" size={22} /><span>Сериалы</span></a>
-  <a href="/?tab=anime" class:on={tab === 'anime'}><Icon name="star" size={22} /><span>Аниме</span></a>
-  <a href="/discover" class:on={path.startsWith('/discover') || path.startsWith('/ext')}><Icon name="globe" size={22} /><span>Обзор</span></a>
-  <button class:on={inMenu || menu === 'tab'} aria-expanded={menu === 'tab'} onclick={() => (menu = menu ? '' : 'tab')}>
+  <a href="/" class:on={path === '/' || path.startsWith('/discover')}><Icon name="home" size={24} /><span>Главное</span></a>
+  <a href="/feed" class:on={path.startsWith('/feed')}><Icon name="squareplay" size={24} /><span>Что смотреть</span></a>
+  <a href={profile ? `/people/${profile.id}` : '/profile'} class:on={inProfile}>
     <span class="ic"><Avatar avatar={profile?.avatar ?? 0} photo={profile?.photo} size={24} />{#if alert}<i class="num">{alert}</i>{/if}</span>
-    <span>Я</span>
-  </button>
+    <span>Профиль</span>
+  </a>
+  <a href="/my" class:on={path.startsWith('/my') || path.startsWith('/lists')}><Icon name="bookmark" size={24} /><span>Моё</span></a>
+  <a href="/search" class:on={path === '/search'}><Icon name="search" size={24} /><span>Поиск</span></a>
 </nav>
 
 <style>
@@ -316,143 +275,12 @@
     border: 0;
     cursor: default;
   }
-  .scrim.dim {
-    background: rgba(0, 0, 0, 0.5);
-    animation: fade 0.2s;
-  }
-  @keyframes fade {
-    from {
-      opacity: 0;
-    }
-  }
-
-  /* Меню аватара: пружинит из угла, пункты - лесенкой. */
-  .menu {
-    position: fixed;
-    z-index: 71;
-    right: max(var(--gutter), env(safe-area-inset-right));
-    top: calc(var(--header) + env(safe-area-inset-top) - 6px);
-    width: 280px;
-    max-width: calc(100vw - 32px);
-    padding: 8px;
-    border-radius: 18px;
-    background: rgba(26, 26, 28, 0.98);
-    border: 1px solid var(--line);
-    box-shadow: 0 30px 70px -14px rgba(0, 0, 0, 0.85);
-    display: grid;
-    transform-origin: top right;
-    animation: pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.25);
-  }
-  @keyframes pop {
-    from {
-      opacity: 0;
-      transform: scale(0.88) translateY(-8px);
-    }
-  }
-  /* С телефона - лист снизу, над нижней панелью. */
-  .menu.sheet {
-    top: auto;
-    left: 12px;
-    right: 12px;
-    bottom: calc(var(--tabbar) + 10px);
-    width: auto;
-    max-width: none;
-    transform-origin: bottom right;
-    animation: sheet 0.36s cubic-bezier(0.2, 0.9, 0.3, 1.15);
-  }
-  @keyframes sheet {
-    from {
-      opacity: 0;
-      transform: translateY(24px) scale(0.97);
-    }
-  }
-  .who {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 10px 12px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--line);
-    border-radius: 12px 12px 0 0;
-    min-width: 0;
-  }
-  .who span {
-    display: grid;
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .who .muted {
-    font-size: 12.5px;
-  }
-  .menu a:not(.who),
-  .menu button {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    border: 0;
-    background: none;
-    color: var(--text);
-    text-align: left;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    animation: item 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    animation-delay: calc(var(--k, 0) * 28ms + 40ms);
-    transition:
-      background 0.15s,
-      transform 0.15s;
-  }
-  @keyframes item {
-    from {
-      opacity: 0;
-      transform: translateX(10px);
-    }
-  }
-  .menu a:hover,
-  .menu button:hover {
-    background: var(--surface-2);
-  }
-  .menu a:active,
-  .menu button:active {
-    transform: scale(0.98);
-  }
-  .menu a.on {
-    background: rgba(255, 255, 255, 0.08);
-  }
-  .menu .ic {
-    position: relative;
-    display: grid;
-    color: var(--muted);
-  }
-  .menu .lbl {
-    flex: 1;
-  }
-  .cnt {
-    min-width: 22px;
-    height: 22px;
-    padding: 0 7px;
-    border-radius: 99px;
-    background: #ff5c7a;
-    color: #fff;
-    font-size: 12px;
-    font-style: normal;
-    font-weight: 800;
-    line-height: 22px;
-    text-align: center;
-  }
-  hr {
-    border: 0;
-    border-top: 1px solid var(--line);
-    margin: 4px 0;
-  }
 
   .tabs {
     display: none;
   }
-  .find-m {
+  .find-m,
+  .bell {
     display: none;
   }
 
@@ -476,13 +304,12 @@
       transform: translate3d(0, 0, 0);
       backface-visibility: hidden;
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      padding: 8px 4px calc(6px + env(safe-area-inset-bottom));
       background: rgba(8, 8, 10, 0.96);
       border-top: 1px solid var(--line);
     }
-    .tabs a,
-    .tabs button {
+    .tabs a {
       display: grid;
       justify-items: center;
       gap: 2px;
@@ -491,22 +318,21 @@
       border: 0;
       background: none;
       font: inherit;
-      /* Шесть разделов на 320 px: подпись уменьшается с экраном и не выходит за свою кнопку. */
-      font-size: clamp(9.5px, 3vw, 11px);
-      font-weight: 600;
-      color: var(--faint);
+      /* Пять вкладок на 320 px: подпись уменьшается с экраном и не выходит за свою кнопку. */
+      font-size: clamp(10px, 2.9vw, 11px);
+      font-weight: 500;
+      color: #8e8e93;
       cursor: pointer;
       transition: color 0.15s;
     }
-    .tabs a > span,
-    .tabs button > span:last-child {
+    .tabs a > span:last-child {
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .tabs .on {
-      color: var(--text);
+      color: var(--m-accent);
     }
     /* Значок раздела пружинит при нажатии и подпрыгивает, когда раздел выбран. */
     .tabs :global(svg),
@@ -514,11 +340,11 @@
       transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     .tabs a:active :global(svg),
-    .tabs button:active .ic {
+    .tabs a:active .ic {
       transform: scale(0.85);
     }
     .tabs a.on :global(svg),
-    .tabs button.on .ic {
+    .tabs a.on .ic {
       animation: tab-pop 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     @keyframes tab-pop {
@@ -532,7 +358,7 @@
       height: 22px;
       place-items: center;
     }
-    .tabs button:not(.on) .ic {
+    .tabs a:not(.on) .ic {
       opacity: 0.75;
     }
     .tabs .num {
@@ -564,11 +390,23 @@
   .pill { background: #000; border: 1px solid #ffffff20; box-shadow: none; }
   .pill a { display: flex; gap: 7px; padding-inline: 14px; }
   .pill a.on { background: #000; color: #fff; box-shadow: inset 0 0 0 1px #ffffff80; }
-  .tabs { background: #000; backdrop-filter: none; }
-  /* Телефон - «Кинозал»: верх отдан кадру фильма, знака Nova в шапке нет. */
+  .tabs { background: #141414; backdrop-filter: none; border-top-color: #ffffff12; }
+  /* Телефон (как в Кинопоиске): шапка - только на главной (знак слева, колокольчик справа); у остальных
+     экранов свой крупный заголовок и места под шапку нет. */
   @media (max-width: 640px) {
-    .brand {
-      visibility: hidden;
+    header:not(.home) {
+      display: none;
+    }
+    .find-m,
+    .right .round:not(.bell) {
+      display: none;
+    }
+    .right .bell {
+      display: grid;
+    }
+    .brand :global(.logo svg),
+    .brand :global(img) {
+      height: 28px;
     }
   }
   /* «Жидкое стекло», как у Apple: только капсула разделов и круглые кнопки шапки - маленькая

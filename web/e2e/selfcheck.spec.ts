@@ -3,8 +3,8 @@ import { expectClean, url } from './util';
 
 // Сама проверка вёрстки должна ловить ошибки, иначе её зелёный цвет ничего не значит.
 test('самопроверка: наложение ловится', async ({ page }) => {
-  // Поиск: заголовок и текст под ним есть на любом экране (у главной на телефоне заголовка нет).
-  await page.goto(url('/search'));
+  // Обзор: заголовок и текст под ним есть на любом экране (у главной и поиска на телефоне заголовка нет).
+  await page.goto(url('/discover'));
   await page.waitForSelector('main h1');
   await page.evaluate(() => {
     const h = document.querySelector('h1')!;

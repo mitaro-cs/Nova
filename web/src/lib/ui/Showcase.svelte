@@ -10,9 +10,21 @@
   import { toggle, toggleMark } from '$lib/marks';
   import { localized } from '$lib/localized.svelte';
   import type { Card, ExtCard, ExtDetail } from '$lib/types';
+  import type { Component } from 'svelte';
   import Icon from './Icon.svelte';
 
   let { items }: { items: { card?: Card; ext?: ExtCard }[] } = $props();
+
+  // Телефон: поверх кадра - трейлер без звука (`ShowcaseTrailer`, грузится лениво: бюджет JS главной);
+  // при экономии трафика и выключенной настройке - только кадр.
+  let phone = $state(false);
+  let Trailer = $state<Component<any> | null>(null);
+  $effect(() => {
+    phone = matchMedia('(max-width: 640px)').matches;
+  });
+  $effect(() => {
+    if (phone && !Trailer) void import('./ShowcaseTrailer.svelte').then((m) => (Trailer = m.default));
+  });
   let at = $state(0);
   let manual = $state(false);
   let hovering = $state(false);
@@ -144,6 +156,11 @@
     if (selected?.card) void toggle(selected.card, 'want');
     else if (selected?.ext) void toggleMark(selected.ext, 'want');
   }
+  // «Не интересно» (то же, что «Больше не смотрю», с отменой) - код грузится только по нажатию.
+  async function nope(e: Event) {
+    e.stopPropagation();
+    (await import('./nope')).nope(selected?.card, selected?.ext);
+  }
   $effect(() => {
     document.documentElement.style.setProperty('--hero-tint', accent);
     return () => document.documentElement.style.removeProperty('--hero-tint');
@@ -158,6 +175,7 @@
         {#if shot}<img class="backdrop" class:on={front === i} src={shot.src} srcset={shot.set} sizes="100vw" alt="" decoding="async" fetchpriority={i === front ? 'high' : 'auto'} />{/if}
       {/each}
     </div>
+    {#if phone && Trailer}<Trailer card={selected?.card} ext={selected?.ext} />{/if}
     <div class="shade"></div>
     <div class="copies">{#key card.id}<div class="copy" in:fly|global={{ y: 12, duration: 600, delay: 320, easing: cubicOut }} out:fade|global={{ duration: 260 }}>
       <span class="eyebrow">{eyebrow}</span>
@@ -170,7 +188,8 @@
       <p class="description" class:empty={!overview}>{overview}</p>
       <div class="actions">
         {#if selected.card?.resume}<a class="btn primary" href="/watch/{selected.card.resume.fileId}"><Icon name="play" size={18} /> Продолжить</a>{:else}<a class="btn primary" {href}><Icon name="play" size={18} /> Смотреть</a>{/if}
-        <button class="btn glass" class:on={wanted} aria-pressed={wanted} onclick={want}><Icon name={wanted ? 'check' : 'plus'} size={18} /> {wanted ? 'В планах' : 'Хочу'}</button>
+        <button class="btn glass round" class:on={wanted} aria-pressed={wanted} aria-label={wanted ? 'В планах' : 'Хочу'} onclick={want}><Icon name={wanted ? 'check' : 'plus'} size={18} /> <span class="lbl">{wanted ? 'В планах' : 'Хочу'}</span></button>
+        <button class="btn glass round nope" aria-label="Не интересно" onclick={nope}><Icon name="ban" size={22} /></button>
       </div>
     </div>{/key}</div>
     {#if items.length > 1}
@@ -215,18 +234,26 @@
   .dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 99px; background: #ffffff55; cursor: pointer; transition: width .3s cubic-bezier(.2,.8,.2,1), background .3s; }
   .dots button.on { width: 28px; background: #fff; }
   :global(.no-motion) .backdrop { transition: none; }
-  /* Телефон: кадр сверху почти целиком, всё по центру под ним. */
+  .nope { display: none; }
+  /* Телефон - по референсам Кинопоиска (390 px): герой 1,3 ширины экрана, трейлер на весь кадр, внизу по
+     центру название, описание в три строки, оранжевая «Смотреть» 148 × 47 и два круга 47, под ними точки;
+     кнопка звука - круг 44 слева вверху. */
   @media (max-width: 640px) {
-    .showcase { min-height: 0; touch-action: pan-y; padding: calc(75vw - 40px) var(--gutter) 50px; justify-content: center; text-align: center; }
-    .stage { inset: 0 0 auto 0; width: 100%; aspect-ratio: 4 / 3; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
-    .shade { background: linear-gradient(0deg, var(--tone-dark) 30%, #0000 70%), linear-gradient(180deg, #0006, #0000 30%); }
+    .showcase { min-height: 0; height: clamp(440px, 130vw, 640px); touch-action: pan-y; padding: 0 var(--gutter) 46px; justify-content: center; text-align: center; }
+    .stage { inset: 0; }
+    .shade { background: linear-gradient(0deg, #000 4%, #000a 26%, #0000 54%), linear-gradient(180deg, #0005, #0000 22%); }
     .copies { max-width: 100%; }
-    .eyebrow { justify-content: center; font-size: 11px; }
-    h1 { font-size: clamp(32px, 10vw, 44px); margin: 8px 0 10px; }
-    .meta { justify-content: center; font-size: 13px; }
-    .description { display: none; }
-    .actions { justify-content: center; margin-top: 20px; }
-    .actions .btn { height: 48px; padding: 0 22px; }
-    .dots { left: 0; right: 0; bottom: 18px; justify-content: center; }
+    .eyebrow, .meta { display: none; }
+    h1 { font-size: clamp(26px, 8.4vw, 34px); line-height: 1.05; margin: 0 0 12px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; text-wrap: balance; }
+    .description { display: -webkit-box; min-height: 0; max-width: 292px; margin: 0 auto; font-size: 16px; line-height: 1.3; color: #ffffffeb; }
+    .actions { flex-wrap: nowrap; justify-content: center; gap: 8px; margin-top: 20px; }
+    .actions .btn { height: 47px; }
+    .actions .btn.primary { min-width: 148px; padding: 0 22px; background: linear-gradient(90deg, var(--m-accent), #f7931e); color: #fff; font-size: 17px; }
+    .actions .btn.round { width: 47px; padding: 0; background: #2a2a2ae6; box-shadow: none; backdrop-filter: none; }
+    .actions .btn.round.on { background: #2a2a2a; color: var(--m-accent); }
+    .actions .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .nope { display: inline-flex; }
+    .dots { left: 0; right: 0; bottom: 14px; justify-content: center; gap: 8px; }
   }
 </style>
+

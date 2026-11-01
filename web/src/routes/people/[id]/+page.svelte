@@ -14,6 +14,16 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
   import type { IconName } from '$lib/ui/icons';
+  import { goto } from '$app/navigation';
+  import { post } from '$lib/api';
+  import { session } from '$lib/session.svelte';
+  import { badges as unseen } from '$lib/social/badges.svelte';
+
+  async function logout() {
+    await post('/api/auth/logout').catch(() => {});
+    session.me = null;
+    goto('/login');
+  }
 
   // Страница человека - как страница фильма: на фоне обложка (своя картинка или постеры
   // просмотренного плывут вверх), крупный портрет вместо постера, имя и «о себе», цифры и любимые
@@ -122,6 +132,15 @@
         {#if p.me}
           <a class="btn block" href="/profile"><Icon name="edit" size={14} /> Оформить профиль</a>
           <a class="btn block" href="/people"><Icon name="users" size={14} /> Найти друзей</a>
+          <!-- Телефон: чаты, списки и остальное, что было в меню «Я» (нижняя панель теперь без него). -->
+          <nav class="quick" aria-label="Быстрые разделы">
+            <a class="btn block" href="/chats"><Icon name="mail" size={14} /> Чаты{#if unseen.unread} · {unseen.unread}{/if}</a>
+            <a class="btn block" href="/lists"><Icon name="list" size={14} /> Списки</a>
+            {#if session.me?.manage}<a class="btn block" href="/admin"><Icon name="sliders" size={14} /> Управление</a>{/if}
+            <button class="btn block" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={14} /> Комната по ссылке</button>
+            <button class="btn block" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><Icon name="sparkle" size={14} /> Экскурсия по Nova</button>
+            {#if !session.me?.window}<button class="btn block" onclick={logout}><Icon name="logout" size={14} /> Выйти</button>{/if}
+          </nav>
         {:else if p.relation}
           <FriendButton id={p.person.id} bind:relation={p.relation} />
           {#if p.relation === 'friend'}
@@ -472,6 +491,16 @@
   .panel :global(.fb .btn) {
     width: 100%;
     border-radius: 999px;
+  }
+
+  .quick {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .quick {
+      display: grid;
+      gap: 8px;
+    }
   }
 
   /* ---------- лист с разделами ---------- */

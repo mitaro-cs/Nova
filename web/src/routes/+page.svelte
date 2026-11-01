@@ -162,6 +162,13 @@
 </script>
 
 <div class="home" class:flat={tab !== 'home' && items !== null && !hero.length} class:homepage={tab === 'home'}>
+  <!-- Телефон: разделы полосой под шапкой (как «Моё кино / Детям / Спорт» у Кинопоиска). -->
+  <nav class="strip" aria-label="Разделы кинотеатра">
+    {#each [['/', 'home', 'Моё кино'], ['/?tab=movies', 'movies', 'Фильмы'], ['/?tab=series', 'series', 'Сериалы'], ['/?tab=anime', 'anime', 'Аниме']] as [to, id, label] (id)}
+      <a href={to} class:on={tab === id} aria-current={tab === id ? 'page' : undefined}>{label}</a>
+    {/each}
+    <a href="/discover">Обзор</a>
+  </nav>
   {#if catalog.failed}
     <div class="page empty"><Icon name="offline" size={40} /> Не удалось загрузить - проверьте связь</div>
   {:else if items === null}
@@ -294,10 +301,46 @@
       padding-top: calc(var(--header) + env(safe-area-inset-top) + 20px);
     }
   }
+  .strip { display: none; }
+  /* Телефон и планшет: полоса разделов липнет под шапкой (нижняя панель разделов не содержит). */
+  @media (max-width: 1000px) {
+    .home {
+      padding-top: calc(var(--header) + env(safe-area-inset-top));
+    }
+    .strip {
+      position: sticky;
+      top: calc(var(--header) + env(safe-area-inset-top));
+      z-index: 45;
+      display: flex;
+      align-items: center;
+      gap: 17px;
+      height: 46px;
+      padding: 0 var(--gutter);
+      overflow-x: auto;
+      scrollbar-width: none;
+      background: #000;
+    }
+    .strip::-webkit-scrollbar { display: none; }
+    .strip a {
+      flex: none;
+      padding: 8px 0 6px;
+      border-bottom: 3px solid transparent;
+      color: #8e8e93;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .strip a.on { color: #fff; border-bottom-color: var(--m-accent); }
+    .flat .rows { padding-top: 20px; }
+  }
+  /* Телефон: ряды не наезжают на кадр героя (он целиком над ними). */
   @media (max-width: 640px) {
     .home {
-      --row: 200px;
+      --row: 0px;
     }
+    .welcome { padding-top: 32px; }
+    .home .ph-hero, .home .ph-hero.wait { height: clamp(440px, 130vw, 640px); min-height: 0; }
   }
   .head {
     display: flex;

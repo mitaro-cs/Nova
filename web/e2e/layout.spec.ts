@@ -15,6 +15,8 @@ const PAGES = [
   ['/profile', 'аккаунт'],
   ['/lists', 'списки'],
   ['/discover', 'обзор'],
+  ['/feed', 'что смотреть'],
+  ['/my', 'моё'],
   ['/discover?chart=top_movies', 'топ-250'],
   ['/discover?kind=series', 'обзор: сериалы'],
   ['/ext/tt1196946', 'фильм из IMDb'],

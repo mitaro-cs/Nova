@@ -24,6 +24,7 @@
   let uploading = $state(false);
   let tab = $state<'style' | 'account' | 'playback'>('style');
   let motion = $state(motionOn());
+  let trailers = $state((() => { try { return localStorage.getItem('nova-trailers') !== 'off'; } catch { return true; } })());
   $effect(()=>{const requested=page.url.searchParams.get('tab');if(requested==='account'||requested==='style'||requested==='playback')tab=requested;});
 
   $effect(() => {
@@ -145,6 +146,13 @@
       <label class="switch">
         <input type="checkbox" bind:checked={motion} onchange={() => setMotion(motion)} />
         <span>Плавные переходы, всплывающие ряды, плывущие постеры. Выключите, если компьютер слабый.</span>
+      </label>
+    </section>
+    <section class="rw-block pane">
+      <h2 class="rw-h2">Трейлеры на телефоне</h2>
+      <label class="switch">
+        <input type="checkbox" bind:checked={trailers} onchange={() => { try { localStorage.setItem('nova-trailers', trailers ? 'on' : 'off'); } catch { /* приватный режим */ } }} />
+        <span>Трейлер сам играет без звука в герое главной и в ленте «Что смотреть». Выключите, чтобы экономить трафик.</span>
       </label>
     </section>
     <section class="rw-block pane">

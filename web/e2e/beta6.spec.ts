@@ -12,6 +12,9 @@ test('русский поиск, фильтры и кэш повторного �
   await page.goto(url('/search?q=матрица'));
   const results = page.getByRole('region',{name:'Все фильмы и сериалы'});
   await expect(results.getByRole('link')).toHaveCount(2);
+  // Телефон: фильтры за значком справа в поле поиска.
+  const tune = page.getByRole('button',{name:'Фильтры',exact:true});
+  if (await tune.isVisible()) await tune.click();
   await page.getByLabel('Рейтинг',{exact:true}).selectOption('8');
   await expect(results.getByRole('link')).toHaveCount(1);
   await expect(results).toContainText('Матрица');
@@ -34,7 +37,7 @@ test('внешнее видео продолжается с точного ме�
   await expect(row.getByRole('link')).toHaveAttribute('href','/watch/link/900');
   await expect(row).toContainText('20:24');
   await expect(row.getByRole('meter')).toHaveAttribute('aria-valuenow','17');
-  if (info.project.name !== 'desktop') await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(0, 0, 0)');
+  if (info.project.name !== 'desktop') await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(20, 20, 20)');
   await expectClean(page,'продолжение внешнего видео');
 });
 

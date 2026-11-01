@@ -16,6 +16,8 @@ const PAGES = [
   ['/profile', 'профиль'],
   ['/lists', 'списки'],
   ['/discover', 'обзор'],
+  ['/feed', 'что смотреть'],
+  ['/my', 'моё'],
   ['/ext/tt1196946', 'фильм из IMDb'],
   ['/admin', 'управление'],
   ['/admin?tab=folders', 'папки'],
@@ -73,6 +75,9 @@ async function check(page: Page, path: string, what: string) {
   // Поиск видео ходит на внешние сайты: без интернета (CI) сервер честно отвечает 400 «источники не
   // отвечают». Датчик проверяет наш код, а не сеть - поиск подменяем пустым ответом.
   await page.route('**/api/links/search**', (route) => route.fulfill({ json: [] }));
+  // То же с трейлерами (лента «Что смотреть», герой): официальный HD идёт с IMDb, без сети его нет (404).
+  await page.route('**/api/discover/title/*/trailer/hd', (route) => route.fulfill({ status: 200, contentType: 'video/mp4', body: '' }));
+  await page.route('**/api/discover/title/*/trailer', (route) => route.fulfill({ json: { linkId: null } }));
   const found = watch(page);
   await page.goto(url(path));
   await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});

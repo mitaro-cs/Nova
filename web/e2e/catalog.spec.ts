@@ -25,8 +25,8 @@ test('главная: герой, ряды и сериалы рядом с фи�
 
 test('Фильмы: фильтр по статусу, отметки со страницы фильма', async ({ page }, info) => {
   await page.goto(url('/'));
-  // Компьютер - капсула в шапке, телефон и планшет - нижняя панель.
-  const nav = info.project.name === 'desktop' ? page.locator('nav.pill') : page.locator('nav.tabs');
+  // Компьютер - капсула в шапке; телефон и планшет - полоса разделов на главной (в нижней панели их нет).
+  const nav = info.project.name === 'desktop' ? page.locator('nav.pill') : page.getByRole('navigation', { name: 'Разделы кинотеатра' });
   await nav.getByRole('link', { name: 'Фильмы' }).click();
   await expect(page).toHaveURL(/tab=movies/);
   const chip = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) });

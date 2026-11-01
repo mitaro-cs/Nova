@@ -14,6 +14,7 @@
   import { genreRu } from '$lib/genres';
   import Loading from '$lib/ui/Loading.svelte';
   import { personHref } from '$lib/people';
+  import { artW } from '$lib/ui/art';
 
   // Поиск: своё (сразу) и IMDb - всё остальное (страница фильма - /ext). Поле - своё состояние:
   // раньше оно бралось из адреса и при быстром наборе теряло буквы (адрес отставал от ввода).
@@ -42,6 +43,20 @@
   const localResults = $derived(refine(items ?? []));
   const externalResults = $derived(refine(found ?? []));
   $effect(() => { loadCatalog(); });
+
+  // Телефон (как у Кинопоиска): пока поле пусто - «Советуем посмотреть» (подборки IMDb) и «Категории»
+  // (жанры); фильтры прячутся за значком справа в поле.
+  const compact = typeof matchMedia !== 'undefined' && matchMedia('(max-width: 640px)').matches;
+  let showFilters = $state(false);
+  type Pick = { key: string; title: string; items: ExtCard[] };
+  let picks = $state<Pick[]>([]);
+  const CATEGORIES = ['Боевики', 'Комедии', 'Драмы', 'Триллеры', 'Фантастика', 'Ужасы', 'Мелодрамы', 'Детективы', 'Приключения', 'Фэнтези', 'Мультфильмы', 'Криминал', 'Документальные', 'Военные'];
+  $effect(() => {
+    if (!compact) return;
+    let live = true;
+    api<{ rows: Pick[] }>('/api/discover').then((f) => { if (live) picks = f.rows.filter((r) => r.items.length && r.items[0].poster).slice(0, 8); }, () => {});
+    return () => { live = false; };
+  });
 
   $effect(() => {
     const q = query;
@@ -88,19 +103,21 @@
   });
 </script>
 
+<div class="search-root">
 <Sheet title="Что посмотрим?" subtitle="Ваша коллекция и мир кино в одном поиске.">
   <div class="rw-block">
   <form class="big" role="search" onsubmit={(e) => e.preventDefault()}>
     <Icon name="search" size={22} />
     <!-- svelte-ignore a11y_autofocus -->
-    <input type="search" placeholder="Название фильма или сериала" bind:value={text} autofocus aria-label="Поиск" />
+    <input type="search" placeholder={compact ? 'Фильмы, персоны' : 'Название фильма или сериала'} bind:value={text} autofocus={!compact} aria-label="Поиск" />
+    <button type="button" class="tune" aria-label="Фильтры" aria-expanded={showFilters} onclick={() => (showFilters = !showFilters)}><Icon name="sliders" size={22} /></button>
   </form>
-  <nav class="filters" aria-label="Тип результатов">
+  <nav class="filters" class:open={showFilters} aria-label="Тип результатов">
     {#each [{ id: 'all', label: 'Всё' }, { id: 'movie', label: 'Фильмы' }, { id: 'series', label: 'Сериалы' }, { id: 'anime', label: 'Аниме' }, { id: 'people', label: 'Люди кино' }] as option (option.id)}
       <button class="chip" class:on={kind === option.id} onclick={() => kind = option.id as typeof kind}><Icon name={option.id === 'all' ? 'grid' : option.id === 'movie' ? 'film' : option.id === 'series' ? 'tv' : option.id === 'people' ? 'users' : 'star'} size={14} />{option.label}</button>
     {/each}
   </nav>
-  <div class="refine" aria-label="Фильтры поиска">
+  <div class="refine" class:open={showFilters} aria-label="Фильтры поиска">
     <label>Год<input type="text" inputmode="numeric" maxlength="4" placeholder="Любой" bind:value={year} /></label>
     <label>Рейтинг<select aria-label="Рейтинг" bind:value={rating}><option value="">Любой</option>{#each [5,6,7,8,9] as n}<option value={String(n)}>{n} и выше</option>{/each}</select></label>
     <label>Жанр<select aria-label="Жанр" bind:value={genre}><option value="">Все жанры</option>{#each genres as g}<option value={g}>{g}</option>{/each}</select></label>
@@ -111,6 +128,22 @@
   {#if searching}<div class="rw-block"><Loading compact label="Ищем в русских и международных каталогах" /></div>{/if}
   {#if !query}
     <div class="rw-block"><div class="search-empty"><Icon name="search" size={40} /><h2>Истории начинаются здесь</h2><p>Введите название, имя режиссёра или год.</p></div></div>
+    {#if compact}
+      {#if picks.length}
+        <section class="suggest" aria-label="Советуем посмотреть">
+          <div class="s-head"><h2>Советуем посмотреть</h2><a href="/discover">Все</a></div>
+          <div class="tiles">
+            {#each picks as r (r.key)}
+              <a class="tile" href="/discover?chart={r.key}"><span class="cover"><img src={artW(r.items[0].poster!, 342)} alt="" loading="lazy" decoding="async" /></span><span class="cap">{r.title}</span></a>
+            {/each}
+          </div>
+        </section>
+      {/if}
+      <section class="suggest" aria-label="Категории">
+        <div class="s-head"><h2>Категории</h2></div>
+        <div class="cats">{#each CATEGORIES as g (g)}<button type="button" onclick={() => (text = g)}>{g}</button>{/each}</div>
+      </section>
+    {/if}
   {/if}
   {#if query}
     {#if kind === 'people'}
@@ -138,6 +171,7 @@
     {/if}
   {/if}
 </Sheet>
+</div>
 
 <style>
   .persons { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 16px; }
@@ -193,5 +227,31 @@
       grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
       gap: 16px 10px;
     }
+  }
+  .tune, .suggest { display: none; }
+  /* Телефон - по референсу Кинопоиска: поле 44 px с радиусом 8 и значком фильтров, дальше - блоки
+     подборок и категорий на чёрном; заголовка страницы нет. */
+  @media (max-width: 640px) {
+    .search-root :global(.rw-head) { display: none; }
+    .search-root :global(.rw-page) { padding-top: calc(env(safe-area-inset-top) + 20px); }
+    .search-root :global(.rw-plate) { background: #000; padding-block: 0; }
+    .search-root :global(.rw-block) { border-bottom: 0; padding-block: 0 20px; }
+    .big { height: 44px; padding: 0 6px 0 14px; margin-bottom: 20px; border: 0; border-radius: 8px; background: #2c2c2e; }
+    .big input { font-size: 17px; }
+    .tune { display: grid; place-items: center; width: 40px; height: 32px; padding: 0 0 0 8px; border: 0; border-left: 1px solid #ffffff2e; border-radius: 0; background: none; color: #c7c7cc; cursor: pointer; }
+    .filters:not(.open), .refine:not(.open) { display: none; }
+    .search-empty { display: none; }
+    .suggest { display: block; margin-top: 26px; }
+    .s-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+    .s-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+    .s-head a { color: var(--m-accent); font-size: 16px; font-weight: 600; }
+    .tiles { display: flex; gap: 12px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
+    .tiles::-webkit-scrollbar { display: none; }
+    .tile { flex: none; width: 128px; color: #fff; }
+    .cover { display: block; width: 128px; height: 128px; overflow: hidden; border-radius: 4px; background: #1c1c1e; }
+    .cover img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+    .cap { display: -webkit-box; margin-top: 10px; overflow: hidden; font-size: 14px; font-weight: 500; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
+    .cats { display: flex; flex-wrap: wrap; gap: 10px; }
+    .cats button { height: 46px; padding: 0 20px; border: 0; border-radius: 23px; background: #1c1c1e; color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
   }
 </style>
