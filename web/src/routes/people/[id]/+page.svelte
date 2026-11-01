@@ -132,9 +132,9 @@
     </div>
   </section>
 
-  <main class="sheet">
-    <section class="block" aria-labelledby="st">
-      <h2 id="st">Статистика просмотра</h2>
+  <main class="sheet rw-plate">
+    <section class="rw-block" aria-labelledby="st">
+      <h2 class="rw-h2" id="st">Статистика просмотра</h2>
       <ProfileStats stats={p.stats} accent={p.decor.accent} />
       <p class="seen-links">
         <a class="btn sm" href="/people/{p.person.id}/watched?kind=movie"><Icon name="film" size={14} /> Какие фильмы смотрел</a>
@@ -142,7 +142,7 @@
       </p>
     </section>
     {#if p.watching.length}
-      <div class="block now">
+      <div class="rw-block now">
         <PosterRow title="Сейчас смотрит" items={p.watching.map((n) => ({ card: n.card, ext: n.ext, label: n.label }))} />
       </div>
     {/if}
@@ -150,8 +150,8 @@
     {#each [{ kind: 'movie', label: 'Любимые фильмы' }, { kind: 'series', label: 'Любимые сериалы' }] as g (g.kind)}
       {@const favs = p.decor.favorites.filter((f) => (f.card ?? f.ext)?.kind === g.kind)}
       {#if favs.length}
-        <section class="block" aria-labelledby="f-{g.kind}">
-          <h2 id="f-{g.kind}">{g.label}</h2>
+        <section class="rw-block" aria-labelledby="f-{g.kind}">
+          <h2 class="rw-h2" id="f-{g.kind}">{g.label}</h2>
           <ol class="favs">
             {#each favs as f, i (f.key)}
               <li class="rise" style:--i={i}><span class="num">{i + 1}</span><Poster card={f.ext} local={f.card ?? null} /></li>
@@ -162,8 +162,8 @@
     {/each}
 
     {#if p.decor.directors.length}
-      <section class="block" aria-labelledby="d">
-        <h2 id="d">Любимый режиссёр</h2>
+      <section class="rw-block" aria-labelledby="d">
+        <h2 class="rw-h2" id="d">Любимый режиссёр</h2>
         <ul class="dirs">
           {#each p.decor.directors as d, i (d)}
             {@const ph = p.decor.directorsInfo?.find((x) => x.name === d)?.photo}
@@ -182,8 +182,8 @@
 
 
     {#if p.decor.likedPeople?.length}
-      <section class="block" aria-labelledby="lp">
-        <h2 id="lp">Нравятся актёры и режиссёры</h2>
+      <section class="rw-block" aria-labelledby="lp">
+        <h2 class="rw-h2" id="lp">Нравятся актёры и режиссёры</h2>
         <ul class="dirs">
           {#each p.decor.likedPeople as lp, i (lp.name + lp.role)}
             <li class="rise" style:--i={i}>
@@ -200,8 +200,8 @@
     {/if}
 
     {#if p.watched.length}
-      <section class="block" aria-labelledby="w">
-        <h2 id="w">Просмотрено</h2>
+      <section class="rw-block" aria-labelledby="w">
+        <h2 class="rw-h2" id="w">Просмотрено</h2>
         <ul class="posters">
           {#each p.watched as c, i (c.id)}
             <li class="rise" style:--i={i}>
@@ -214,8 +214,8 @@
       </section>
     {/if}
 
-    <section class="block" aria-labelledby="r">
-      <h2 id="r">Отзывы</h2>
+    <section class="rw-block" aria-labelledby="r">
+      <h2 class="rw-h2" id="r">Отзывы</h2>
       {#if p.reviews.length}
         <ul class="reviews">
           {#each p.reviews as r (r.id)}
@@ -476,26 +476,13 @@
 
   /* ---------- лист с разделами ---------- */
   .sheet {
-    width: min(1440px, 100% - 2 * var(--gutter));
-    margin: 0 auto;
-    padding: 8px clamp(18px, 4vw, 54px) 40px;
-    background: #1a1a1c;
-    border-radius: 22px;
+    width: min(max(960px, calc(1200 * var(--rw) + 2 * var(--gutter))), 100% - 2 * var(--gutter));
+    margin: 0 auto 64px;
   }
-  .block {
-    padding: 28px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  }
-  .block:last-child {
-    border-bottom: 0;
-  }
-  h2 {
+  .sheet :global(.rw-h2) {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 17px;
-    font-weight: 700;
-    margin-bottom: 16px;
   }
   .now :global(.row) {
     margin-bottom: 0;
@@ -551,7 +538,7 @@
     font-weight: 800;
     font-size: 22px;
     box-shadow:
-      0 0 0 3px #1a1a1c,
+      0 0 0 3px var(--sheet),
       0 0 0 5px rgba(255, 255, 255, 0.14);
     transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.4);
   }
@@ -694,13 +681,9 @@
       gap: 10px;
     }
     .sheet {
-      width: 100%;
-      border-radius: 18px 18px 0 0;
+      width: calc(100% - 2 * var(--gutter));
     }
   }
-
-  .sheet { max-width: 1800px; width: calc(100% - var(--gutter) * 2); background: var(--panel); border: 1px solid var(--line); border-radius: 26px; }
-  @media(max-width: 640px) { .sheet { width: 100%; border-radius: 20px 20px 0 0; } }
 
   .seen-links {
     display: flex;

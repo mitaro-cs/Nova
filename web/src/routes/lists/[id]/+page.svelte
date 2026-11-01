@@ -7,6 +7,7 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import { ask } from '$lib/ui/dialogs.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
   import Modal from '$lib/ui/Modal.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import Poster from '$lib/discover/Poster.svelte';
@@ -134,21 +135,24 @@
   }
 </script>
 
-<div class="page">
+<Sheet title={l?.name ?? 'Список'}>
+  {#snippet above()}
+    <a class="back muted" href="/lists"><Icon name="back" size={16} /> Все списки</a>
+  {/snippet}
+  {#snippet actions()}
+    {#if l}
+      <div class="acts">
+        <button class="btn sm ghost" onclick={() => ((newName = l?.name ?? ''), (renaming = true))}><Icon name="edit" size={14} /> Переименовать</button>
+        <button class="btn sm ghost" onclick={leave}><Icon name={l.mine ? 'trash' : 'logout'} size={14} /> {l.mine ? 'Удалить' : 'Выйти'}</button>
+      </div>
+    {/if}
+  {/snippet}
   {#if error}
     <div class="empty"><Icon name="info" size={36} /> {error}</div>
   {:else if !l}
     <div class="ph-head skeleton"></div>
   {:else}
-    <a class="back muted" href="/lists"><Icon name="back" size={16} /> Все списки</a>
-    <div class="head">
-      <h1>{l.name}</h1>
-      <div class="acts">
-        <button class="btn sm ghost" onclick={() => ((newName = l?.name ?? ''), (renaming = true))}><Icon name="edit" size={14} /> Переименовать</button>
-        <button class="btn sm ghost" onclick={leave}><Icon name={l.mine ? 'trash' : 'logout'} size={14} /> {l.mine ? 'Удалить' : 'Выйти'}</button>
-      </div>
-    </div>
-    <div class="members">
+    <div class="members rw-block">
       {#each l.members as m (m.id)}
         <a class="m" href="/people/{m.id}" title={m.name}><Avatar avatar={m.avatar} photo={m.photo} size={36} /><span>{m.name}</span></a>
       {/each}
@@ -164,10 +168,10 @@
     {/if}
     {#each sections as g (g.id ?? 'rest')}
       {#if g.items.length || g.id}
-        <section aria-label={g.name || 'Фильмы'}>
+        <section class="rw-block" aria-label={g.name || 'Фильмы'}>
           {#if g.name}
             <div class="ghead">
-              <h2>{g.name} <span class="faint">{g.items.length}</span></h2>
+              <h2 class="rw-h2">{g.name} <span class="faint">{g.items.length}</span></h2>
               {#if g.id}
                 <button class="mini" aria-label="Переименовать группу" title="Переименовать" onclick={() => editGroup({ id: g.id, name: g.name })}><Icon name="edit" size={14} /></button>
                 <button class="mini" aria-label="Удалить группу" title="Удалить группу" onclick={() => dropGroup(g)}><Icon name="trash" size={14} /></button>
@@ -203,9 +207,11 @@
         </section>
       {/if}
     {/each}
-    <button class="btn sm ghost" onclick={() => editGroup({ id: null, name: '' })}><Icon name="plus" size={14} /> Новая группа</button>
+    <div class="rw-block">
+      <button class="btn sm ghost" onclick={() => editGroup({ id: null, name: '' })}><Icon name="plus" size={14} /> Новая группа</button>
+    </div>
   {/if}
-</div>
+</Sheet>
 
 <Modal bind:open={renaming} title="Название списка">
   <form class="rename" onsubmit={rename}>
@@ -241,20 +247,7 @@
     align-items: center;
     gap: 4px;
     font-size: 14px;
-    margin-bottom: 8px;
-  }
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px 16px;
-  }
-  h1 {
-    font-size: clamp(28px, 4vw, 40px);
-    font-weight: 800;
-    overflow-wrap: anywhere;
-    min-width: 0;
+    margin-bottom: 12px;
   }
   .acts {
     display: flex;
@@ -265,7 +258,6 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    margin: 16px 0 28px;
   }
   .m {
     display: inline-flex;
@@ -283,17 +275,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  h2 {
-    font-size: 20px;
-  }
   .ghead {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 14px;
+    margin-bottom: max(14px, calc(26 * var(--rw)));
   }
-  .ghead h2 {
-    margin-right: 6px;
+  .ghead :global(.rw-h2) {
+    margin: 0 6px 0 0;
   }
   .tiles {
     display: grid;
@@ -329,9 +318,6 @@
   }
   .none {
     font-size: 14px;
-  }
-  section {
-    margin-bottom: 32px;
   }
   .item {
     display: grid;

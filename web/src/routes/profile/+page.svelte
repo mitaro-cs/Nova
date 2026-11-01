@@ -95,37 +95,40 @@
   }
 </script>
 
-<div class="page narrow">
+<div class="rw-page">
   {#if me && profile}
-    <section class="hero card">
-      <div class="pic">
-        <Avatar avatar={profile.avatar} photo={profile.photo} size={96} />
-      </div>
+    <header class="rw-head who-head">
       <div class="who">
-        <h1>{me.user.name}</h1>
-        <p class="muted">@{me.user.login}</p>
-        <div class="row">
-          <label class="btn sm" class:busy={uploading}>
-            <Icon name="image" size={15} />
-            {uploading ? 'Загружаем…' : profile.photo ? 'Другое фото' : 'Загрузить фото'}
-            <input type="file" accept="image/jpeg,image/png,image/webp" onchange={pick} hidden />
-          </label>
-          {#if profile.photo}<button class="btn sm ghost" onclick={dropPhoto}>Убрать фото</button>{/if}
-          <a class="btn sm ghost" href="/people/{profile.id}"><Icon name="user" size={15} /> Моя страница</a>
+        <div class="pic">
+          <Avatar avatar={profile.avatar} photo={profile.photo} size={96} />
+        </div>
+        <div class="name">
+          <h1>{me.user.name}</h1>
+          <p>@{me.user.login}</p>
         </div>
       </div>
-    </section>
+      <div class="row">
+        <label class="btn sm" class:busy={uploading}>
+          <Icon name="image" size={15} />
+          {uploading ? 'Загружаем…' : profile.photo ? 'Другое фото' : 'Загрузить фото'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" onchange={pick} hidden />
+        </label>
+        {#if profile.photo}<button class="btn sm ghost" onclick={dropPhoto}>Убрать фото</button>{/if}
+        <a class="btn sm ghost" href="/people/{profile.id}"><Icon name="user" size={15} /> Моя страница</a>
+      </div>
+    </header>
 
     <nav class="profile-tabs" aria-label="Настройки профиля">
       <button class:active={tab === 'style'} onclick={() => tab = 'style'}>Оформление</button>
       <button class:active={tab === 'account'} onclick={() => tab = 'account'}>Аккаунт и безопасность</button>
       <button class:active={tab === 'playback'} onclick={() => tab = 'playback'}>Интерфейс</button>
     </nav>
+    <section class="rw-plate" aria-label="Профиль">
     {#if tab === 'style'}<DecorEditor profileId={profile.id} />{/if}
 
     {#if tab === 'style' && !profile.photo}
-      <section class="card pane">
-        <h2>Аватар</h2>
+      <section class="rw-block pane">
+        <h2 class="rw-h2">Аватар</h2>
         <div class="avatars" role="radiogroup" aria-label="Аватар">
           {#each Array(12) as _, i (i)}
             <button type="button" role="radio" aria-checked={profile.avatar === i} aria-label={CHARACTERS[i].name} title={CHARACTERS[i].name} class:on={profile.avatar === i} onclick={() => setAvatar(i)}>
@@ -137,15 +140,15 @@
     {/if}
 
     {#if tab === 'playback'}
-    <section class="card pane">
-      <h2>Анимации</h2>
+    <section class="rw-block pane">
+      <h2 class="rw-h2">Анимации</h2>
       <label class="switch">
         <input type="checkbox" bind:checked={motion} onchange={() => setMotion(motion)} />
         <span>Плавные переходы, всплывающие ряды, плывущие постеры. Выключите, если компьютер слабый.</span>
       </label>
     </section>
-    <section class="card pane">
-      <h2>Экскурсия по Nova</h2>
+    <section class="rw-block pane">
+      <h2 class="rw-h2">Экскурсия по Nova</h2>
       <p class="muted">Короткий показ, где что лежит: разделы, Обзор, списки, совместный просмотр, плеер и телевизор.</p>
       <button class="btn" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><Icon name="play" size={15} /> Пройти экскурсию</button>
     </section>
@@ -153,14 +156,14 @@
     {/if}
     {#if tab === 'account'}
     <div class="account-grid">
-    <form class="card pane" onsubmit={saveName}>
-      <h2>Имя</h2>
+    <form class="rw-block pane" onsubmit={saveName}>
+      <h2 class="rw-h2">Имя</h2>
       <label class="field"><span>Как вас видят другие</span><input class="input" bind:value={name} maxlength="60" /></label>
       <button class="btn">Сохранить</button>
     </form>
 
-    <form class="card pane" onsubmit={savePassword}>
-      <h2>{me.hasPassword ? 'Сменить пароль' : 'Пароль для входа с других устройств'}</h2>
+    <form class="rw-block pane" onsubmit={savePassword}>
+      <h2 class="rw-h2">{me.hasPassword ? 'Сменить пароль' : 'Пароль для входа с других устройств'}</h2>
       {#if !me.hasPassword}
         <p class="muted small">Сейчас вы входите только из приложения на этом компьютере. Задайте пароль, чтобы управлять сайтом с телефона.</p>
       {:else}
@@ -175,46 +178,38 @@
     {/if}
     {#if err}<p class="error">{err}</p>{/if}
     {#if !me.window}
-      <button class="btn danger" onclick={logout}><Icon name="logout" size={16} /> Выйти</button>
+      <div class="rw-block"><button class="btn danger" onclick={logout}><Icon name="logout" size={16} /> Выйти</button></div>
     {/if}
+    </section>
   {/if}
 </div>
 
 <style>
-  .narrow {
-    max-width: 640px;
-    margin: 0 auto;
+  .who-head {
+    align-items: center;
+    flex-wrap: wrap;
   }
-  .hero {
+  .who {
     display: flex;
     align-items: center;
     gap: 20px;
-    padding: 22px;
-    margin-bottom: 18px;
+    min-width: 0;
   }
   .pic {
     flex: none;
     border-radius: 50%;
     overflow: hidden;
   }
-  .who {
-    display: grid;
-    gap: 6px;
+  .name {
     min-width: 0;
   }
-  h1 {
-    font-size: 26px;
-    font-weight: 800;
+  .name h1 {
     overflow-wrap: anywhere;
-  }
-  .who p {
-    margin: 0;
   }
   .row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 6px;
   }
   .busy {
     opacity: 0.6;
@@ -223,11 +218,6 @@
   .pane {
     display: grid;
     gap: 14px;
-    padding: 22px;
-    margin-bottom: 18px;
-  }
-  .pane h2 {
-    font-size: 17px;
   }
   .pane .btn {
     justify-self: start;
@@ -273,22 +263,41 @@
     margin: 0;
   }
   @media (max-width: 480px) {
-    .hero {
+    .who {
       flex-direction: column;
       text-align: center;
     }
+    .who-head,
     .row {
       justify-content: center;
     }
   }
 
-  .narrow { max-width: 1280px; }
-  .hero { padding: clamp(22px, 4vw, 44px); background: radial-gradient(ellipse at 90% 0, #697ba52a, transparent 65%), var(--panel); border-radius: 26px; }
-  h1 { font-size: clamp(26px, 3vw, 42px); }
-  .profile-tabs { display: flex; gap: 6px; padding: 6px; margin-bottom: 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); overflow-x: auto; }
-  .profile-tabs button { border: 0; border-radius: 12px; padding: 12px 20px; background: transparent; color: var(--muted); white-space: nowrap; cursor: pointer; }
-  .profile-tabs button.active { background: #dbe3f5; color: #10131a; }
-  .account-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
-  @media(max-width: 720px) { .account-grid { grid-template-columns: minmax(0, 1fr); } .hero { flex-wrap: wrap; } }
-
-</style>
+  /* Вкладки - капсулы над плитой, выбранная - белая (как чипы остальных экранов). */
+  .profile-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: calc(20 * var(--rw));
+    overflow-x: auto;
+  }
+  .profile-tabs button {
+    flex: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 10px 20px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .profile-tabs button.active {
+    background: #fff;
+    border-color: #fff;
+    color: #0a0a0a;
+  }
+  .account-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }</style>

@@ -222,4 +222,14 @@
       font-size: 9.5px;
     }
   }
+  /* Совсем узкий экран (плита профиля уже): подпись - у каждого третьего месяца. */
+  @media (max-width: 380px) {
+    .col:not(:nth-child(3n + 2)):not(.selected) small {
+      visibility: hidden;
+    }
+    .col small {
+      font-size: 8px;
+      letter-spacing: -0.02em;
+    }
+  }
 </style>

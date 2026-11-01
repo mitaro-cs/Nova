@@ -5,6 +5,7 @@
   import type { Member } from '$lib/types';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
 
   // Люди сайта: найти друзей, принять заявки. Сверху - кто просит дружбы, потом друзья.
   let list = $state<Member[] | null>(null);
@@ -24,15 +25,16 @@
   ]);
 </script>
 
-<div class="page narrow">
-  <div class="top">
-    <h1>Люди</h1>
+<Sheet title="Люди" subtitle="Друзья, заявки и все, кто есть на сайте">
+  {#snippet actions()}
     <a class="btn sm" href="/lists"><Icon name="users" size={15} /> Смотрим вместе</a>
+  {/snippet}
+  <div class="rw-block">
+    <label class="find">
+      <Icon name="search" size={18} />
+      <input type="search" bind:value={q} placeholder="Найти по имени" aria-label="Найти человека" />
+    </label>
   </div>
-  <label class="find">
-    <Icon name="search" size={18} />
-    <input type="search" bind:value={q} placeholder="Найти по имени" aria-label="Найти человека" />
-  </label>
 
   {#if error}
     <div class="empty"><Icon name="info" size={36} /> {error}</div>
@@ -43,8 +45,8 @@
   {:else}
     {#each groups as g (g.id)}
       {#if g.items.length}
-        <section aria-label={g.title}>
-          <h2>{g.title} <span class="faint">{g.items.length}</span></h2>
+        <section class="rw-block" aria-label={g.title}>
+          <h2 class="rw-h2">{g.title} <span class="faint">{g.items.length}</span></h2>
           <ul>
             {#each g.items as m, i (m.id)}
               <li style:--i={i}>
@@ -63,33 +65,15 @@
       {/if}
     {/each}
   {/if}
-</div>
-
+</Sheet>
 <style>
-  .top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-  .narrow {
-    max-width: 820px;
-    margin: 0 auto;
-  }
-  h1 {
-    font-size: clamp(32px, 5vw, 46px);
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    margin: 8px 0 18px;
-  }
+
   .find {
     display: flex;
     align-items: center;
     gap: 10px;
     height: 46px;
     padding: 0 16px;
-    margin-bottom: 26px;
     border-radius: 999px;
     border: 1.5px solid var(--line-strong);
     color: var(--muted);
@@ -102,15 +86,10 @@
     background: none;
     color: var(--text);
   }
-  h2 {
+
+  section h2 {
     display: flex;
     gap: 8px;
-    font-size: 15px;
-    font-weight: 700;
-    margin: 0 0 10px;
-  }
-  section {
-    margin-bottom: 26px;
   }
   ul {
     list-style: none;
@@ -127,7 +106,7 @@
     gap: 10px 14px;
     padding: 12px 14px;
     border-radius: 16px;
-    background: #1a1a1c;
+    background: var(--surface-2);
     animation: rise 0.35s calc(min(var(--i), 10) * 30ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   .who {

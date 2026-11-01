@@ -8,6 +8,7 @@
   import type { Marks, SharedList } from '$lib/types';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
 
   // Мои списки: «Смотрю», «Буду смотреть» и «Просмотрел» (с сервиса и из ленты IMDb), ниже -
   // общие списки с друзьями.
@@ -32,74 +33,59 @@
   });
 </script>
 
-<div class="page">
-  <h1 class="top">Списки</h1>
+<Sheet title="Списки" subtitle="Ваши отметки и общие списки с друзьями">
+  {#snippet actions()}
+    <button class="btn primary" onclick={() => (creating = true)}><Icon name="plus" size={16} /> Новый список</button>
+  {/snippet}
   {#if error}
     <div class="empty"><Icon name="info" size={36} /> {error}</div>
   {:else if marks === null || lists === null}
     <div class="ph-row skeleton"></div>
   {:else}
-    {#if marks.watching.length}<PosterRow title="Смотрю" items={marks.watching} />{/if}
-    {#if marks.want.length}<PosterRow title="Буду смотреть" items={marks.want} />{/if}
-    {#if marks.watched.length}<PosterRow title="Просмотрел" items={marks.watched} />{/if}
+    {#each [{ title: 'Смотрю', items: marks.watching }, { title: 'Буду смотреть', items: marks.want }, { title: 'Просмотрел', items: marks.watched }] as g (g.title)}
+      {#if g.items.length}
+        <div class="rw-block"><PosterRow title={g.title} items={g.items} /></div>
+      {/if}
+    {/each}
     {#if !marks.want.length && !marks.watched.length && !marks.watching.length}
-      <p class="muted hint">
+      <p class="rw-block muted hint">
         Отмечайте фильмы «Буду смотреть» и «Просмотрел» - на странице фильма или в <a href="/discover">Обзоре</a>, они соберутся здесь.
       </p>
     {/if}
 
-  <div class="head">
-    <h2>Смотрим вместе</h2>
-    <button class="btn primary" onclick={() => (creating = true)}><Icon name="plus" size={16} /> Новый список</button>
-  </div>
-  <p class="muted lead">Общие списки с друзьями: добавляйте фильмы и отмечайте, что уже посмотрели вместе.</p>
+    <section class="rw-block" aria-label="Смотрим вместе">
+      <h2 class="rw-h2">Смотрим вместе</h2>
+      <p class="muted lead">Общие списки с друзьями: добавляйте фильмы и отмечайте, что уже посмотрели вместе.</p>
 
-  {#if lists.length === 0}
-    <div class="empty"><Icon name="users" size={40} /> Пока нет ни одного списка - создайте первый и позовите друга.</div>
-  {:else}
-    <div class="grid">
-      {#each lists as l (l.id)}
-        <a class="list" href="/lists/{l.id}">
-          <span class="art" class:many={l.art.length > 1}>
-            {#each l.art.slice(0, 4) as a, i (i)}<img src={artW(a, 342)} alt="" loading="lazy" decoding="async" />{/each}
-            {#if !l.art.length}<span class="none"><Icon name="film" size={30} /></span>{/if}
-          </span>
-          <span class="name">{l.name}</span>
-          <span class="sub">
-            <span class="faces">
-              {#each l.members.slice(0, 4) as m (m.id)}<Avatar avatar={m.avatar} photo={m.photo} size={22} />{/each}
-            </span>
-            {l.count ? `${l.watched} из ${l.count} посмотрели` : 'пока пусто'}
-          </span>
-        </a>
-      {/each}
-    </div>
+      {#if lists.length === 0}
+        <div class="empty"><Icon name="users" size={40} /> Пока нет ни одного списка - создайте первый и позовите друга.</div>
+      {:else}
+        <div class="grid">
+          {#each lists as l (l.id)}
+            <a class="list" href="/lists/{l.id}">
+              <span class="art" class:many={l.art.length > 1}>
+                {#each l.art.slice(0, 4) as a, i (i)}<img src={artW(a, 342)} alt="" loading="lazy" decoding="async" />{/each}
+                {#if !l.art.length}<span class="none"><Icon name="film" size={30} /></span>{/if}
+              </span>
+              <span class="name">{l.name}</span>
+              <span class="sub">
+                <span class="faces">
+                  {#each l.members.slice(0, 4) as m (m.id)}<Avatar avatar={m.avatar} photo={m.photo} size={22} />{/each}
+                </span>
+                {l.count ? `${l.watched} из ${l.count} посмотрели` : 'пока пусто'}
+              </span>
+            </a>
+          {/each}
+        </div>
+      {/if}
+    </section>
   {/if}
-  {/if}
-</div>
+</Sheet>
 <NewList bind:open={creating} oncreated={(id) => goto(`/lists/${id}`)} />
 
 <style>
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  h1 {
-    font-size: clamp(28px, 4vw, 40px);
-    font-weight: 800;
-  }
-  .top {
-    margin-bottom: 20px;
-  }
-  h2 {
-    font-size: clamp(19px, 1.6vw, 24px);
-    font-weight: 700;
-  }
   .hint {
-    margin: 0 0 32px;
+    margin: 0;
   }
   .hint a {
     text-decoration: underline;
@@ -110,7 +96,7 @@
     margin-bottom: 30px;
   }
   .lead {
-    margin: 6px 0 24px;
+    margin: -8px 0 20px;
   }
   .list {
     display: grid;
