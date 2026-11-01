@@ -31,7 +31,8 @@ test('управление появляется без паузы, клавиш�
   await page.waitForTimeout(3200);
   await expect(player).not.toHaveClass(/idle/);
   await expect(player).toHaveClass(/idle/, {timeout:2500});
-  expect(await player.locator('.bottom').evaluate(el => getComputedStyle(el).userSelect)).toBe('none');
+  // Safari понимает только user-select с префиксом: смотрим тот, что есть.
+  expect(await player.locator('.bottom').evaluate(el => { const s = getComputedStyle(el); return s.webkitUserSelect || s.userSelect; })).toBe('none');
   await page.mouse.move(100, 120);
   await expect(player).not.toHaveClass(/idle/);
   await expectClean(page, 'плеер');

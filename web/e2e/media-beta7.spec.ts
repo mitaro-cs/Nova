@@ -47,7 +47,8 @@ test('ошибка источника оставляет выбор в Nova и �
   await expect(page.locator('iframe')).toHaveCount(0);
 });
 
-test('F скрывает оболочку, внешние серии переключаются без выхода из полноэкранного режима', async ({ page }) => {
+test('F скрывает оболочку, внешние серии переключаются без выхода из полноэкранного режима', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'WebKit (iPhone): полный экран только у <video> через webkitEnterFullscreen, у оболочки его нет');
   await page.addInitScript(() => Object.defineProperty(window, '__NOVA_DESKTOP__', { value: true }));
   const native:boolean[]=[];
   await page.route('**/api/host/fullscreen',route=>{native.push(route.request().postDataJSON().enabled);return route.fulfill({json:{native:true}});});

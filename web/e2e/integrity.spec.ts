@@ -70,6 +70,9 @@ async function inspect(page: Page, found: Finding[]) {
 }
 
 async function check(page: Page, path: string, what: string) {
+  // Поиск видео ходит на внешние сайты: без интернета (CI) сервер честно отвечает 400 «источники не
+  // отвечают». Датчик проверяет наш код, а не сеть - поиск подменяем пустым ответом.
+  await page.route('**/api/links/search**', (route) => route.fulfill({ json: [] }));
   const found = watch(page);
   await page.goto(url(path));
   await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});

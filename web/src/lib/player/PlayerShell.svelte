@@ -572,7 +572,14 @@
   function fullscreen() {
     if (document.fullscreenElement) document.exitFullscreen();
     else if (box?.requestFullscreen) box.requestFullscreen().catch(() => {});
-    else (video as HTMLVideoElement & { webkitEnterFullscreen?: () => void } | undefined)?.webkitEnterFullscreen?.();
+    else {
+      // iPhone: полный экран только у самого <video>; пока оно не готово, браузер бросает InvalidStateError.
+      try {
+        (video as HTMLVideoElement & { webkitEnterFullscreen?: () => void } | undefined)?.webkitEnterFullscreen?.();
+      } catch {
+        say('Полный экран пока недоступен');
+      }
+    }
   }
 
   // Браузер не даёт запустить видео со звуком без нажатия (зашёл по ссылке) - без звука, и кнопка
@@ -979,6 +986,7 @@
     background: #000;
     color: #fff;
     overflow: hidden;
+    -webkit-user-select: none;
     user-select: none;
   }
   @media (min-width: 801px) {
