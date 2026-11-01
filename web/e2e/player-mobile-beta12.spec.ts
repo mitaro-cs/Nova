@@ -24,7 +24,8 @@ test('сенсорные кнопки перематывают, ставят п�
   await page.route('**/api/links/99120/progress',r=>r.fulfill({json:{ok:true}}));
   await page.goto(url('/watch/link/99120'));
   await page.waitForFunction(()=>!!document.querySelector('video')?.duration);
-  const controls=page.locator('.touch-playback');
+  // Центральные кнопки: скрыты - класс hide (плеер без движения 4 с и видео идёт).
+  const controls=page.locator('.center');
   await page.locator('video').evaluate(async(v:HTMLVideoElement)=>{v.muted=true;await v.play();});
   await page.getByRole('application',{name:'Видеоплеер'}).dispatchEvent('pointermove');
   await controls.getByRole('button',{name:'Пауза',exact:true}).click();
@@ -32,9 +33,9 @@ test('сенсорные кнопки перематывают, ставят п�
   await controls.getByRole('button',{name:'Вперёд на 10 секунд'}).click();
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(9);
   await controls.getByRole('button',{name:'Смотреть',exact:true}).click();
-  await expect(controls).not.toHaveClass(/visible/,{timeout:7000});
+  await expect(controls).toHaveClass(/hide/,{timeout:7000});
   await page.setViewportSize({width:844,height:390});
   await page.getByRole('application',{name:'Видеоплеер'}).dispatchEvent('pointermove');
-  await expect(controls).toHaveClass(/visible/);
+  await expect(controls).not.toHaveClass(/hide/);
   await page.screenshot({path:`test-results/player-beta12-${info.project.name}.png`});
 });
