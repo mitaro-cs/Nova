@@ -1,0 +1,150 @@
+// Адаптивный режим (hls) и видео по ссылке с HLS: hls.js, подгружается лениво. Параметры загрузки и
+// повторов - те же, что у прежнего плеера (хост готовит плейлист несколько секунд, интернет бывает плохим).
+import type { Engine } from '../session.svelte';
+import type { Step } from '../plan';
+import { qualityTier } from '../quality-label';
+import { abrEstimate } from '../speed';
+import { streamUrl } from '../urls';
+
+export interface Level {
+  i: number;
+  height: number;
+  label?: number;
+}
+
+/** Минимум, который мы берём от hls.js (и что подменяем в тестах). */
+export interface HlsLike {
+  new (config: Record<string, unknown>): HlsInstance;
+  isSupported(): boolean;
+  Events: { MANIFEST_PARSED: string; LEVEL_SWITCHED: string; ERROR: string };
+  ErrorTypes: { MEDIA_ERROR: string; NETWORK_ERROR: string };
+}
+
+export interface HlsInstance {
+  levels: { height: number; width: number }[];
+  currentLevel: number;
+  loadLevel: number;
+  on(event: string, cb: (event: string, data: never) => void): void;
+  loadSource(url: string): void;
+  attachMedia(video: HTMLVideoElement): void;
+  destroy(): void;
+  startLoad(): void;
+  recoverMediaError(): void;
+}
+
+export interface HlsCtx {
+  fileId?: number;
+  audio?: number;
+  /** Скорость до хоста, Мбит/с: с неё начинается автокачество. */
+  mbit?: number | null;
+  /** Видео по ссылке: адрес потока вместо файла хоста (запас вперёд меньше, нужна полная сборка). */
+  source?: string;
+  /** Лёгкая сборка hls.js (без отдельных звуковых дорожек). */
+  light?: boolean;
+  /** С какого уровня начать (видео по ссылке): -1 - автоматически. */
+  startLevel?: number;
+  loader?: () => Promise<{ default: HlsLike }>;
+}
+
+export interface HlsEngine extends Engine {
+  levels(): Level[];
+  setLevel(i: number): void;
+  onLevels(cb: (levels: Level[]) => void): void;
+  /** Высота текущего уровня (или null). */
+  onLevel(cb: (height: number | null) => void): void;
+}
+
+const policy = (ttfb: number, load: number, timeoutRetry: [number, number, number], errorRetry: [number, number, number]) => ({
+  default: {
+    maxTimeToFirstByteMs: ttfb,
+    maxLoadTimeMs: load,
+    timeoutRetry: { maxNumRetry: timeoutRetry[0], retryDelayMs: timeoutRetry[1], maxRetryDelayMs: timeoutRetry[2] },
+    errorRetry: { maxNumRetry: errorRetry[0], retryDelayMs: errorRetry[1], maxRetryDelayMs: errorRetry[2] },
+  },
+});
+
+const defaultLoader = (light: boolean) => () =>
+  (light ? import('hls.js/light') : import('hls.js')) as unknown as Promise<{ default: HlsLike }>;
+
+export function createHlsEngine(ctx: HlsCtx): HlsEngine {
+  let hls: HlsInstance | null = null;
+  let destroyed = false;
+  let fatalCb: ((code: string) => void) | null = null;
+  let levelsCb: ((l: Level[]) => void) | null = null;
+  let levelCb: ((h: number | null) => void) | null = null;
+  let current: Level[] = [];
+
+  return {
+    async start(video: HTMLVideoElement, step: Step, at: number) {
+      destroyed = false;
+      const load = ctx.loader ?? defaultLoader(ctx.light ?? true);
+      const { default: Hls } = await load();
+      if (destroyed) return;
+      if (!Hls.isSupported()) {
+        fatalCb?.('decode');
+        return;
+      }
+      const url = ctx.source ?? streamUrl(step, { fileId: ctx.fileId ?? 0, audio: ctx.audio ?? 0, at, hevc: false }).url;
+      const estimate = ctx.source ? undefined : abrEstimate(ctx.mbit ?? null);
+      let retries = 0;
+      const h = new Hls({
+        startPosition: at,
+        // Запас вперёд - до минуты: короткие провалы скорости не останавливают видео.
+        maxBufferLength: ctx.source ? 20 : 60,
+        maxMaxBufferLength: 120,
+        startLevel: ctx.startLevel ?? -1,
+        // Автокачество начинает с уровня под замеренную скорость, а не наугад.
+        ...(estimate === undefined ? {} : { abrEwmaDefaultEstimate: estimate }),
+        capLevelToPlayerSize: true,
+        backBufferLength: 60,
+        // Плейлист у хоста может готовиться несколько секунд (копия, перекодирование).
+        manifestLoadPolicy: policy(60_000, 90_000, [2, 1000, 4000], [3, 1000, 8000]),
+        playlistLoadPolicy: policy(60_000, 90_000, [2, 1000, 4000], [3, 1000, 8000]),
+        fragLoadPolicy: policy(45_000, 120_000, [4, 500, 4000], [6, 1000, 8000]),
+      }) as HlsInstance;
+      hls = h;
+      h.on(Hls.Events.LEVEL_SWITCHED, ((_e: string, d: { level: number }) => levelCb?.(h.levels[d.level]?.height ?? null)) as never);
+      h.on(Hls.Events.MANIFEST_PARSED, (() => {
+        // Разные качества (без повторов подписи) - от лучшего.
+        const seen = new Set<number>();
+        current = h.levels
+          .map((l, i) => ({ i, height: l.height, label: qualityTier(l.height, l.width) }))
+          .filter((l) => l.height && !seen.has(l.label) && seen.add(l.label))
+          .sort((a, b) => b.height - a.height);
+        levelsCb?.(current);
+      }) as never);
+      h.on(Hls.Events.ERROR, ((_e: string, d: { fatal?: boolean; type?: string }) => {
+        if (!d.fatal) return;
+        if (retries++ < 3) {
+          if (d.type === Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
+          else h.startLoad();
+          return;
+        }
+        fatalCb?.(d.type === Hls.ErrorTypes.MEDIA_ERROR ? 'decode' : 'network');
+      }) as never);
+      h.loadSource(url);
+      h.attachMedia(video);
+    },
+    destroy() {
+      destroyed = true;
+      hls?.destroy();
+      hls = null;
+      current = [];
+    },
+    onFatal(cb) {
+      fatalCb = cb;
+    },
+    levels: () => current,
+    setLevel(i) {
+      if (!hls) return;
+      hls.currentLevel = i;
+      hls.loadLevel = i;
+    },
+    onLevels(cb) {
+      levelsCb = cb;
+    },
+    onLevel(cb) {
+      levelCb = cb;
+    },
+  };
+}
