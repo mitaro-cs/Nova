@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, errorText, post } from '$lib/api';
-  import Player from '$lib/player/Player.svelte';
+  import PlayerShell from '$lib/player/PlayerShell.svelte';
   import type { VideoLink } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
 
@@ -117,9 +117,9 @@
 </script>
 
 {#if src}
-  <Player {src} {alts} {nextSource} onnext={()=>{if(nextSource)void goto(`/watch/link/${nextSource.id}`,{replace: true});}} onNearEnd={prepareNext} onfinish={()=>{finished=true;prepareNext();}} onalt={(a) => goto(`/watch/link/${a}`, { replace: true })} onwrong={wrong} expect={expected} onfail={fallback}>
+  <PlayerShell {src} {alts} {nextSource} onnext={()=>{if(nextSource)void goto(`/watch/link/${nextSource.id}`,{replace: true});}} onNearEnd={prepareNext} onfinish={()=>{finished=true;prepareNext();}} onalt={(a) => goto(`/watch/link/${a}`, { replace: true })} onwrong={wrong} expect={expected} onfail={fallback}>
     {#if finished && !nextSource && link?.season != null}<div class="next-status" role="status">{nextLoading ? 'Ищем следующую серию…' : 'Источник следующей серии не найден'}{#if !nextLoading}<button class="btn sm" onclick={back}>Выбрать серию</button>{/if}</div>{/if}
-  </Player>
+  </PlayerShell>
 {:else}
   <div class="stage">
     {#if own && link?.embed}

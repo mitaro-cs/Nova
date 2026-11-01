@@ -95,6 +95,26 @@ describe('PlaySession', () => {
     expect(engines).toHaveLength(1);
   });
 
+  it('данные первого кадра пришли, а автозапуск заблокирован: это успешный старт, режим не меняется', () => {
+    const { video, engines, session } = setup([raw, hls]);
+    session.start(0);
+    fire(video, 'loadeddata');
+    expect(session.state).toBe('ready');
+    vi.advanceTimersByTime(START_TIMEOUT_MS * 3);
+    expect(engines).toHaveLength(1);
+    expect(session.state).toBe('ready');
+    fire(video, 'playing');
+    expect(session.state).toBe('playing');
+  });
+
+  it('canplay после playing не возвращает состояние назад', () => {
+    const { video, session } = setup([raw]);
+    session.start(0);
+    fire(video, 'playing');
+    fire(video, 'canplay');
+    expect(session.state).toBe('playing');
+  });
+
   it('fatal_error_goes_to_next_step: фатальная ошибка движка', () => {
     const { engines, events, session } = setup([remux, hls]);
     session.start(10);

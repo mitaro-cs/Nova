@@ -2,7 +2,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, errorText, post } from '$lib/api';
-  import Player, { type PlayerSync } from '$lib/player/Player.svelte';
+  import PlayerShell from '$lib/player/PlayerShell.svelte';
+  import type { PlayerSync } from '$lib/player/sync';
   import { session } from '$lib/session.svelte';
   import type { RoomChat, RoomEvent, RoomState, Who } from '$lib/types';
   import { Voice } from '$lib/room/voice.svelte';
@@ -215,7 +216,7 @@
     {#if room.linkId && !linkSrc}
       <div class="boot" aria-busy="true"><Icon name="party" size={36} /> Готовим видео с сайта…</div>
     {:else}
-    <Player fileId={room.fileId} src={linkSrc} {sync} sidebar={side}>
+    <PlayerShell fileId={room.fileId} src={linkSrc} {sync} sidebar={side}>
       <div class="room" class:closed={!side}>
         <div class="room-status" role="status"><Icon name="party" size={14}/><span>Смотрим вместе</span><i class:online={connection === 'online'}></i><small>{error || (connection === 'online' ? `${members.length} участн.` : 'Восстанавливаем связь…')}</small></div>
         <button class="toggle" aria-label={side ? 'Спрятать чат' : 'Показать чат'} aria-expanded={side} onclick={() => (side = !side)}>
@@ -289,7 +290,7 @@
           <span class="fly" style:left="{f.x}%" aria-hidden="true"><em>{f.emoji}</em><small>{f.who}</small></span>
         {/each}
       </div>
-    </Player>
+    </PlayerShell>
     {/if}
   {/key}
 {:else}

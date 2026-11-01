@@ -64,6 +64,10 @@ export class PlaySession {
       this.#listeners.push([name, fn]);
     };
     on('playing', () => this.#onPlaying());
+    // Данные первого кадра пришли: старт удался, даже если браузер не дал запустить сам (автозапуск
+    // без нажатия заблокирован) - зритель нажмёт «Смотреть». Менять из-за этого режим нельзя.
+    on('loadeddata', () => this.#onReady());
+    on('canplay', () => this.#onReady());
     on('pause', () => this.#onPause());
     on('waiting', () => this.#onWaiting());
     on('error', () => this.#fail(this.#gen, 'decode'));
@@ -153,6 +157,13 @@ export class PlaySession {
   #onPlaying() {
     this.#clearTimers();
     this.state = 'playing';
+  }
+
+  #onReady() {
+    if (this.state !== 'loading') return;
+    if (this.#startTimer) clearTimeout(this.#startTimer);
+    this.#startTimer = null;
+    this.state = 'ready';
   }
 
   #onPause() {
