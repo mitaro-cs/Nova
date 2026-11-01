@@ -195,6 +195,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .tab-head {
+    margin-bottom: max(22px, calc(32 * var(--rw)));
+  }
   .tab-head p {
     max-width: 72ch;
     margin: -8px 0 12px;

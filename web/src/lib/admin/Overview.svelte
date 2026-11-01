@@ -343,7 +343,7 @@
     min-height: 104px;
     padding: 16px 18px;
     border-radius: 18px;
-    background: #0b0b0d;
+    background: var(--surface-2);
     border: 1px solid var(--line);
   }
   .tile span {
