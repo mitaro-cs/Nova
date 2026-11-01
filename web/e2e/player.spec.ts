@@ -18,6 +18,25 @@ const state = (page: Page) =>
     return { t: v?.currentTime ?? 0, paused: v?.paused ?? true, ended: v?.ended ?? false };
   });
 
+// Playwright WebKit на Windows собран без медиа-движка: даже корректный WAV даёт MEDIA_ERR_SRC_NOT_SUPPORTED
+// (а canPlayType отвечает «probably»). Играть там нечему - тесты плеера пропускаем, а не считаем сбоем.
+test.beforeEach(async ({ page, browserName }) => {
+  if (browserName !== 'webkit') return;
+  await page.goto('about:blank');
+  const works = await page.evaluate(
+    (src) =>
+      new Promise<boolean>((done) => {
+        const a = document.createElement('audio');
+        a.addEventListener('loadedmetadata', () => done(true));
+        a.addEventListener('error', () => done(false));
+        setTimeout(() => done(false), 3000);
+        a.src = src;
+      }),
+    'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YQAAAAA=',
+  );
+  test.skip(!works, 'WebKit без медиа-движка (Playwright на Windows): воспроизвести нечего');
+});
+
 // Видео ещё может не появиться на странице: это 0, а не ошибка.
 const ready = (page: Page) => page.evaluate(() => document.querySelector('video')?.readyState ?? 0);
 
