@@ -476,7 +476,7 @@
 
   /* ---------- лист с разделами ---------- */
   .sheet {
-    width: min(max(960px, calc(1200 * var(--rw) + 2 * var(--gutter))), 100% - 2 * var(--gutter));
+    width: calc(100% - 2 * var(--gutter));
     margin: 0 auto 64px;
   }
   .sheet :global(.rw-h2) {

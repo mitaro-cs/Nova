@@ -12,17 +12,10 @@
   --sheet-text-3: #8f8f95;
 }
 
-/* Страница: заголовок над плитой, колонка 1200 в долях --rw, не шире 1440. */
+/* Страница: заголовок над плитой, на всю ширину окна (боковое поле - --gutter). */
 .rw-page {
   width: 100%;
-  max-width: calc(1200 * var(--rw) + 2 * var(--gutter));
-  margin-inline: auto;
   padding: calc(var(--header) + 24px) var(--gutter) calc(64px + var(--tabbar));
-}
-@media (min-width: 981px) {
-  .rw-page {
-    max-width: max(960px, calc(1200 * var(--rw) + 2 * var(--gutter)));
-  }
 }
 .rw-head {
   display: flex;
@@ -53,14 +46,10 @@
   --muted: var(--sheet-text-2);
   --faint: var(--sheet-text-3);
   background: var(--sheet);
-  border-radius: max(20px, calc(30 * var(--rw)));
-  padding: calc(8 * var(--rw)) max(20px, calc(40 * var(--rw)));
-}
-@media (max-width: 640px) {
-  .rw-plate {
-    padding: 4px 16px;
-    border-radius: 20px;
-  }
+  /* Плита - от края до края окна, без рамок и скруглений; поля - внутри. */
+  border-radius: 0;
+  margin-inline: calc(-1 * var(--gutter));
+  padding: calc(8 * var(--rw)) var(--gutter);
 }
 
 /* Раздел плиты: отступы и тонкая линия между разделами; заголовок раздела - .rw-h2. */
