@@ -264,7 +264,7 @@
   /* Ожидание героя - той же высоты, что и сам герой (ничего не сдвигается, когда он появится). */
   .ph-hero.wait { min-height: clamp(520px, 78svh, 860px); }
   .homepage .rows { margin-top: 0; padding-top: 12px; }
-  .welcome { min-height: 430px; padding: calc(var(--header) + 80px) var(--gutter) 48px; background: radial-gradient(ellipse at 80% 20%, #37302566, transparent 65%); }
+  .welcome { min-height: 430px; padding: calc(var(--header) + 80px) var(--edge) 48px; background: radial-gradient(ellipse at 80% 20%, #37302566, transparent 65%); }
   .welcome h1 { font-size: clamp(32px, 4vw, 64px); letter-spacing: -.04em; margin: 18px 0; }
   .welcome p { color: var(--muted); font-size: 17px; }
   .eyebrow { color: #f5c518; letter-spacing: .12em; font-size: 11px; font-weight: 800; }
@@ -283,7 +283,7 @@
     position: relative;
     z-index: 1;
     margin-top: calc(-1 * var(--row));
-    padding: 0 var(--gutter);
+    padding: 0 var(--edge);
   }
   .flat .rows {
     margin-top: 0;
@@ -308,8 +308,9 @@
     margin-bottom: 16px;
   }
   h2 {
-    font-size: clamp(19px, 1.6vw, 24px);
-    font-weight: 700;
+    font-size: max(17px, calc(20 * var(--rw)));
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   .chips {
     display: flex;

@@ -186,7 +186,7 @@
 <style>
   /* «Кинозал+» (alpha 0.5): кадр почти на весь экран, слева - надпись цветом фильма, крупное название,
      оценка, описание и две капсулы; справа внизу - точки. Затемнение только слева и снизу. */
-  .showcase { position: relative; min-height: clamp(520px, 78svh, 860px); isolation: isolate; display: flex; align-items: flex-end; padding: calc(var(--header) + 36px) var(--gutter) clamp(48px, 9vh, 100px); overflow: hidden; }
+  .showcase { position: relative; min-height: clamp(520px, 78svh, 860px); isolation: isolate; display: flex; align-items: flex-end; padding: calc(var(--header) + 36px) var(--edge) clamp(48px, 9vh, 100px); overflow: hidden; }
   /* Кадр - на всю ширину, слева его плавно гасит затемнение (края кадра не видно). */
   .stage { position: absolute; inset: 0; z-index: -2; }
   /* Два слоя: прозрачность меняется плавно и без пересчёта вёрстки. */
@@ -211,7 +211,7 @@
   .actions .btn.glass { background: #ffffff1c; color: #fff; box-shadow: inset 0 0 0 1px #ffffff2e; backdrop-filter: blur(14px); }
   .actions .btn.glass:hover { background: #ffffff2a; }
   .actions .btn.glass.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 70%, #fff); }
-  .dots { position: absolute; right: var(--gutter); bottom: clamp(80px, 12vh, 140px); display: flex; gap: 6px; }
+  .dots { position: absolute; right: var(--edge); bottom: clamp(80px, 12vh, 140px); display: flex; gap: 6px; }
   .dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 99px; background: #ffffff55; cursor: pointer; transition: width .3s cubic-bezier(.2,.8,.2,1), background .3s; }
   .dots button.on { width: 28px; background: #fff; }
   :global(.no-motion) .backdrop { transition: none; }

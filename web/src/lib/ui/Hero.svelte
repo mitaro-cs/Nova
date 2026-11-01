@@ -125,7 +125,7 @@
     height: clamp(560px, 100svh, 1200px);
     display: flex;
     align-items: flex-end;
-    padding: 0 var(--gutter) calc(var(--row) + clamp(60px, 9vh, 110px));
+    padding: 0 var(--edge) calc(var(--row) + clamp(60px, 9vh, 110px));
     overflow: hidden;
     isolation: isolate;
     touch-action: pan-y;
