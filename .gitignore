@@ -16,8 +16,6 @@
 
 # Локально (не в репозиторий): JDK и SDK, сборка Java preview, логи проверок, скриншоты отчётов.
 /tools/
-/server-java/build/
-/server-java/lib/
 /docs/screenshots/*
 !/docs/screenshots/[1-9]-*.webp
 *.log
