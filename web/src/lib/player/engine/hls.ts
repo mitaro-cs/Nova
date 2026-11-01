@@ -30,6 +30,8 @@ export interface HlsInstance {
   destroy(): void;
   startLoad(): void;
   recoverMediaError(): void;
+  pauseBuffering?(): void;
+  resumeBuffering?(): void;
 }
 
 export interface HlsCtx {
@@ -52,6 +54,9 @@ export interface HlsEngine extends Engine {
   onLevels(cb: (levels: Level[]) => void): void;
   /** Высота текущего уровня (или null). */
   onLevel(cb: (height: number | null) => void): void;
+  /** На паузе hls.js не качает вперёд (экономит интернет и нагрузку на хосте). */
+  pauseBuffering(): void;
+  resumeBuffering(): void;
 }
 
 const policy = (ttfb: number, load: number, timeoutRetry: [number, number, number], errorRetry: [number, number, number]) => ({
@@ -145,6 +150,12 @@ export function createHlsEngine(ctx: HlsCtx): HlsEngine {
     },
     onLevel(cb) {
       levelCb = cb;
+    },
+    pauseBuffering() {
+      hls?.pauseBuffering?.();
+    },
+    resumeBuffering() {
+      hls?.resumeBuffering?.();
     },
   };
 }

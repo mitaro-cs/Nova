@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PlaySession, type Engine, type PlayEvent } from './session.svelte';
-import { START_TIMEOUT_MS, STALL_TIMEOUT_MS, type Step } from './plan';
+import { LAST_START_TIMEOUT_MS, START_TIMEOUT_MS, STALL_TIMEOUT_MS, type Step } from './plan';
 
 class FakeVideo extends EventTarget {
   currentTime = 0;
@@ -128,12 +128,35 @@ describe('PlaySession', () => {
     expect(events.at(-1)).toMatchObject({ type: 'fatal', code: 'no_variant' });
   });
 
-  it('timeout старта в последнем варианте - network', () => {
+  it('последний вариант ждёт дольше: хост может готовить плейлист десятки секунд', () => {
     const { session } = setup([hls]);
     session.start(0);
     vi.advanceTimersByTime(START_TIMEOUT_MS + 1);
+    expect(session.state).toBe('loading');
+    vi.advanceTimersByTime(LAST_START_TIMEOUT_MS);
     expect(session.state).toBe('failed');
     expect(session.failure).toBe('network');
+  });
+
+  it('при переходе состояние уже loading, когда старый движок останавливается', () => {
+    const states: string[] = [];
+    const video = new FakeVideo();
+    let session!: PlaySession;
+    session = new PlaySession({
+      chain: [raw, hls],
+      makeEngine: (step) => {
+        const e = new FakeEngine(step);
+        e.destroy = () => void states.push(session.state);
+        return e;
+      },
+      report: () => {},
+    });
+    session.attach(video as unknown as HTMLVideoElement);
+    session.start(0);
+    fire(video, 'playing');
+    session.seek(10);
+    session.start(20);
+    expect(states).toEqual(['loading']);
   });
 
   it('stall_lowers_quality_once_per_20s: зависание посреди фильма - ступень вниз, не чаще раза в 20 с', () => {

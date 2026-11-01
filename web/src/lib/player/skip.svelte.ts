@@ -53,6 +53,11 @@ export class NextEpisode {
     this.left = null;
   }
 
+  /** Остановить отсчёт, не сбрасывая число (видео поставили на паузу в титрах). */
+  pause() {
+    this.#stop();
+  }
+
   #stop() {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;

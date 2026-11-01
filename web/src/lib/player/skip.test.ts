@@ -62,6 +62,21 @@ describe('NextEpisode', () => {
     expect(done).not.toHaveBeenCalled();
   });
 
+  it('pause останавливает отсчёт, но оставляет число (пауза видео в титрах)', () => {
+    const done = vi.fn();
+    const n = new NextEpisode(done);
+    n.start(10);
+    vi.advanceTimersByTime(3000);
+    n.pause();
+    expect(n.left).toBe(7);
+    vi.advanceTimersByTime(20_000);
+    expect(n.left).toBe(7);
+    expect(done).not.toHaveBeenCalled();
+    n.start(n.left ?? 10);
+    vi.advanceTimersByTime(7000);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
   it('повторный start перезапускает отсчёт', () => {
     const done = vi.fn();
     const n = new NextEpisode(done);

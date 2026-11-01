@@ -1,7 +1,7 @@
 // Конечный автомат воспроизведения: ведёт цепочку режимов (`plan.ts`), единственный владелец
 // `<video>`. Не заработало - следующий вариант с того же места, без чёрного экрана; зависло посреди
 // фильма - ступень вниз (не чаще раза в 20 с); перемотка - не зависание.
-import { START_TIMEOUT_MS, STALL_TIMEOUT_MS, type Mode, type Step } from './plan';
+import { LAST_START_TIMEOUT_MS, START_TIMEOUT_MS, STALL_TIMEOUT_MS, type Mode, type Step } from './plan';
 
 export type State = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
 
@@ -108,6 +108,9 @@ export class PlaySession {
 
   #begin(idx: number, at: number, announce: boolean) {
     this.#clearTimers();
+    // Сначала «загрузка», потом останавливаем прежний поток: его остановка у `<video>` может дать
+    // событие `pause`, а оно не должно считаться паузой зрителя.
+    this.state = 'loading';
     this.#stopEngine();
     const gen = ++this.#gen;
     this.#idx = idx;
@@ -118,12 +121,12 @@ export class PlaySession {
       return;
     }
     this.step = step;
-    this.state = 'loading';
     if (announce) this.#report({ type: 'start', mode: step.mode });
     const engine = this.#makeEngine(step);
     this.#engine = engine;
     engine.onFatal((code) => this.#fail(gen, code));
-    this.#startTimer = setTimeout(() => this.#fail(gen, 'timeout'), START_TIMEOUT_MS);
+    const last = idx === this.#chain.length - 1;
+    this.#startTimer = setTimeout(() => this.#fail(gen, 'timeout'), last ? LAST_START_TIMEOUT_MS : START_TIMEOUT_MS);
     if (this.#video) engine.start(this.#video, step, at).catch(() => this.#fail(gen, 'network'));
   }
 
