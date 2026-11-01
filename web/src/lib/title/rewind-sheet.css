@@ -9,12 +9,12 @@
     margin: 0;
     border: 0;
     border-radius: 0;
-    background: #212121;
+    background: var(--sheet);
     padding: calc(20 * var(--rw)) max(var(--gutter), calc((100% - 1200 * var(--rw)) / 2)) calc(90 * var(--rw));
   }
   main.sheet.rw-sheet .block {
     padding: calc(40 * var(--rw)) 0;
-    border-bottom: 1px solid #ffffff1f;
+    border-bottom: 1px solid var(--sheet-line);
   }
   main.sheet.rw-sheet .block:last-child {
     border-bottom: 0;
@@ -58,7 +58,7 @@
   }
   main.sheet.rw-sheet .cast small {
     font-size: max(11px, calc(13 * var(--rw)));
-    color: #8f8f95;
+    color: var(--sheet-text-3);
   }
 
   /* Отзывы: карточки по два в ряд */
@@ -69,12 +69,12 @@
   main.sheet.rw-sheet .review {
     padding: calc(24 * var(--rw)) calc(26 * var(--rw)) calc(16 * var(--rw));
     border-radius: calc(26 * var(--rw));
-    background: #2a2a2a;
+    background: var(--sheet-2);
   }
   main.sheet.rw-sheet .review .text {
     font-size: max(13px, calc(15 * var(--rw)));
     line-height: 1.5;
-    color: #bdbdc2;
+    color: var(--sheet-text-2);
   }
 
   /* Похожие: ряд постеров */
@@ -94,7 +94,7 @@
     gap: calc(6 * var(--rw));
     padding: calc(38 * var(--rw)) calc(40 * var(--rw));
     border-radius: calc(30 * var(--rw));
-    background: #2a2a2a;
+    background: var(--sheet-2);
   }
   main.sheet.rw-sheet .story b {
     font-size: max(16px, calc(22 * var(--rw)));
@@ -115,12 +115,12 @@
     margin: 0;
     border: 0;
     border-radius: 0;
-    background: #212121;
+    background: var(--sheet);
     padding: 6px 16px 40px;
   }
   main.sheet.rw-sheet .block {
     padding: 22px 0;
-    border-bottom: 1px solid #ffffff1f;
+    border-bottom: 1px solid var(--sheet-line);
   }
   main.sheet.rw-sheet .block h2 {
     margin-bottom: 14px;
@@ -148,7 +148,7 @@
   main.sheet.rw-sheet .review {
     padding: 16px;
     border-radius: 18px;
-    background: #2a2a2a;
+    background: var(--sheet-2);
   }
   main.sheet.rw-sheet .similar {
     display: flex;
@@ -164,7 +164,7 @@
   main.sheet.rw-sheet .story {
     padding: 20px;
     border-radius: 20px;
-    background: #2a2a2a;
+    background: var(--sheet-2);
   }
 }
 

@@ -1,0 +1,95 @@
+/* Язык Rewind для всех экранов (как у страницы фильма): чёрный фон страницы, серая плита с разделами
+   и тонкими линиями, кружки и капсулы, масштаб макета --rw (1440 × 900). Страница - это `Sheet`:
+   заголовок на чёрном и плита; всё, что лежит внутри плиты, берёт её палитру через локальные
+   --surface* и --line, поэтому карточки и поля в рамках сами становятся «серыми по серому» без правок.
+   Страница фильма (`title/rewind-sheet.css`) использует те же токены. */
+:root {
+  --sheet: #212121;
+  --sheet-2: #2a2a2a;
+  --sheet-3: #333333;
+  --sheet-line: #ffffff1f;
+  --sheet-text-2: #bdbdc2;
+  --sheet-text-3: #8f8f95;
+}
+
+/* Страница: заголовок над плитой, колонка 1200 в долях --rw, не шире 1440. */
+.rw-page {
+  width: 100%;
+  max-width: calc(1200 * var(--rw) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: calc(var(--header) + 24px) var(--gutter) calc(64px + var(--tabbar));
+}
+@media (min-width: 981px) {
+  .rw-page {
+    max-width: max(960px, calc(1200 * var(--rw) + 2 * var(--gutter)));
+  }
+}
+.rw-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: calc(24 * var(--rw));
+}
+.rw-head h1 {
+  margin: 0;
+  font-size: max(26px, calc(36 * var(--rw)));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.rw-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: max(14px, calc(16 * var(--rw)));
+}
+
+/* Плита. Внутри - своя палитра: --surface* и --line переопределены только здесь. */
+.rw-plate {
+  --surface: var(--sheet-2);
+  --surface-2: var(--sheet-2);
+  --surface-3: var(--sheet-3);
+  --line: var(--sheet-line);
+  --muted: var(--sheet-text-2);
+  --faint: var(--sheet-text-3);
+  background: var(--sheet);
+  border-radius: max(20px, calc(30 * var(--rw)));
+  padding: calc(8 * var(--rw)) max(20px, calc(40 * var(--rw)));
+}
+@media (max-width: 640px) {
+  .rw-plate {
+    padding: 4px 16px;
+    border-radius: 20px;
+  }
+}
+
+/* Раздел плиты: отступы и тонкая линия между разделами; заголовок раздела - .rw-h2. */
+.rw-block {
+  padding: max(22px, calc(40 * var(--rw))) 0;
+  border-bottom: 1px solid var(--sheet-line);
+}
+.rw-block:last-child {
+  border-bottom: 0;
+}
+.rw-h2 {
+  margin: 0 0 max(14px, calc(26 * var(--rw)));
+  font-size: max(17px, calc(20 * var(--rw)));
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Внутри плиты карточки в рамках (`.card`, `.pane`) - не отдельные коробки, а разделы с линиями. */
+.rw-plate .card,
+.rw-plate .pane {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding-inline: 0;
+  border-bottom: 1px solid var(--sheet-line);
+  border-radius: 0;
+}
+.rw-plate .card:last-child,
+.rw-plate .pane:last-child {
+  border-bottom: 0;
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import '$lib/ui/rewind.css';
   import { goto } from '$app/navigation';
   import Loading from '$lib/ui/Loading.svelte';
   import { applyMotion } from '$lib/motion';
