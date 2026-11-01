@@ -159,10 +159,11 @@
     position: relative;
     width: min(420px, 100%);
     padding: 34px 30px 30px;
-    background: rgba(18, 18, 20, 0.9);
-    box-shadow:
-      0 40px 80px -30px rgba(0, 0, 0, 0.9),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    /* Плита Rewind по центру стены: та же палитра и скругление, что у страниц. */
+    background: var(--sheet);
+    border: 1px solid var(--sheet-line);
+    border-radius: 28px;
+    box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.9);
     animation: box-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   @keyframes box-in {
@@ -176,6 +177,8 @@
   }
   h1 {
     font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
   p {
     margin: 8px 0 0;

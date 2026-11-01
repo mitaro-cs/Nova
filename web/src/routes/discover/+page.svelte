@@ -194,13 +194,14 @@
     align-items: center;
     gap: 10px;
     height: 48px;
-    padding: 0 16px;
-    border-radius: 14px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
     background: var(--surface-2);
     color: var(--muted);
   }
   .find:focus-within {
-    box-shadow: inset 0 0 0 1px var(--accent-2);
+    border-color: var(--accent-2);
   }
   .find input {
     flex: 1;
@@ -250,8 +251,9 @@
     font-size: 14px;
   }
   h2 {
-    font-size: clamp(19px, 1.6vw, 24px);
-    font-weight: 700;
+    font-size: max(17px, calc(20 * var(--rw)));
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   .grid {
     display: grid;

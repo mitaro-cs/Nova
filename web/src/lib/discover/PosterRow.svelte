@@ -77,8 +77,9 @@
     margin-bottom: 12px;
   }
   h2 {
-    font-size: clamp(19px, 1.6vw, 24px);
-    font-weight: 700;
+    font-size: max(17px, calc(20 * var(--rw)));
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   /* Подпись к ряду (тема недели): мельче и спокойнее названия. */
   .note {

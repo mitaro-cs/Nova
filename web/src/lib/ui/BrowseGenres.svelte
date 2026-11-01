@@ -11,5 +11,85 @@
 <section class="browse" aria-label="Жанры"><h2>Под настроение</h2><div class="genres">{#each genres as genre}<a href="/discover?chart={genre.chart}"><Icon name={genre.icon} size={27} /><b>{genre.label}</b><span>Открыть подборку <Icon name="right" size={13} /></span></a>{/each}</div></section>
 <section class="browse" aria-label="Франшизы"><h2>Любимые киновселенные</h2><div class="franchises">{#each franchises as title}<a href="/search?q={encodeURIComponent(title)}"><Icon name="film" size={18} />{title}<Icon name="right" size={14} /></a>{/each}</div></section>
 <style>
-  .browse{margin:30px 0 38px}h2{font-size:clamp(19px,1.7vw,25px);margin:0 0 18px}.genres{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.genres a{min-width:0;display:flex;flex-direction:column;gap:18px;justify-content:space-between;padding:24px 18px;border:1px solid var(--line);background:#000;border-radius:16px;transition:transform .2s,border-color .2s}.genres a:hover{transform:translateY(-4px);border-color:#fff8}.genres b{font-size:clamp(15px,1.8vw,23px)}.genres span{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px}.franchises{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}.franchises a{display:flex;align-items:center;gap:9px;flex:none;padding:16px 20px;border:1px solid var(--line);border-radius:12px;background:#000;font-size:13px}.franchises a:hover{border-color:#fff8}@media(max-width:1000px){.genres{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:600px){.genres{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.genres a{padding:18px 14px;gap:14px}.franchises a{padding:14px}}
+  .browse {
+    margin: 30px 0 38px;
+  }
+  h2 {
+    margin: 0 0 max(14px, calc(20 * var(--rw)));
+    font-size: max(17px, calc(20 * var(--rw)));
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .genres {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+  }
+  /* Плитки и капсулы - как чипы на плите Rewind: фон --surface-2, тонкая линия, без толстой рамки. */
+  .genres a {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    justify-content: space-between;
+    padding: 22px 18px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    border-radius: max(18px, calc(24 * var(--rw)));
+    transition: transform 0.2s, background 0.2s;
+  }
+  .genres a:hover {
+    transform: translateY(-4px);
+    background: var(--surface-3);
+  }
+  .genres b {
+    font-size: clamp(15px, 1.8vw, 23px);
+  }
+  .genres span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .franchises {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .franchises a {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: none;
+    padding: 12px 20px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-2);
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  .franchises a:hover {
+    background: var(--surface-3);
+  }
+  @media (max-width: 1000px) {
+    .genres {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 600px) {
+    .genres {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .genres a {
+      padding: 18px 14px;
+      gap: 14px;
+    }
+    .franchises a {
+      padding: 12px 16px;
+    }
+  }
 </style>

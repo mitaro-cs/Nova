@@ -8,7 +8,8 @@ test('самопроверка: наложение ловится', async ({ pag
   await page.waitForSelector('main h1');
   await page.evaluate(() => {
     const h = document.querySelector('h1')!;
-    h.style.marginBottom = '-60px';
+    // Абзац под заголовком заезжает на него наполовину при любой высоте заголовка (телефон - ниже).
+    h.style.marginBottom = `-${Math.round(h.getBoundingClientRect().height / 2)}px`;
   });
   await expect(expectClean(page, 'проба')).rejects.toThrow(/пересекаются/);
   await page.evaluate(() => {

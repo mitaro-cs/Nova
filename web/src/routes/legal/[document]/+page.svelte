@@ -48,11 +48,13 @@
   .legal { max-width: 900px; margin: auto; padding: 36px clamp(20px, 5vw, 64px) 64px; }
   nav { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 28px 0 40px; color: var(--muted); }
   nav a[aria-current] { color: var(--text); }
-  article { padding: clamp(20px, 4vw, 44px); border: 1px solid var(--line); border-radius: 24px; background: var(--panel); }
+  /* Читаемая колонка на плите Rewind: строка текста не длиннее 72 знаков. */
+  article { padding: clamp(20px, 4vw, 44px); border-radius: max(20px, calc(30 * var(--rw))); background: var(--sheet); }
+  article > :global(p), article > :global(h2) { max-width: 72ch; }
   .eyebrow { color: var(--muted); font-size: 12px; }
-  h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.13; margin: 20px 0; }
-  h2 { margin: 32px 0 12px; font-size: 20px; }
-  p { line-height: 1.7; color: var(--muted); }
+  h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.13; margin: 20px 0; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { margin: 32px 0 12px; font-size: max(17px, calc(20 * var(--rw))); font-weight: 600; letter-spacing: -0.01em; }
+  p { line-height: 1.7; color: var(--sheet-text-2); }
   .lead { font-size: 18px; color: var(--text); }
   .back { display: inline-block; margin-top: 28px; }
 </style>

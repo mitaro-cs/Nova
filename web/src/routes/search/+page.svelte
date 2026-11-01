@@ -5,6 +5,7 @@
   import Poster from '$lib/discover/Poster.svelte';
   import type { Card, ExtCard } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
   import Wide from '$lib/ui/Wide.svelte';
   import { untrack } from 'svelte';
   import { catalog, loadCatalog } from '$lib/catalog.svelte';
@@ -87,8 +88,8 @@
   });
 </script>
 
-<div class="page search-page">
-  <header class="search-head"><span class="eyebrow">NOVA · ПОИСК</span><h1>Что посмотрим?</h1><p class="muted">Ваша коллекция и мир кино в одном поиске.</p></header>
+<Sheet title="Что посмотрим?" subtitle="Ваша коллекция и мир кино в одном поиске.">
+  <div class="rw-block">
   <form class="big" role="search" onsubmit={(e) => e.preventDefault()}>
     <Icon name="search" size={22} />
     <!-- svelte-ignore a11y_autofocus -->
@@ -105,52 +106,49 @@
     <label>Жанр<select aria-label="Жанр" bind:value={genre}><option value="">Все жанры</option>{#each genres as g}<option value={g}>{g}</option>{/each}</select></label>
     <label>Порядок<select aria-label="Порядок" bind:value={sort}><option value="relevance">По совпадению</option><option value="rating">По рейтингу</option><option value="year">Сначала новые</option><option value="title">По названию</option></select></label>
   </div>
-  {#if failure}<p role="status">{failure}</p>{/if}
-  {#if searching}<Loading compact label="Ищем в русских и международных каталогах" />{/if}
+  </div>
+  {#if failure}<p class="rw-block" role="status">{failure}</p>{/if}
+  {#if searching}<div class="rw-block"><Loading compact label="Ищем в русских и международных каталогах" /></div>{/if}
   {#if !query}
-    <div class="search-empty"><Icon name="search" size={40} /><h2>Истории начинаются здесь</h2><p>Введите название, имя режиссёра или год.</p></div>
+    <div class="rw-block"><div class="search-empty"><Icon name="search" size={40} /><h2>Истории начинаются здесь</h2><p>Введите название, имя режиссёра или год.</p></div></div>
   {/if}
   {#if query}
     {#if kind === 'people'}
-      <div class="persons">{#each persons as p (p.id)}<a href={personHref({name:p.name,job:p.role,id:p.id})}><Icon name="user" size={28} /><div><b>{p.name}</b><p class="muted">{p.description ?? 'Фильмография и биография'}</p></div><Icon name="right" size={16} /></a>{/each}</div>
+      <div class="rw-block"><div class="persons">{#each persons as p (p.id)}<a href={personHref({name:p.name,job:p.role,id:p.id})}><Icon name="user" size={28} /><div><b>{p.name}</b><p class="muted">{p.description ?? 'Фильмография и биография'}</p></div><Icon name="right" size={16} /></a>{/each}</div></div>
       {#if !searching && !failure && !persons.length}<div class="empty">Никого не нашли. Попробуйте полное имя.</div>{/if}
     {:else}
     {#if localResults.length}
-      <section aria-label="На Nova">
-        <h2>На Nova</h2>
+      <section class="rw-block" aria-label="На Nova">
+        <h2 class="rw-h2">На Nova</h2>
         <div class="grid">
           {#each localResults as card, i (card.id)}<Wide {card} {i} />{/each}
         </div>
       </section>
     {/if}
     {#if externalResults.length}
-      <section aria-label="Все фильмы и сериалы">
-        <h2>{genreName ? `Жанр: ${genreName} - самое известное` : 'Все фильмы и сериалы'}</h2>
+      <section class="rw-block" aria-label="Все фильмы и сериалы">
+        <h2 class="rw-h2">{genreName ? `Жанр: ${genreName} - самое известное` : 'Все фильмы и сериалы'}</h2>
         <div class="posters">{#each externalResults as card, i (card.id)}<Poster {card} {i} />{/each}</div>
       </section>
     {:else if items === null || found === null || searching}
-      <div class="posters">{#each Array(6) as _, i (i)}<span class="ph skeleton"></span>{/each}</div>
+      <div class="rw-block"><div class="posters">{#each Array(6) as _, i (i)}<span class="ph skeleton"></span>{/each}</div></div>
     {:else if !localResults.length}
-      <div class="empty"><Icon name="search" size={40} /> По запросу «{query}» ничего нет</div>
+      <div class="rw-block"><div class="empty"><Icon name="search" size={40} /> По запросу «{query}» ничего нет</div></div>
     {/if}
     {/if}
   {/if}
-</div>
+</Sheet>
 
 <style>
-  .search-page { max-width: 1680px; }
   .persons { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 16px; }
-  .persons a { display: flex; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .persons a { display: flex; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: 18px; padding: 20px; background: var(--surface-2); }
   .persons a div { min-width: 0; flex: 1; }.persons p { margin: 8px 0 0; font-size: 12px; }
-  .search-head { margin: 20px 0 28px; }
-  .eyebrow { color: var(--brand); font-size: 11px; letter-spacing: .2em; }
-  h1 { font-size: clamp(32px, 4vw, 56px); margin-top: 12px; }
-  .filters { display: flex; gap: 8px; margin-bottom: 28px; }
+  .filters { display: flex; gap: 8px; margin-bottom: 20px; }
   .filters { flex-wrap: wrap; }
   .filters button { gap: 7px; }
-  .refine { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+  .refine { display: flex; flex-wrap: wrap; gap: 12px; }
   .refine label { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); font-size: 12px; min-width: 0; }
-  .refine input, .refine select { background: #000; color: #fff; border: 0; padding: 5px; font: inherit; max-width: 160px; }
+  .refine input, .refine select { background: var(--surface-3); color: #fff; border: 0; padding: 5px; font: inherit; max-width: 160px; }
   .refine input { width: 65px; }
   @media(max-width:600px) { .refine { gap: 8px; } .refine label { flex: 1 1 40%; } .refine select { flex: 1; min-width: 0; max-width: 100px; } }
   @media(max-width:380px) { .refine label { flex-basis: 100%; justify-content: space-between; } .refine select { max-width: 160px; } }
@@ -163,8 +161,8 @@
     gap: 12px;
     height: 56px;
     padding: 0 18px;
-    margin-bottom: 28px;
-    border-radius: 16px;
+    margin-bottom: 20px;
+    border-radius: 999px;
     background: var(--surface-2);
     border: 1px solid var(--line);
     color: var(--muted);
@@ -180,13 +178,6 @@
     background: none;
     font-size: 18px;
     color: var(--text);
-  }
-  h2 {
-    margin: 0 0 14px;
-    font-size: 20px;
-  }
-  section + section {
-    margin-top: 32px;
   }
   .posters {
     display: grid;
