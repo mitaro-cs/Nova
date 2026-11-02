@@ -29,12 +29,13 @@ pub struct FileRow {
     pub episode: Option<i32>,
     pub name: Option<String>,
     pub trickplay: Option<String>,
+    pub accent: Option<String>,
 }
 
 /// Файл, который этот профиль может смотреть (скрытое и «взрослое» в детском профиле - нет).
 pub fn file_row(app: &App, v: &Viewer, id: i64) -> ApiResult<FileRow> {
     let sql = format!(
-        "SELECT f.path, f.probe, t.title, t.id, t.kind, f.season, f.episode, f.name, f.trickplay
+        "SELECT f.path, f.probe, t.title, t.id, t.kind, f.season, f.episode, f.name, f.trickplay, t.accent
          FROM files f JOIN titles t ON t.id = f.title_id WHERE f.id = ? AND f.missing = 0 AND {}",
         visible(v.profile.kids)
     );
@@ -50,6 +51,7 @@ pub fn file_row(app: &App, v: &Viewer, id: i64) -> ApiResult<FileRow> {
                 episode: r.get(6)?,
                 name: r.get(7)?,
                 trickplay: r.get(8)?,
+                accent: r.get(9)?,
             })
         })
     })?;
@@ -152,7 +154,7 @@ pub async fn info(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
         Some((size * 8.0 / d / 1e6 * 10.0).round() / 10.0)
     });
     Ok(Json(json!({
-        "play": info, "titleId": f.title_id, "kind": f.kind, "title": f.title, "bitrate": bitrate,
+        "play": info, "titleId": f.title_id, "kind": f.kind, "title": f.title, "bitrate": bitrate, "accent": f.accent,
         "season": f.season,
         "episode": super::catalog::episode_label(f.season, f.episode, crate::episode_locale::localized(&app, f.name.as_deref()).as_deref()),
         "prev": prev, "next": next, "nextInfo": next_still, "position": position,

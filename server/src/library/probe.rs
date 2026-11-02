@@ -271,7 +271,7 @@ pub async fn frame(ffmpeg: &Path, file: &Path, at: f64, width: u32) -> anyhow::R
 pub async fn tiny_rgb(ffmpeg: &Path, src: &Path) -> anyhow::Result<Vec<u8>> {
     let out = tokio::time::timeout(
         Duration::from_secs(30),
-        command(ffmpeg)
+        background(ffmpeg)
             .args(["-hide_banner", "-loglevel", "error", "-i"])
             .arg(src)
             .args(["-vf", "scale=24:36", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"])
