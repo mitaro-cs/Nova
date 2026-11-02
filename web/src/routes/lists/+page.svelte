@@ -10,8 +10,8 @@
   import Icon from '$lib/ui/Icon.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
 
-  // Мои списки: «Смотрю», «Буду смотреть» и «Просмотрел» (с сервиса и из ленты IMDb), ниже -
-  // общие списки с друзьями.
+  // Мои подборки: «Смотрю», «Буду смотреть» и «Просмотрел» (с сервиса и из ленты IMDb), ниже -
+  // общие подборки с друзьями.
   let lists = $state<SharedList[] | null>(null);
   let marks = $state<Marks | null>(null);
   let error = $state('');
@@ -19,7 +19,7 @@
 
   $effect(() => {
     void extSheet.version;
-    // Вместе: иначе общие списки сдвигались бы, когда приходят «Буду смотреть» (CLS).
+    // Вместе: иначе общие подборки сдвигались бы, когда приходят «Буду смотреть» (CLS).
     Promise.all([
       api<SharedList[]>('/api/lists'),
       api<Marks>('/api/me/marks').catch(() => ({ want: [], watching: [], watched: [] })),
@@ -33,9 +33,9 @@
   });
 </script>
 
-<Sheet title="Списки" subtitle="Ваши отметки и общие списки с друзьями">
+<Sheet title="Подборки" subtitle="Ваши отметки и общие подборки с друзьями">
   {#snippet actions()}
-    <button class="btn primary" onclick={() => (creating = true)}><Icon name="plus" size={16} /> Новый список</button>
+    <button class="btn primary" onclick={() => (creating = true)}><Icon name="plus" size={16} /> Новая подборка</button>
   {/snippet}
   {#if error}
     <div class="empty"><Icon name="info" size={36} /> {error}</div>
@@ -55,10 +55,10 @@
 
     <section class="rw-block" aria-label="Смотрим вместе">
       <h2 class="rw-h2">Смотрим вместе</h2>
-      <p class="muted lead">Общие списки с друзьями: добавляйте фильмы и отмечайте, что уже посмотрели вместе.</p>
+      <p class="muted lead">Общие подборки с друзьями: добавляйте фильмы и отмечайте, что уже посмотрели вместе.</p>
 
       {#if lists.length === 0}
-        <div class="empty"><Icon name="users" size={40} /> Пока нет ни одного списка - создайте первый и позовите друга.</div>
+        <div class="empty"><Icon name="users" size={40} /> Пока нет ни одной подборки - создайте первую и позовите друга.</div>
       {:else}
         <div class="grid">
           {#each lists as l (l.id)}

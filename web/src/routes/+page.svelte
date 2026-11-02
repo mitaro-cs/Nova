@@ -12,7 +12,6 @@
   import BrowseGenres from '$lib/ui/BrowseGenres.svelte';
   import { counts, featured, filter, isAnime, ofTab, shelves, STATUSES, statusOf, tabOf, type Status } from '$lib/library';
   import { session } from '$lib/session.svelte';
-  import Hero from '$lib/ui/Hero.svelte';
   import Icon from '$lib/ui/Icon.svelte';
   import Shelf from '$lib/ui/Shelf.svelte';
   import Wide from '$lib/ui/Wide.svelte';
@@ -20,7 +19,7 @@
   import { like, recommend, type Taste } from '$lib/recommend';
   import { genreRu } from '$lib/genres';
 
-  // Главная как у Apple TV: герой-карусель и ряды широких карточек. Фильмы и Сериалы - герой,
+  // Главная: герой-карусель и ряды карточек. Фильмы и Сериалы - тот же герой,
   // «Продолжить», «Эксклюзив на Nova» (что хост добавил сам), «Буду смотреть» (с сервиса и из
   // Обзора), популярное и топ-250 IMDb, а внизу - весь эксклюзив сеткой с фильтром по статусу.
   const tab = $derived(tabOf(page.url.searchParams));
@@ -162,7 +161,7 @@
 </script>
 
 <div class="home" class:flat={tab !== 'home' && items !== null && !hero.length} class:homepage={tab === 'home'}>
-  <!-- Телефон: разделы полосой под шапкой (как «Моё кино / Детям / Спорт» у Кинопоиска). -->
+  <!-- Разделы полосой под шапкой, на всех ширинах. -->
   <nav class="strip" aria-label="Разделы кинотеатра">
     {#each [['/', 'home', 'Моё кино'], ['/?tab=movies', 'movies', 'Фильмы'], ['/?tab=series', 'series', 'Сериалы'], ['/?tab=anime', 'anime', 'Аниме']] as [to, id, label] (id)}
       <a href={to} class:on={tab === id} aria-current={tab === id ? 'page' : undefined}>{label}</a>
@@ -193,7 +192,7 @@
           <div class="welcome-actions"><a class="btn primary" href="/discover">Открыть обзор</a><a class="btn" href="/search">Найти фильм</a>{#if session.me?.manage}<a class="btn" href="/admin?tab=folders">Добавить с компьютера</a>{/if}</div>
         </section>
       {/if}
-    {:else if hero.length}<Hero items={hero} />{/if}
+    {:else if hero.length}<Showcase items={hero.map((card) => ({ card }))} />{/if}
 
     <div class="rows">
       {#if tab === 'home'}
@@ -269,9 +268,9 @@
 <style>
   .ph-hero { display: grid; place-items: center; background: #000; }
   /* Ожидание героя - той же высоты, что и сам герой (ничего не сдвигается, когда он появится). */
-  .ph-hero.wait { min-height: clamp(520px, 78svh, 860px); }
+  .ph-hero.wait { height: clamp(520px, min(78svh, 56vw), 1100px); }
   .homepage .rows { margin-top: 0; padding-top: 12px; }
-  .welcome { min-height: 430px; padding: calc(var(--header) + 80px) var(--edge) 48px; background: radial-gradient(ellipse at 80% 20%, #37302566, transparent 65%); }
+  .welcome { min-height: 430px; padding: 80px var(--edge) 48px; background: radial-gradient(ellipse at 80% 20%, #37302566, transparent 65%); }
   .welcome h1 { font-size: clamp(32px, 4vw, 64px); letter-spacing: -.04em; margin: 18px 0; }
   .welcome p { color: var(--muted); font-size: 17px; }
   .eyebrow { color: #f5c518; letter-spacing: .12em; font-size: 11px; font-weight: 800; }
@@ -279,66 +278,46 @@
   .feed-empty { padding: 28px; border: 1px solid var(--line); border-radius: 18px; margin: 20px 0; }
   .feed-loading { margin-bottom: 30px; }
   .feed-loading h2 { margin-bottom: 16px; }
-  /* --row - высота первого ряда: он лежит на нижней части кадра героя, как у Apple TV. */
   .home {
-    --row: clamp(240px, 31vh, 330px);
     min-height: 100dvh;
+    padding-top: calc(var(--header) + env(safe-area-inset-top));
     padding-bottom: calc(48px + var(--tabbar));
   }
-  /* Ряды «лежат» на нижней части кадра, как у Apple TV. */
   .rows {
     position: relative;
     z-index: 1;
-    margin-top: calc(-1 * var(--row));
     padding: 0 var(--edge);
   }
-  .flat .rows {
-    margin-top: 0;
-    padding-top: calc(var(--header) + 24px);
+  .flat .rows { padding-top: 20px; }
+  /* Полоса разделов липнет под шапкой. Нижняя и верхняя панели этих разделов не содержат. */
+  .strip {
+    position: sticky;
+    top: calc(var(--header) + env(safe-area-inset-top));
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: clamp(17px, 2vw, 28px);
+    height: 46px;
+    padding: 0 var(--gutter);
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: #000;
   }
-  @media (max-width: 1000px) {
-    .flat .rows {
-      padding-top: calc(var(--header) + env(safe-area-inset-top) + 20px);
-    }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip a {
+    flex: none;
+    padding: 8px 0 6px;
+    border-bottom: 3px solid transparent;
+    color: #8e8e93;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    transition: color .15s;
   }
-  .strip { display: none; }
-  /* Телефон и планшет: полоса разделов липнет под шапкой (нижняя панель разделов не содержит). */
-  @media (max-width: 1000px) {
-    .home {
-      padding-top: calc(var(--header) + env(safe-area-inset-top));
-    }
-    .strip {
-      position: sticky;
-      top: calc(var(--header) + env(safe-area-inset-top));
-      z-index: 45;
-      display: flex;
-      align-items: center;
-      gap: 17px;
-      height: 46px;
-      padding: 0 var(--gutter);
-      overflow-x: auto;
-      scrollbar-width: none;
-      background: #000;
-    }
-    .strip::-webkit-scrollbar { display: none; }
-    .strip a {
-      flex: none;
-      padding: 8px 0 6px;
-      border-bottom: 3px solid transparent;
-      color: #8e8e93;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      white-space: nowrap;
-    }
-    .strip a.on { color: #fff; border-bottom-color: var(--m-accent); }
-    .flat .rows { padding-top: 20px; }
-  }
-  /* Телефон: ряды не наезжают на кадр героя (он целиком над ними). */
+  .strip a:hover { color: #fff; }
+  .strip a.on { color: #fff; border-bottom-color: #fff; }
   @media (max-width: 640px) {
-    .home {
-      --row: 0px;
-    }
     .welcome { padding-top: 32px; }
     .home .ph-hero, .home .ph-hero.wait { height: clamp(440px, 130vw, 640px); min-height: 0; }
   }
@@ -362,13 +341,8 @@
     overflow-x: auto;
   }
   .ph-hero {
-    height: clamp(560px, 100svh, 1200px);
+    height: clamp(520px, min(78svh, 56vw), 1100px);
     border-radius: 0;
-  }
-  @media (max-width: 640px) {
-    .ph-hero {
-      height: clamp(520px, 86svh, 760px);
-    }
   }
   .ph-row {
     margin-bottom: 30px;
@@ -383,7 +357,7 @@
   .ph-cards {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: calc((100% - 4.3 * 18px) / 5.3);
+    grid-auto-columns: var(--fw);
     gap: 18px;
     overflow: hidden;
   }
@@ -393,7 +367,6 @@
   }
   @media (max-width: 640px) {
     .ph-cards {
-      grid-auto-columns: calc((100% - 12px) / 1.75);
       gap: 12px;
     }
   }

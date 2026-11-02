@@ -51,13 +51,13 @@
   /* Край страниц без плиты (главная, фильмы, сериалы): ряды и подписи героя - от бокового поля окна, на
      всю ширину (колонку по центру владелец не принял, 1 ноября). */
   --edge: var(--gutter);
-  /* Цвет фильма: по умолчанию белый, экран с фильмом ставит свой через `setFilm` (lib/filmColor.ts). */
-  --film: #ffffff;
-  --on-film: #0a0a0a;
-  --film-text: #ffffff;
+  /* Ширина постера и широкого кадра растёт вместе с экраном (телефон - 148 и 240, 1920 px - 240 и 400):
+     ряды, сетки и подборки берут размер отсюда, а не по ступеням. */
+  --pw: clamp(148px, calc(125px + 6vw), 320px);
+  --fw: clamp(250px, calc(170px + 12vw), 520px);
   --header: 64px;
-  /* Высота нижней панели разделов (телефон, планшет), чтобы ничего под ней не пряталось. */
-  --tabbar: 0px;
+  /* Высота нижней панели разделов (одна на всех экранах), чтобы ничего под ней не пряталось. */
+  --tabbar: calc(64px + env(safe-area-inset-bottom));
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   color-scheme: dark;
@@ -336,12 +336,6 @@ select.input option {
 .page {
   padding: calc(var(--header) + 24px) var(--gutter) calc(64px + var(--tabbar));
 }
-@media (max-width: 1000px) {
-  :root {
-    --tabbar: calc(64px + env(safe-area-inset-bottom));
-  }
-}
-
 .section-title {
   display: flex;
   align-items: center;
@@ -354,7 +348,7 @@ select.input option {
 /* Сетка широких карточек (16:9), как у Apple TV. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--fw)), 1fr));
   gap: 26px 18px;
 }
 @media (max-width: 560px) {

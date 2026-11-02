@@ -2,6 +2,7 @@
 
 import { api } from './api';
 import { esc } from './util';
+import { ICONS, type IconName } from '../src/lib/ui/icons';
 import type { Library, Me } from '../src/lib/types';
 
 export type Cleanup = () => void;
@@ -58,24 +59,46 @@ export function forgetLibrary() {
   libAt = 0;
 }
 
-// ---------- шапка ----------
+// ---------- панель разделов (такая же, как на телефоне и компьютере) ----------
 
+const TABS: [string, string, string, IconName][] = [
+  ['home', '/', 'Главное', 'home'],
+  ['feed', '/feed', 'Что смотреть', 'squareplay'],
+  ['profile', '/profile', 'Профиль', 'user'],
+  ['my', '/my', 'Коллекция', 'bookmark'],
+  ['search', '/search', 'Поиск', 'search'],
+];
+
+function icon(name: IconName): string {
+  return (
+    '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="' + ICONS[name] + '"/></svg>'
+  );
+}
+
+/** Одна панель внизу на всех экранах: Главное, Что смотреть, Профиль, Коллекция, Поиск. */
 export function bar(active: string): string {
-  const tabs: [string, string, string][] = [
-    ['home', '/', 'Главная'],
+  let h = '<nav class="dock">';
+  for (let i = 0; i < TABS.length; i++) {
+    const t = TABS[i];
+    h +=
+      '<a class="f d' + (t[0] === active ? ' on' : '') + '" data-k="tab-' + t[0] + '" data-href="' + t[1] + '">' +
+      icon(t[3]) + '<span>' + esc(t[2]) + '</span></a>';
+  }
+  return h + '</nav>';
+}
+
+/** Разделы главной полосой над кадром: Моё кино, Фильмы, Сериалы (как полоса на телефоне). */
+export function sections(active: string): string {
+  const list: [string, string, string][] = [
+    ['home', '/', 'Моё кино'],
     ['movies', '/movies', 'Фильмы'],
     ['series', '/series', 'Сериалы'],
-    ['search', '/search', 'Поиск'],
   ];
-  let h = '<header class="bar"><div class="logo">Nova</div><nav>';
-  for (let i = 0; i < tabs.length; i++) {
-    const t = tabs[i];
-    h +=
-      '<a class="f tab' + (t[0] === active ? ' on' : '') + '" data-k="tab-' + t[0] + '" data-href="' + t[1] + '">' +
-      esc(t[2]) + '</a>';
+  let h = '<nav class="strip">';
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    h += '<a class="f sec-tab' + (s[0] === active ? ' on' : '') + '" data-k="sec-' + s[0] + '" data-href="' + s[1] + '">' + esc(s[2]) + '</a>';
   }
-  h += '</nav><div class="who">';
-  if (session.me) h += '<span>' + esc(session.me.user.name) + '</span>';
-  h += '<a class="f tab" data-k="tab-out" data-act="logout">Выйти</a></div></header>';
-  return h;
+  return h + '</nav>';
 }

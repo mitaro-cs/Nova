@@ -2,7 +2,7 @@
 
 import type { Card } from '../src/lib/types';
 import { featured, ofTab, shelves, type Tab } from '../src/lib/library';
-import { bar, library, type Screen } from './app';
+import { bar, library, sections, type Screen } from './app';
 import { poster, wide } from './cards';
 import { esc, meta } from './util';
 
@@ -22,7 +22,7 @@ function hero(c: Card): string {
   );
 }
 
-function row(key: string, title: string, items: Card[], wideCards: boolean): string {
+export function row(key: string, title: string, items: Card[], wideCards: boolean): string {
   let h = '<section class="sec"><h2>' + esc(title) + '</h2><div class="track">';
   for (let i = 0; i < items.length; i++) h += wideCards ? wide(items[i], key + '-') : poster(items[i], key + '-');
   return h + '</div></section>';
@@ -32,13 +32,12 @@ export function homeScreen(tab: Tab): Screen {
   return async (root) => {
     const lib = await library(true);
     const items = ofTab(lib.items, tab);
-    const active = tab === 'home' ? 'home' : tab;
     if (!items.length) {
-      root.innerHTML = bar(active) + '<div class="empty">В этом разделе пока ничего нет</div>';
+      root.innerHTML = bar('home') + sections(tab) + '<div class="empty">В этом разделе пока ничего нет</div>';
       return;
     }
     const top = featured(items, 1)[0] || items[0];
-    let h = bar(active) + hero(top) + '<div class="rows">';
+    let h = bar('home') + sections(tab) + hero(top) + '<div class="rows">';
     const list = shelves(items, lib.recent, tab);
     for (let i = 0; i < list.length; i++) {
       const s = list[i];

@@ -2,7 +2,7 @@
 
 import type { Card } from '../src/lib/types';
 import { caption } from '../src/lib/library';
-import { esc, pct } from './util';
+import { esc, meta, pct } from './util';
 
 function img(src: string | null): string {
   return src ? '<img src="' + esc(src) + '" alt="" draggable="false">' : '<div class="blank"></div>';
@@ -24,5 +24,15 @@ export function wide(c: Card, key: string): string {
     '<a class="f card w" data-k="' + esc(key + c.id) + '" data-href="/title/' + c.id + '">' +
     '<div class="art">' + img(c.backdropSmall || c.backdrop || c.poster) + bar + '</div>' +
     '<div class="cap"><b>' + esc(c.title) + '</b><small>' + esc(caption(c)) + '</small></div></a>'
+  );
+}
+
+/** «Что смотреть»: кадр из фильма и краткая информация - название, год, жанры, оценка и описание. */
+export function feedCard(c: Card, key: string): string {
+  return (
+    '<a class="f card fc" data-k="' + esc(key + c.id) + '" data-href="/title/' + c.id + '">' +
+    '<div class="art">' + img(c.backdropSmall || c.backdrop || c.poster) + '</div>' +
+    '<div class="cap"><b>' + esc(c.title) + '</b><small>' + esc(meta(c)) + '</small>' +
+    (c.overview ? '<p>' + esc(c.overview) + '</p>' : '') + '</div></a>'
   );
 }

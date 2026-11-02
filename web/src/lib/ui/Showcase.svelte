@@ -15,15 +15,14 @@
 
   let { items }: { items: { card?: Card; ext?: ExtCard }[] } = $props();
 
-  // Телефон: поверх кадра - трейлер без звука (`ShowcaseTrailer`, грузится лениво: бюджет JS главной);
+  // Поверх кадра - трейлер без звука (`ShowcaseTrailer`, грузится лениво: бюджет JS главной);
   // при экономии трафика и выключенной настройке - только кадр.
-  let phone = $state(false);
   let Trailer = $state<Component<any> | null>(null);
   $effect(() => {
-    phone = matchMedia('(max-width: 640px)').matches;
-  });
-  $effect(() => {
-    if (phone && !Trailer) void import('./ShowcaseTrailer.svelte').then((m) => (Trailer = m.default));
+    if (Trailer) return;
+    // Трейлер стартует чуть позже кадра: сначала страница, потом видео (и меньше кода при первой загрузке).
+    const t = setTimeout(() => void import('./ShowcaseTrailer.svelte').then((m) => (Trailer = m.default)), 1500);
+    return () => clearTimeout(t);
   });
   let at = $state(0);
   let manual = $state(false);
@@ -140,8 +139,7 @@
   }
   function save() { try { sessionStorage.setItem('nova-showcase', JSON.stringify({ id: String(selected?.card?.id ?? selected?.ext?.id), manual })); } catch { /* приватный режим */ } }
 
-  // «Кинозал+»: надпись над названием и цвет кадра - по фильму (у своих - цвет постера).
-  const accent = '#ffffff';
+  // Надпись над названием.
   const ext = $derived(selected?.ext);
   const eyebrow = $derived(
     selected?.card?.resume ? 'Вы смотрели'
@@ -161,21 +159,17 @@
     e.stopPropagation();
     (await import('./nope')).nope(selected?.card, selected?.ext);
   }
-  $effect(() => {
-    document.documentElement.style.setProperty('--hero-tint', accent);
-    return () => document.documentElement.style.removeProperty('--hero-tint');
-  });
 </script>
 
 {#if card}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <section class="showcase" aria-label="Рекомендуем" style:--acc={accent} bind:this={root} onpointerenter={() => hovering = true} onpointerleave={() => hovering = false} onpointerdown={hold} onpointerup={swipe} onpointercancel={() => touchStart = null} onkeydown={() => hold()}>
+  <section class="showcase" aria-label="Рекомендуем" bind:this={root} onpointerenter={() => hovering = true} onpointerleave={() => hovering = false} onpointerdown={hold} onpointerup={swipe} onpointercancel={() => touchStart = null} onkeydown={() => hold()}>
     <div class="stage" aria-hidden="true">
       {#each layers as shot, i (i)}
         {#if shot}<img class="backdrop" class:on={front === i} src={shot.src} srcset={shot.set} sizes="100vw" alt="" decoding="async" fetchpriority={i === front ? 'high' : 'auto'} />{/if}
       {/each}
     </div>
-    {#if phone && Trailer}<Trailer card={selected?.card} ext={selected?.ext} />{/if}
+    {#if Trailer}<Trailer card={selected?.card} ext={selected?.ext} />{/if}
     <div class="shade"></div>
     <div class="copies">{#key card.id}<div class="copy" in:fly|global={{ y: 12, duration: 600, delay: 320, easing: cubicOut }} out:fade|global={{ duration: 260 }}>
       <span class="eyebrow">{eyebrow}</span>
@@ -188,8 +182,8 @@
       <p class="description" class:empty={!overview}>{overview}</p>
       <div class="actions">
         {#if selected.card?.resume}<a class="btn primary" href="/watch/{selected.card.resume.fileId}"><Icon name="play" size={18} /> Продолжить</a>{:else}<a class="btn primary" {href}><Icon name="play" size={18} /> Смотреть</a>{/if}
-        <button class="btn glass round" class:on={wanted} aria-pressed={wanted} aria-label={wanted ? 'В планах' : 'Хочу'} onclick={want}><Icon name={wanted ? 'check' : 'plus'} size={18} /> <span class="lbl">{wanted ? 'В планах' : 'Хочу'}</span></button>
-        <button class="btn glass round nope" aria-label="Не интересно" onclick={nope}><Icon name="ban" size={22} /></button>
+        <button class="btn glass round" class:on={wanted} aria-pressed={wanted} aria-label={wanted ? 'В планах' : 'Хочу'} title={wanted ? 'В планах' : 'Хочу'} onclick={want}><Icon name={wanted ? 'check' : 'plus'} size={18} /> <span class="lbl">{wanted ? 'В планах' : 'Хочу'}</span></button>
+        <button class="btn glass round" aria-label="Не интересно" title="Не интересно" onclick={nope}><Icon name="ban" size={22} /></button>
       </div>
     </div>{/key}</div>
     {#if items.length > 1}
@@ -203,9 +197,9 @@
 {/if}
 
 <style>
-  /* «Кинозал+» (alpha 0.5): кадр почти на весь экран, слева - надпись цветом фильма, крупное название,
-     оценка, описание и две капсулы; справа внизу - точки. Затемнение только слева и снизу. */
-  .showcase { position: relative; min-height: clamp(520px, 78svh, 860px); isolation: isolate; display: flex; align-items: flex-end; padding: calc(var(--header) + 36px) var(--edge) clamp(48px, 9vh, 100px); overflow: hidden; }
+  /* Кадр почти на весь экран под полосой разделов, слева - надпись цветом фильма, крупное название, оценка,
+     описание, капсула «Смотреть» и два круга; справа внизу - точки. Затемнение только слева и снизу. */
+  .showcase { position: relative; height: clamp(520px, min(78svh, 56vw), 1100px); isolation: isolate; display: flex; align-items: flex-end; padding: 36px var(--edge) clamp(48px, 9vh, 100px); overflow: hidden; touch-action: pan-y; }
   /* Кадр - на всю ширину, слева его плавно гасит затемнение (края кадра не видно). */
   .stage { position: absolute; inset: 0; z-index: -2; }
   /* Два слоя: прозрачность меняется плавно и без пересчёта вёрстки. */
@@ -215,7 +209,7 @@
   .shade { background: linear-gradient(90deg, var(--tone-dark) 0%, color-mix(in srgb, var(--tone-dark) 92%, transparent) 14%, color-mix(in srgb, var(--tone-dark) 70%, transparent) 30%, color-mix(in srgb, var(--tone-dark) 30%, transparent) 50%, transparent 72%), linear-gradient(0deg, var(--tone-dark) 0%, color-mix(in srgb, var(--tone-dark) 50%, transparent) 22%, transparent 50%); }
   .copies { display: grid; max-width: min(46vw, 620px); }
   .copy { grid-area: 1 / 1; align-self: end; }
-  .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: color-mix(in srgb, var(--acc) 65%, #fff); }
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #fff; }
   .eyebrow::before { content: ''; width: 22px; height: 2px; background: currentColor; }
   h1 { font-size: clamp(38px, 4.6vw, 72px); line-height: 1.02; letter-spacing: -.035em; font-weight: 800; margin: 14px 0; white-space: nowrap; text-overflow: ellipsis; text-shadow: 0 2px 30px #0006; overflow: hidden; padding-bottom: .08em; }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 14px; font-weight: 500; color: #c9c4bb; margin: 0; }
@@ -225,21 +219,22 @@
   .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
   .actions .btn { height: 52px; padding: 0 26px; border-radius: 999px; font-weight: 700; font-size: 15px; gap: 10px; border: 0; transition: transform .15s ease, background .2s; }
   .actions .btn:active { transform: scale(.96); }
-  .actions .btn.primary { background: #fff; color: #0a0a0a; }
-  /* Стекло - только на маленькой капсуле. */
+  .actions .btn.primary { min-width: 160px; background: #fff; color: #0a0a0a; }
+  .actions .btn.primary:hover { filter: brightness(1.12); }
+  /* Круги: подпись только для чтения с экрана и в подсказке. Стекло - только на маленьких кнопках. */
+  .actions .btn.round { width: 52px; padding: 0; }
   .actions .btn.glass { background: #ffffff1c; color: #fff; box-shadow: inset 0 0 0 1px #ffffff2e; backdrop-filter: blur(14px); }
   .actions .btn.glass:hover { background: #ffffff2a; }
-  .actions .btn.glass.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 70%, #fff); }
+  .actions .btn.glass.on { box-shadow: inset 0 0 0 1px #fff; }
+  .actions .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .dots { position: absolute; right: var(--edge); bottom: clamp(80px, 12vh, 140px); display: flex; gap: 6px; }
   .dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 99px; background: #ffffff55; cursor: pointer; transition: width .3s cubic-bezier(.2,.8,.2,1), background .3s; }
   .dots button.on { width: 28px; background: #fff; }
   :global(.no-motion) .backdrop { transition: none; }
-  .nope { display: none; }
-  /* Телефон - по референсам Кинопоиска (390 px): герой 1,3 ширины экрана, трейлер на весь кадр, внизу по
-     центру название, описание в три строки, оранжевая «Смотреть» 148 × 47 и два круга 47, под ними точки;
-     кнопка звука - круг 44 слева вверху. */
+  /* Телефон (390 px): герой 1,3 ширины экрана, трейлер на весь кадр, внизу по центру название, описание в три
+     строки, «Смотреть» 148 × 47 и два круга 47, под ними точки; кнопка звука - круг 44 слева вверху. */
   @media (max-width: 640px) {
-    .showcase { min-height: 0; height: clamp(440px, 130vw, 640px); touch-action: pan-y; padding: 0 var(--gutter) 46px; justify-content: center; text-align: center; }
+    .showcase { min-height: 0; height: clamp(440px, 130vw, 640px); padding: 0 var(--gutter) 46px; justify-content: center; text-align: center; }
     .stage { inset: 0; }
     .shade { background: linear-gradient(0deg, #000 4%, #000a 26%, #0000 54%), linear-gradient(180deg, #0005, #0000 22%); }
     .copies { max-width: 100%; }
@@ -248,11 +243,9 @@
     .description { display: -webkit-box; min-height: 0; max-width: 292px; margin: 0 auto; font-size: 16px; line-height: 1.3; color: #ffffffeb; }
     .actions { flex-wrap: nowrap; justify-content: center; gap: 8px; margin-top: 20px; }
     .actions .btn { height: 47px; }
-    .actions .btn.primary { min-width: 148px; padding: 0 22px; background: linear-gradient(90deg, var(--m-accent), #f7931e); color: #fff; font-size: 17px; }
-    .actions .btn.round { width: 47px; padding: 0; background: #2a2a2ae6; box-shadow: none; backdrop-filter: none; }
-    .actions .btn.round.on { background: #2a2a2a; color: var(--m-accent); }
-    .actions .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .nope { display: inline-flex; }
+    .actions .btn.primary { min-width: 148px; padding: 0 22px; font-size: 17px; }
+    .actions .btn.round { width: 47px; background: #2a2a2ae6; box-shadow: none; backdrop-filter: none; }
+    .actions .btn.round.on { background: #fff; color: #0a0a0a; }
     .dots { left: 0; right: 0; bottom: 14px; justify-content: center; gap: 8px; }
   }
 </style>

@@ -278,8 +278,6 @@ export interface PlayInfo {
     audio: Track[];
     subs: Sub[];
   };
-  /** Цвет фильма по постеру. */
-  accent?: string | null;
   titleId: number;
   kind: Kind;
   title: string;
@@ -353,8 +351,6 @@ export interface ExtCard {
   local: number | null;
   mark: 'want' | 'watching' | 'watched' | 'dropped' | null;
   wished: boolean;
-  /** Цвет по постеру; пока не посчитан - null. */
-  accent?: string | null;
 }
 
 export interface ExtDetail {

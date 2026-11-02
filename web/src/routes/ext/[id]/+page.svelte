@@ -314,8 +314,7 @@
   }
 
   const seed = $derived(extSheet.seed?.id === id ? extSheet.seed : null);
-  const c = $derived<ExtCard | null>(d?.card ?? (session.me?.site.metadataLanguage === 'source' || localized(seed?.title) ? seed : null));
-  const isSeries = $derived(c?.kind === 'series');
+  const c = $derived<ExtCard | null>(d?.card ?? (session.me?.site.metadataLanguage === 'source' || localized(seed?.title) ? seed : null));  const isSeries = $derived(c?.kind === 'series');
   const videoQuery = $derived(isSeries && selected ? `${c?.title} ${selected.season} сезон ${selected.episode} серия` : `${c?.title ?? ''} ${c?.year ?? ''}`);
   const people = $derived(d?.people ?? []);
   const team = $derived([
@@ -519,13 +518,13 @@
     {/snippet}
     {#snippet extra()}
       {#if lists && d}
-        <div class="lists" role="group" aria-label="Мои списки">
+        <div class="lists" role="group" aria-label="Мои подборки">
           {#each d.lists as l (l.id)}
             <button class="li" class:on={l.has} aria-pressed={l.has} onclick={() => toggleList(l)}>
               <span class="tick"><Icon name="check" size={13} stroke={3} /></span>{l.name}
             </button>
           {/each}
-          <button class="li new" onclick={() => (creating = true)}><Icon name="plus" size={14} /> Новый список</button>
+          <button class="li new" onclick={() => (creating = true)}><Icon name="plus" size={14} /> Новая подборка</button>
         </div>
       {/if}
       <FriendsStrip friends={d?.friends ?? []} />
@@ -576,13 +575,13 @@
         <button class="btn block" aria-expanded={lists} disabled={!d} onclick={() => (lists = !lists)}><Icon name="plus" size={15} /> В список</button>
         <button class="btn block" onclick={() => { moreOpen = false; writeReview(); }}><Icon name="edit" size={15} /> Написать отзыв</button>
         {#if lists && d}
-          <div class="lists" role="group" aria-label="Мои списки">
+          <div class="lists" role="group" aria-label="Мои подборки">
             {#each d.lists as l (l.id)}
               <button class="li" class:on={l.has} aria-pressed={l.has} onclick={() => toggleList(l)}>
                 <span class="tick"><Icon name="check" size={13} stroke={3} /></span>{l.name}
               </button>
             {/each}
-            <button class="li new" onclick={() => (creating = true)}><Icon name="plus" size={14} /> Новый список</button>
+            <button class="li new" onclick={() => (creating = true)}><Icon name="plus" size={14} /> Новая подборка</button>
           </div>
         {/if}
         {#if !c.local}<button class="btn block" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={15} /> Смотреть вместе</button>{/if}
@@ -648,7 +647,7 @@
           <div class="rw-rate"><small>Оценка</small><StarInput value={mine?.stars ?? null} onchange={setStars} size={28} label="Ваша оценка" /></div>
         </div>
         {#if !c?.local}<button class="rw-btn together" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={18} /> Смотреть вместе</button>{/if}
-        <button class="rw-btn" disabled={!d} onclick={() => { lists = true; moreOpen = true; }}>В списки</button>
+        <button class="rw-btn" disabled={!d} onclick={() => { lists = true; moreOpen = true; }}>В подборки</button>
         <div class="rw-row">
           <button class="rw-btn" onclick={writeReview}>Отзыв</button>
           <button class="rw-btn round" aria-label="Ещё действия" onclick={() => (moreOpen = true)}><Icon name="dots" size={22} /></button>

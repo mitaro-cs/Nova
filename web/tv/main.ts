@@ -1,13 +1,17 @@
 // ТВ-интерфейс Nova (для Samsung Tizen и других телевизоров со старым браузером): вход, главная,
-// фильмы, сериалы, карточка, поиск и плеер - всё управляется пультом.
+// фильмы, сериалы, «Что смотреть», «Профиль», «Коллекция», карточка, поиск и плеер - всё управляется пультом.
+// Панель разделов внизу - та же, что на телефоне и компьютере.
 
 import './tv.css';
 import { ApiError, post } from './api';
 import { ctx, forgetLibrary, go, loadMe, session, type Cleanup, type Route, type Screen } from './app';
+import { feedScreen } from './feed';
 import { homeScreen } from './home';
 import { loginScreen } from './login';
+import { myScreen } from './my';
 import { KEYS, current, dirOf, focusKey, isBack, isTyping, move } from './nav';
 import { playerScreen } from './player';
+import { profileScreen } from './profile';
 import { searchScreen } from './search';
 import { titleScreen } from './title';
 import { esc } from './util';
@@ -35,6 +39,9 @@ const SCREENS: Record<string, Screen> = {
   home: homeScreen('home'),
   movies: homeScreen('movies'),
   series: homeScreen('series'),
+  feed: feedScreen,
+  my: myScreen,
+  profile: profileScreen,
   title: titleScreen,
   search: searchScreen,
   watch: playerScreen,

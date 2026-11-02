@@ -132,10 +132,10 @@
         {#if p.me}
           <a class="btn block" href="/profile"><Icon name="edit" size={14} /> Оформить профиль</a>
           <a class="btn block" href="/people"><Icon name="users" size={14} /> Найти друзей</a>
-          <!-- Телефон: чаты, списки и остальное, что было в меню «Я» (нижняя панель теперь без него). -->
+          <!-- Чаты, подборки и остальное, что раньше было в меню аватара (панель разделов внизу его не содержит). -->
           <nav class="quick" aria-label="Быстрые разделы">
             <a class="btn block" href="/chats"><Icon name="mail" size={14} /> Чаты{#if unseen.unread} · {unseen.unread}{/if}</a>
-            <a class="btn block" href="/lists"><Icon name="list" size={14} /> Списки</a>
+            <a class="btn block" href="/lists"><Icon name="list" size={14} /> Подборки</a>
             {#if session.me?.manage}<a class="btn block" href="/admin"><Icon name="sliders" size={14} /> Управление</a>{/if}
             <button class="btn block" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={14} /> Комната по ссылке</button>
             <button class="btn block" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><Icon name="sparkle" size={14} /> Экскурсия по Nova</button>
@@ -494,13 +494,8 @@
   }
 
   .quick {
-    display: none;
-  }
-  @media (max-width: 640px) {
-    .quick {
-      display: grid;
-      gap: 8px;
-    }
+    display: grid;
+    gap: 8px;
   }
 
   /* ---------- лист с разделами ---------- */

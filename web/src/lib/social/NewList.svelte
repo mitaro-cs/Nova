@@ -40,7 +40,7 @@
   }
 </script>
 
-<Modal bind:open title="Новый совместный список">
+<Modal bind:open title="Новая совместная подборка">
   <form class="form" onsubmit={save}>
     <label class="field"><span>Название</span><input class="input" bind:value={name} maxlength="60" placeholder="Например, «Кино по пятницам»" required /></label>
     <div class="field">

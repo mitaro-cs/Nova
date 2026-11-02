@@ -5,8 +5,7 @@
   import type { Card, ExtCard } from '$lib/types';
   import FeedCard from '$lib/ui/FeedCard.svelte';
 
-  // «Что смотреть» (телефон, как у Кинопоиска): вертикальная лента карточек, на экране играет трейлер
-  // одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
+  // «Что смотреть»: вертикальная лента карточек, на экране играет трейлер одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
   // «Не интересно» не показываем. Подгружается по шесть, когда лента подходит к концу.
   type Item = { key: string; card?: Card; ext?: ExtCard };
   type Feed = { rows: { key: string; items: ExtCard[] }[] };
@@ -101,8 +100,6 @@
     display: grid;
     gap: 16px;
     padding: 0 var(--gutter);
-    max-width: 720px;
-    margin-inline: auto;
   }
   .note {
     margin: 0 var(--gutter);

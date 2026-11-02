@@ -10,16 +10,18 @@
   import { api } from '$lib/api';
   import { trailersOff } from '$lib/trailers';
   import { remember } from '$lib/discover/sheet.svelte';
+  import { getDetail, peekDetail } from '$lib/discover/details';
   import { localized } from '$lib/localized.svelte';
   import { genreRu } from '$lib/genres';
   import { setMark, setStatus, toggle, toggleMark } from '$lib/marks';
-  import type { Card, ExtCard } from '$lib/types';
-  import { artW } from './art';
+  import type { Card, ExtCard, ExtDetail } from '$lib/types';
+  import { artW, heroSet } from './art';
   import Icon from './Icon.svelte';
 
-  // Карточка ленты «Что смотреть» (телефон, как у Кинопоиска): кадр 16:9, на нём - трейлер без звука, пока
-  // карточка занимает экран; кнопка звука - круг 32 справа внизу. Под кадром название, описание в три
-  // строки, «…» (уже смотрел / не интересно) и «+» в планы. Играет одна карточка за раз (`active`).
+  // Карточка ленты «Что смотреть»: кадр из фильма 16:9, на нём - трейлер без звука, пока карточка занимает
+  // экран; кнопка звука - круг 32 справа внизу. Рядом краткая информация: название, оценка, год, жанры,
+  // длительность и описание в три строки; «…» (уже смотрел / не интересно) и закладка в планы. Играет одна
+  // карточка за раз (`active`). У фильма из ленты кадр и описание подгружаются, когда карточка подходит к экрану.
   let {
     card,
     ext,
@@ -31,12 +33,36 @@
   const c = $derived(card ?? ext!);
   const href = $derived(card ? `/title/${card.id}` : `/ext/${ext!.id}`);
   const wanted = $derived(card ? card.status === 'want' : ext?.mark === 'want');
-  const shot = $derived(card ? (card.backdropSmall ?? card.backdrop ?? card.poster) : ext!.poster);
-  const text = $derived(
-    localized(card?.overview) || [c.year, c.genres.slice(0, 2).map(genreRu).join(', ')].filter(Boolean).join(' · '),
-  );
 
   let root = $state<HTMLElement>();
+  let near = $state(false);
+  let detail = $state<ExtDetail | null>(null);
+  $effect(() => {
+    detail = ext ? peekDetail(ext.id) : null;
+  });
+  $effect(() => {
+    if (!ext || !near || detail) return;
+    let live = true;
+    getDetail(ext.id).then(
+      (d) => live && (detail = d),
+      () => {},
+    );
+    return () => (live = false);
+  });
+
+  const big = $derived(card ? (card.backdrop ?? null) : (detail?.backdrop ?? detail?.gallery?.[0] ?? null));
+  const small = $derived(card?.backdropSmall ?? null);
+  // Кадра ещё нет (у фильма из ленты - пока не пришли подробности): показываем постер целиком, не обрезая.
+  const shot = $derived(big ?? small ?? c.poster ?? null);
+  const framed = $derived(!!(big ?? small));
+  const overview = $derived(localized(card?.overview ?? detail?.overview));
+  const minutes = $derived(card?.runtime ?? detail?.runtime ?? null);
+  const facts = $derived(
+    [c.year, c.genres.slice(0, 2).map(genreRu).join(', '), minutes ? `${Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)} ч ` : ''}${minutes % 60 ? `${minutes % 60} мин` : ''}`.trim() : '']
+      .filter(Boolean)
+      .join(' · '),
+  );
+
   let TB = $state<Component<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let tb = $state<any>();
@@ -49,7 +75,12 @@
     if (!root) return;
     const io = new IntersectionObserver(([e]) => e.isIntersecting && onseen(), { threshold: 0.6 });
     io.observe(root);
-    return () => io.disconnect();
+    const preload = new IntersectionObserver(([e]) => e.isIntersecting && (near = true), { rootMargin: '100% 0px' });
+    preload.observe(root);
+    return () => {
+      io.disconnect();
+      preload.disconnect();
+    };
   });
 
   // Нужен id IMDb: у фильма из ленты это его id, у своего - из подробностей (один лёгкий запрос).
@@ -81,7 +112,7 @@
 <article class="fc" bind:this={root}>
   <div class="shot">
     <a class="cover" {href} onclick={() => ext && remember(ext)} aria-label={c.title}>
-      {#if shot}<img src={artW(shot, 640)} alt="" loading="lazy" decoding="async" />{/if}
+      {#if shot}<img class:poster={!framed} src={artW(shot, 640)} srcset={big ? heroSet(big, small) : undefined} sizes="(min-width: 1001px) 60vw, 100vw" alt="" loading="lazy" decoding="async" />{/if}
       {#if active && TB && imdb}{#key imdb}<TB imdbId={imdb} bare bind:available bind:muted bind:this={tb} />{/key}{/if}
     </a>
     {#if active && available}
@@ -90,7 +121,11 @@
   </div>
   <div class="info">
     <h2><a {href} onclick={() => ext && remember(ext)}>{c.title}</a></h2>
-    {#if text}<p>{text}</p>{/if}
+    <p class="facts">
+      {#if c.rating}<span class="rate" class:low={c.rating < 7}>{c.rating.toFixed(1)}</span>{/if}
+      {#if facts}<span>{facts}</span>{/if}
+    </p>
+    <p class="about">{overview}</p>
     <div class="act">
       <div class="more">
         <button class="dots" aria-label="Ещё" aria-expanded={menu} onclick={() => (menu = !menu)}><Icon name="dots" size={22} /></button>
@@ -130,6 +165,11 @@
     object-fit: cover;
     object-position: center 30%;
   }
+  /* Пока кадра нет - постер целиком по центру, а не обрезанная полоска. */
+  .cover img.poster {
+    object-fit: contain;
+    object-position: center;
+  }
   .sound {
     position: absolute;
     right: 13px;
@@ -159,12 +199,36 @@
   h2 a {
     color: #fff;
   }
-  p {
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    margin: 0 0 10px;
+    color: #b5b5ba;
+    font-size: 14px;
+    line-height: 1.3;
+    /* Место под одну строку занято всегда: когда длительность придёт позже, ничего не прыгает. */
+    min-height: 22px;
+  }
+  .rate {
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #3bb33b;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 18px;
+  }
+  .rate.low {
+    background: #7b7b7e;
+  }
+  .about {
     display: -webkit-box;
     min-height: 3.9em;
     margin: 0;
     overflow: hidden;
-    color: #b5b5ba;
+    color: #d8d8dc;
     font-size: 15px;
     line-height: 1.3;
     -webkit-line-clamp: 3;
@@ -198,7 +262,38 @@
     background: #2a2a2a;
   }
   .add.on {
-    color: var(--m-accent);
+    background: #fff;
+    color: #0a0a0a;
+  }
+  /* Широкий экран: одна карточка на всю ширину, кадр слева, краткая информация справа. */
+  @media (min-width: 1001px) {
+    .fc {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+      align-items: center;
+      gap: 32px;
+      max-height: calc(100svh - var(--header) - 48px);
+    }
+    .shot {
+      max-height: calc(100svh - var(--header) - 48px);
+    }
+    .info {
+      padding: 24px 32px 24px 0;
+    }
+    h2 {
+      font-size: clamp(26px, 2.6vw, 44px);
+    }
+    .facts {
+      font-size: clamp(15px, 1.2vw, 20px);
+    }
+    .about {
+      font-size: clamp(16px, 1.3vw, 22px);
+      -webkit-line-clamp: 6;
+      line-clamp: 6;
+    }
+    .act {
+      justify-content: flex-start;
+    }
   }
   .pop {
     position: absolute;
@@ -227,4 +322,3 @@
     background: #ffffff14;
   }
 </style>
-

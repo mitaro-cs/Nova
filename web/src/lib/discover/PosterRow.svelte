@@ -66,7 +66,6 @@
 <style>
   .row {
     margin-bottom: 30px;
-    --n: 7.4;
     --gap: 16px;
   }
   .head {
@@ -77,9 +76,10 @@
     margin-bottom: 12px;
   }
   h2 {
-    font-size: max(17px, calc(20 * var(--rw)));
-    font-weight: 600;
+    font-size: 20px;
+    font-weight: 700;
     letter-spacing: -0.01em;
+    line-height: 1.2;
   }
   /* Подпись к ряду (тема недели): мельче и спокойнее названия. */
   .note {
@@ -92,12 +92,13 @@
     display: inline-flex;
     align-items: center;
     gap: 2px;
-    color: var(--muted);
-    font-size: 14px;
+    flex: none;
+    color: #fff;
+    font-size: 16px;
     font-weight: 600;
   }
   .all:hover {
-    color: var(--text);
+    text-decoration: underline;
   }
   .wrap {
     position: relative;
@@ -105,7 +106,7 @@
   .strip {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: calc((100% - (var(--n) - 1) * var(--gap)) / var(--n));
+    grid-auto-columns: var(--pw);
     gap: var(--gap);
     overflow-x: auto;
     margin: -12px calc(var(--gutter) * -1);
@@ -143,31 +144,15 @@
     right: calc(var(--gutter) * -1);
     background: linear-gradient(270deg, rgba(0, 0, 0, 0.75), transparent);
   }
-  @media (max-width: 1280px) {
-    .row {
-      --n: 6.3;
-    }
-  }
   @media (max-width: 1000px) {
     .row {
-      --n: 4.4;
       --gap: 12px;
     }
   }
-  /* Телефон - как у Disney+: три с лишним постера в ряд, плотно, без подписей (название - на постере
-     и в описании для чтения с экрана). */
   @media (max-width: 640px) {
     .row {
-      --n: 3.3;
       --gap: 8px;
       margin-bottom: 24px;
-    }
-    h2 {
-      font-size: 17px;
-    }
-    .strip > :global(.tile .name),
-    .strip > :global(.tile .sub) {
-      display: none;
     }
   }
   @media (hover: none) {

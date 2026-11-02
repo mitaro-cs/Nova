@@ -2,11 +2,11 @@
   import { fadeIn } from '$lib/ui/fade';
   import type { Card, ExtCard } from '$lib/types';
   import { artW, placeholder } from '$lib/ui/art';
-  import Icon from '$lib/ui/Icon.svelte';
   import QuickMarks from '$lib/ui/QuickMarks.svelte';
   import { remember } from './sheet.svelte';
 
-  // Постер 2:3: название, год и оценка, поверх - быстрые отметки. Из ленты IMDb - ссылка на его
+  // Постер 2:3: оценка плашкой в углу (от 7 - зелёная, ниже - серая), название и год, поверх - быстрые
+  // отметки. Из ленты IMDb - ссылка на его
   // страницу `/ext/<id>` (карточка запоминается - страница показывается сразу), с сервиса
   // (`local`) - на `/title/<id>`.
   let {
@@ -39,13 +39,12 @@
   <span class="art" class:ranked={rank !== null} style:background={c.poster ? undefined : placeholder(c.title)}>
     {#if !loaded}<span class="ph">{c.title}</span>{/if}
     {#if source}<img use:fadeIn src={artW(source, 342)} alt="" loading="lazy" decoding="async" width="342" height="513" onload={() => loaded = true} onerror={retryImage} />{/if}
+    {#if c.rating}<span class="rate" class:low={c.rating < 7}>{c.rating.toFixed(1)}</span>{/if}
     {#if rank}<span class="rank">{rank}</span>{/if}
     {#if c.here}<span class="here">Есть у нас</span>{/if}
   </span>
   <span class="name">{c.title}</span>
-  <span class="sub">
-    {#if c.year}{c.year}{/if}{#if c.rating}<span class="star"><Icon name="star" size={11} /> {c.rating.toFixed(1)}</span>{/if}
-  </span>
+  {#if c.year}<span class="sub">{c.year}</span>{/if}
 {/snippet}
 
 <div class="tile" class:rise={i !== null} style:--i={i}>
@@ -150,10 +149,22 @@
     font-size: 13px;
     color: var(--muted);
   }
-  .star {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    color: var(--imdb);
+  .rate {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: #3bb33b;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 16px;
+  }
+  .rate.low {
+    background: #7b7b7e;
+  }
+  .here {
+    top: 32px;
   }
 </style>

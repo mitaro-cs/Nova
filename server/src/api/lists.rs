@@ -115,7 +115,7 @@ pub async fn create(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLis
     others.sort_unstable();
     others.dedup();
     if others.len() + 1 > MAX_MEMBERS {
-        return Err(ApiError::bad("too_many", format!("В списке - не больше {MAX_MEMBERS} человек")));
+        return Err(ApiError::bad("too_many", format!("В подборке - не больше {MAX_MEMBERS} человек")));
     }
     for m in &others {
         friend(&app, &v, *m)?;
@@ -123,7 +123,7 @@ pub async fn create(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLis
     let n: i64 =
         app.db.with(|c| c.query_row("SELECT COUNT(*) FROM lists WHERE owner_id = ?", [v.profile.id], |r| r.get(0)))?;
     if n >= MAX_LISTS {
-        return Err(ApiError::bad("too_many", format!("Не больше {MAX_LISTS} своих списков")));
+        return Err(ApiError::bad("too_many", format!("Не больше {MAX_LISTS} своих подборок")));
     }
     let id = app.db.tx(|tx| {
         tx.execute(
@@ -250,7 +250,7 @@ pub async fn invite(
     member_of(&app, &v, id)?;
     friend(&app, &v, b.id)?;
     if members(&app, id)?.len() >= MAX_MEMBERS {
-        return Err(ApiError::bad("too_many", format!("В списке - не больше {MAX_MEMBERS} человек")));
+        return Err(ApiError::bad("too_many", format!("В подборке - не больше {MAX_MEMBERS} человек")));
     }
     app.db.with(|c| {
         c.execute("INSERT OR IGNORE INTO list_members (list_id, profile_id) VALUES (?, ?)", params![id, b.id])
@@ -276,7 +276,7 @@ pub async fn item(
         let n: i64 =
             app.db.with(|c| c.query_row("SELECT COUNT(*) FROM list_items WHERE list_id = ?", [id], |r| r.get(0)))?;
         if n >= MAX_ITEMS {
-            return Err(ApiError::bad("too_many", format!("В списке - не больше {MAX_ITEMS} фильмов")));
+            return Err(ApiError::bad("too_many", format!("В подборке - не больше {MAX_ITEMS} фильмов")));
         }
         app.db.with(|c| {
             c.execute(
@@ -356,7 +356,7 @@ pub async fn ext_item(
             )
         })?;
         if n >= MAX_ITEMS {
-            return Err(ApiError::bad("too_many", format!("В списке - не больше {MAX_ITEMS} фильмов")));
+            return Err(ApiError::bad("too_many", format!("В подборке - не больше {MAX_ITEMS} фильмов")));
         }
         app.db.with(|c| {
             c.execute(

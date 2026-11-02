@@ -5,8 +5,8 @@
   import type { Component } from 'svelte';
   import Icon from './Icon.svelte';
 
-  // Трейлер героя главной на телефоне: официальный HD с IMDb без звука поверх кадра, кнопка звука - круг 44
-  // слева вверху. Вынесено из `Showcase`, чтобы главная не тащила это на компьютере (бюджет JS 80 КБ).
+  // Трейлер героя: официальный HD с IMDb без звука поверх кадра, кнопка звука - круг 44 слева вверху.
+  // Вынесено из `Showcase` и грузится лениво: бюджет JS главной 80 КБ.
   let { card, ext }: { card?: Card; ext?: ExtCard } = $props();
 
   let TB = $state<Component<any> | null>(null);

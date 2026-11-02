@@ -44,15 +44,14 @@
   const externalResults = $derived(refine(found ?? []));
   $effect(() => { loadCatalog(); });
 
-  // Телефон (как у Кинопоиска): пока поле пусто - «Советуем посмотреть» (подборки IMDb) и «Категории»
-  // (жанры); фильтры прячутся за значком справа в поле.
+  // Пока поле пусто - «Советуем посмотреть» (подборки IMDb) и «Категории» (жанры). На телефоне (`compact`)
+  // фильтры прячутся за значком справа в поле.
   const compact = typeof matchMedia !== 'undefined' && matchMedia('(max-width: 640px)').matches;
   let showFilters = $state(false);
   type Pick = { key: string; title: string; items: ExtCard[] };
   let picks = $state<Pick[]>([]);
   const CATEGORIES = ['Боевики', 'Комедии', 'Драмы', 'Триллеры', 'Фантастика', 'Ужасы', 'Мелодрамы', 'Детективы', 'Приключения', 'Фэнтези', 'Мультфильмы', 'Криминал', 'Документальные', 'Военные'];
   $effect(() => {
-    if (!compact) return;
     let live = true;
     api<{ rows: Pick[] }>('/api/discover').then((f) => { if (live) picks = f.rows.filter((r) => r.items.length && r.items[0].poster).slice(0, 8); }, () => {});
     return () => { live = false; };
@@ -127,23 +126,20 @@
   {#if failure}<p class="rw-block" role="status">{failure}</p>{/if}
   {#if searching}<div class="rw-block"><Loading compact label="Ищем в русских и международных каталогах" /></div>{/if}
   {#if !query}
-    <div class="rw-block"><div class="search-empty"><Icon name="search" size={40} /><h2>Истории начинаются здесь</h2><p>Введите название, имя режиссёра или год.</p></div></div>
-    {#if compact}
-      {#if picks.length}
-        <section class="suggest" aria-label="Советуем посмотреть">
-          <div class="s-head"><h2>Советуем посмотреть</h2><a href="/discover">Все</a></div>
-          <div class="tiles">
-            {#each picks as r (r.key)}
-              <a class="tile" href="/discover?chart={r.key}"><span class="cover"><img src={artW(r.items[0].poster!, 342)} alt="" loading="lazy" decoding="async" /></span><span class="cap">{r.title}</span></a>
-            {/each}
-          </div>
-        </section>
-      {/if}
-      <section class="suggest" aria-label="Категории">
-        <div class="s-head"><h2>Категории</h2></div>
-        <div class="cats">{#each CATEGORIES as g (g)}<button type="button" onclick={() => (text = g)}>{g}</button>{/each}</div>
+    {#if picks.length}
+      <section class="suggest" aria-label="Советуем посмотреть">
+        <div class="s-head"><h2>Советуем посмотреть</h2><a href="/discover">Все</a></div>
+        <div class="tiles">
+          {#each picks as r (r.key)}
+            <a class="tile" href="/discover?chart={r.key}"><span class="cover"><img src={artW(r.items[0].poster!, 342)} alt="" loading="lazy" decoding="async" /></span><span class="cap">{r.title}</span></a>
+          {/each}
+        </div>
       </section>
     {/if}
+    <section class="suggest" aria-label="Категории">
+      <div class="s-head"><h2>Категории</h2></div>
+      <div class="cats">{#each CATEGORIES as g (g)}<button type="button" onclick={() => (text = g)}>{g}</button>{/each}</div>
+    </section>
   {/if}
   {#if query}
     {#if kind === 'people'}
@@ -186,9 +182,6 @@
   .refine input { width: 65px; }
   @media(max-width:600px) { .refine { gap: 8px; } .refine label { flex: 1 1 40%; } .refine select { flex: 1; min-width: 0; max-width: 100px; } }
   @media(max-width:380px) { .refine label { flex-basis: 100%; justify-content: space-between; } .refine select { max-width: 160px; } }
-  .search-empty { display: grid; justify-items: center; gap: 14px; padding: 70px 20px; border: 1px dashed var(--line); border-radius: 24px; color: var(--muted); text-align: center; }
-  .search-empty h2 { color: var(--text); margin: 0; }
-  .search-empty p { margin: 0; }
   .big {
     display: flex;
     align-items: center;
@@ -215,7 +208,7 @@
   }
   .posters {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--pw) - 8px), 1fr));
     gap: 20px 14px;
   }
   .ph {
@@ -228,9 +221,21 @@
       gap: 16px 10px;
     }
   }
-  .tune, .suggest { display: none; }
-  /* Телефон - по референсу Кинопоиска: поле 44 px с радиусом 8 и значком фильтров, дальше - блоки
-     подборок и категорий на чёрном; заголовка страницы нет. */
+  .tune { display: none; }
+  .suggest { display: block; margin-top: 26px; }
+  .s-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .s-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .s-head a { color: #fff; font-size: 16px; font-weight: 600; }
+  .tiles { display: flex; gap: 12px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
+  .tiles::-webkit-scrollbar { display: none; }
+  .tile { flex: none; width: calc(var(--pw) - 20px); color: #fff; }
+  .cover { display: block; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 4px; background: #1c1c1e; }
+  .cover img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+  .cap { display: -webkit-box; margin-top: 10px; overflow: hidden; font-size: 14px; font-weight: 500; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
+  .cats { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cats button { height: 46px; padding: 0 20px; border: 0; border-radius: 23px; background: #1c1c1e; color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  /* Телефон: поле 44 px с радиусом 8 и значком фильтров, дальше - блоки подборок и категорий на чёрном;
+     заголовка страницы нет. */
   @media (max-width: 640px) {
     .search-root :global(.rw-head) { display: none; }
     .search-root :global(.rw-page) { padding-top: calc(env(safe-area-inset-top) + 20px); }
@@ -240,18 +245,5 @@
     .big input { font-size: 17px; }
     .tune { display: grid; place-items: center; width: 40px; height: 32px; padding: 0 0 0 8px; border: 0; border-left: 1px solid #ffffff2e; border-radius: 0; background: none; color: #c7c7cc; cursor: pointer; }
     .filters:not(.open), .refine:not(.open) { display: none; }
-    .search-empty { display: none; }
-    .suggest { display: block; margin-top: 26px; }
-    .s-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
-    .s-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
-    .s-head a { color: var(--m-accent); font-size: 16px; font-weight: 600; }
-    .tiles { display: flex; gap: 12px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
-    .tiles::-webkit-scrollbar { display: none; }
-    .tile { flex: none; width: 128px; color: #fff; }
-    .cover { display: block; width: 128px; height: 128px; overflow: hidden; border-radius: 4px; background: #1c1c1e; }
-    .cover img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
-    .cap { display: -webkit-box; margin-top: 10px; overflow: hidden; font-size: 14px; font-weight: 500; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
-    .cats { display: flex; flex-wrap: wrap; gap: 10px; }
-    .cats button { height: 46px; padding: 0 20px; border: 0; border-radius: 23px; background: #1c1c1e; color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
   }
 </style>

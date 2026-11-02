@@ -149,7 +149,7 @@
       </label>
     </section>
     <section class="rw-block pane">
-      <h2 class="rw-h2">Трейлеры на телефоне</h2>
+      <h2 class="rw-h2">Трейлеры в герое</h2>
       <label class="switch">
         <input type="checkbox" bind:checked={trailers} onchange={() => { try { localStorage.setItem('nova-trailers', trailers ? 'on' : 'off'); } catch { /* приватный режим */ } }} />
         <span>Трейлер сам играет без звука в герое главной и в ленте «Что смотреть». Выключите, чтобы экономить трафик.</span>
@@ -157,7 +157,7 @@
     </section>
     <section class="rw-block pane">
       <h2 class="rw-h2">Экскурсия по Nova</h2>
-      <p class="muted">Короткий показ, где что лежит: разделы, Обзор, списки, совместный просмотр, плеер и телевизор.</p>
+      <p class="muted">Короткий показ, где что лежит: разделы, Обзор, подборки, совместный просмотр, плеер и телевизор.</p>
       <button class="btn" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><Icon name="play" size={15} /> Пройти экскурсию</button>
     </section>
 

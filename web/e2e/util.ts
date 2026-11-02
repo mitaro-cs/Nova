@@ -141,6 +141,8 @@ export async function expectClean(page: Page, what: string) {
         const fb = fixedOf(b.el);
         // Нижние плавающие панели и прокручиваемое содержимое: пересечение зависит от прокрутки.
         if (fa !== fb && ((fa && fa.getBoundingClientRect().top > H / 2) || (fb && fb.getBoundingClientRect().top > H / 2))) continue;
+        // Прокрутили вниз: контент идёт под шапку, у неё тогда сплошной фон - так задумано.
+        if (fa !== fb && scrollY > 8 && (fa?.tagName === 'HEADER' || fb?.tagName === 'HEADER')) continue;
         // Всплывающее меню поверх страницы - задумано.
         if ((fa && fa !== fb && getComputedStyle(fa).zIndex > '60') || (fb && fa !== fb && getComputedStyle(fb).zIndex > '60')) continue;
         const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);

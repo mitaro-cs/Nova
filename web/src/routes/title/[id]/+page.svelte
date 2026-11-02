@@ -115,8 +115,7 @@
     api<TitleDetail>('/api/titles/' + want).then((d) => { if (want === id && t) t = d; }, () => {});
   });
 
-  const c = $derived(t?.card);
-  const people = $derived(t?.people ?? []);
+  const c = $derived(t?.card);  const people = $derived(t?.people ?? []);
   const crew = $derived(people.filter((p) => p.job === 'director' || p.job === 'creator'));
   const cast = $derived(people.filter((p) => p.job === 'actor'));
   const team = $derived([...crew.map((p) => ({ ...p, role: p.job === 'creator' ? 'Создатель' : 'Режиссёр' })), ...cast]);
@@ -292,7 +291,7 @@
           <button class="ib" class:on={c.myRating === 2} aria-pressed={c.myRating === 2} aria-label="Нравится" title="Нравится" onclick={() => rate(c, 2)}><Icon name="heart" size={16} /><span>Нравится</span></button>
           <button class="ib" class:on={isFavorite(`t:${c.id}`)} aria-pressed={isFavorite(`t:${c.id}`)} aria-label="Любимый" title="Любимый" onclick={() => toggleFavorite(`t:${c.id}`)}><Icon name="star" size={16} /><span>Любимый</span></button>
           {#if next}<button class="ib" aria-label="Смотреть вместе" title="Смотреть вместе" disabled={roomBusy} onclick={together}><Icon name="party" size={16} /><span>Вместе</span></button>{/if}
-          <button class="ib" aria-label="В общий список" title="В общий список" onclick={() => (picking = true)}><Icon name="users" size={16} /><span>В список</span></button>
+          <button class="ib" aria-label="В подборку" title="В подборку" onclick={() => (picking = true)}><Icon name="users" size={16} /><span>В подборку</span></button>
           <button class="ib" aria-label="Обсудить с другом" title="Обсудить с другом" onclick={() => (sharing = true)}><Icon name="share" size={16} /><span>Обсудить</span></button>
           {#if c.status === 'watching'}<button class="ib" aria-label="Больше не смотрю" title="Больше не смотрю" onclick={() => drop(c, c.title)}><Icon name="ban" size={16} /><span>Бросил</span></button>{/if}
         </div>
@@ -327,7 +326,7 @@
           <button class="unrate" class:hidden={!mine} disabled={!mine} onclick={() => setStars(null)}>Убрать оценку</button>
         </div>
         </div>
-        <button class="btn block" onclick={() => (picking = true)}><Icon name="users" size={15} /> В общий список</button>
+        <button class="btn block" onclick={() => (picking = true)}><Icon name="users" size={15} /> В подборку</button>
         <button class="btn block" onclick={() => (sharing = true)}><Icon name="share" size={15} /> Обсудить с другом</button>
         {#if t?.next}<button class="btn block" disabled={roomBusy} onclick={together}><Icon name="party" size={15} /> Смотреть вместе</button>{/if}
         <button class="btn block" onclick={() => { moreOpen = false; writeReview(); }}><Icon name="edit" size={15} /> Написать отзыв</button>
@@ -405,7 +404,7 @@
           <div class="rw-rate"><small>Оценка</small><StarInput value={mine?.stars ?? null} onchange={setStars} size={28} label="Ваша оценка" /></div>
         </div>
         {#if next}<button class="rw-btn together" disabled={roomBusy} onclick={together}><Icon name="party" size={18} /> Смотреть вместе</button>{/if}
-        <button class="rw-btn" onclick={() => (picking = true)}>В списки</button>
+        <button class="rw-btn" onclick={() => (picking = true)}>В подборки</button>
         <div class="rw-row">
           <button class="rw-btn" onclick={writeReview}>Отзыв</button>
           <button class="rw-btn round" aria-label="Ещё действия" onclick={() => (moreOpen = true)}><Icon name="dots" size={22} /></button>

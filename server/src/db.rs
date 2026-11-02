@@ -651,10 +651,6 @@ ALTER TABLE ext_titles ADD COLUMN ru_at INTEGER;
 ALTER TABLE person_names ADD COLUMN orig TEXT;
 CREATE INDEX person_names_orig ON person_names(orig);
 "#,
-    // 27 (alpha 0.7.4): цвет постера у фильмов ленты (NULL - ещё не считали, '' - постер не прочитался).
-    r#"
-ALTER TABLE ext_titles ADD COLUMN accent TEXT;
-"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

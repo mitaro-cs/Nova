@@ -30,14 +30,14 @@ test('русский поиск, фильтры и кэш повторного �
   await expectClean(page,'поиск с фильтрами');
 });
 
-test('внешнее видео продолжается с точного места, нижняя панель чёрная', async ({page}, info) => {
+test('внешнее видео продолжается с точного места, нижняя панель чёрная', async ({page}) => {
   await page.route('**/api/continue',r=>r.fulfill({json:[{key:'x:tt0133093',href:'/watch/link/900',position:1224,duration:7200,label:'Фильм',at:1,art:null,ext:{...cards[0],mark:'watching'}}]}));
   await page.goto(url('/'));
   const row = page.getByRole('region',{name:'Продолжить просмотр'});
   await expect(row.getByRole('link')).toHaveAttribute('href','/watch/link/900');
   await expect(row).toContainText('20:24');
   await expect(row.getByRole('meter')).toHaveAttribute('aria-valuenow','17');
-  if (info.project.name !== 'desktop') await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(20, 20, 20)');
+  await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(20, 20, 20)');
   await expectClean(page,'продолжение внешнего видео');
 });
 

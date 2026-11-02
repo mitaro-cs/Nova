@@ -5,7 +5,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import NewList from './NewList.svelte';
 
-  // Со страницы фильма: в какие совместные списки положить (галочки), или новый список.
+  // Со страницы фильма: в какие совместные подборки положить (галочки), или новая подборка.
   let { open = $bindable(false), titleId }: { open: boolean; titleId: number } = $props();
 
   let lists = $state<{ id: number; name: string; has: boolean }[] | null>(null);
@@ -38,7 +38,7 @@
   }
 </script>
 
-<Modal bind:open title="Совместные списки">
+<Modal bind:open title="Подборки с друзьями">
   <div class="box">
     {#if lists === null}
       <div class="skeleton ph"></div>
@@ -57,8 +57,8 @@
       </ul>
     {/if}
     <div class="row">
-      <a class="btn ghost sm" href="/lists" onclick={() => (open = false)}>Все списки</a>
-      <button class="btn sm" onclick={() => ((open = false), (creating = true))}><Icon name="plus" size={15} /> Новый список</button>
+      <a class="btn ghost sm" href="/lists" onclick={() => (open = false)}>Все подборки</a>
+      <button class="btn sm" onclick={() => ((open = false), (creating = true))}><Icon name="plus" size={15} /> Новая подборка</button>
     </div>
   </div>
 </Modal>

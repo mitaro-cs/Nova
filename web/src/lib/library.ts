@@ -6,13 +6,6 @@ import type { Card } from './types';
 export type Tab = 'home' | 'movies' | 'series' | 'anime';
 export type Status = 'all' | 'want' | 'watching' | 'watched';
 
-export const TABS = [
-  { id: 'home', label: 'Главная', href: '/' },
-  { id: 'movies', label: 'Фильмы', href: '/?tab=movies' },
-  { id: 'series', label: 'Сериалы', href: '/?tab=series' },
-  { id: 'anime', label: 'Аниме', href: '/?tab=anime' },
-] as const satisfies readonly { id: Tab; label: string; href: string }[];
-
 export const STATUSES: { id: Status; label: string }[] = [
   { id: 'all', label: 'Все' },
   { id: 'want', label: 'Хочу посмотреть' },

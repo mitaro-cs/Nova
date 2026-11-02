@@ -59,7 +59,7 @@
   .strip {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(0, calc((100% - 3 * 14px) / 4.2));
+    grid-auto-columns: var(--fw);
     gap: 12px;
     overflow-x: auto;
     scroll-snap-type: x proximity;
@@ -178,20 +178,13 @@
     color: #fff;
     cursor: pointer;
   }
-  @media (max-width: 1200px) {
-    .strip {
-      grid-auto-columns: minmax(0, calc((100% - 2 * 12px) / 3.2));
-    }
-  }
   @media (max-width: 900px) {
     .strip {
-      grid-auto-columns: minmax(0, calc((100% - 10px) / 2.3));
       gap: 10px;
     }
   }
   @media (max-width: 600px) {
     .strip {
-      grid-auto-columns: 72%;
       gap: 8px;
     }
   }

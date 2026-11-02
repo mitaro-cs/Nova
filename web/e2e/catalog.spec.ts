@@ -23,11 +23,10 @@ test('главная: герой, ряды и сериалы рядом с фи�
   await expect(page.getByRole('region', { name: 'Фильмы' }).getByRole('link', { name: /Дюна/ })).toBeVisible();
 });
 
-test('Фильмы: фильтр по статусу, отметки со страницы фильма', async ({ page }, info) => {
+test('Фильмы: фильтр по статусу, отметки со страницы фильма', async ({ page }) => {
   await page.goto(url('/'));
-  // Компьютер - капсула в шапке; телефон и планшет - полоса разделов на главной (в нижней панели их нет).
-  const nav = info.project.name === 'desktop' ? page.locator('nav.pill') : page.getByRole('navigation', { name: 'Разделы кинотеатра' });
-  await nav.getByRole('link', { name: 'Фильмы' }).click();
+  // На всех ширинах разделы - полосой на главной (в верхней и нижней панелях их нет).
+  await page.getByRole('navigation', { name: 'Разделы кинотеатра' }).getByRole('link', { name: 'Фильмы' }).click();
   await expect(page).toHaveURL(/tab=movies/);
   const chip = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) });
   await expect(chip('Хочу посмотреть')).toContainText('2');
@@ -96,9 +95,9 @@ test('смотреть вместе: комната, чат, назад к фи�
 test('совместный список: из фильма - в список с другом', async ({ page }) => {
   const name = `Пятница ${test.info().project.name} ${Date.now() % 100000}`;
   await page.goto(url(`/title/${env().ids['Дюна']}`));
-  await act(page, 'В общий список');
-  await page.getByRole('button', { name: 'Новый список' }).click();
-  const form = page.getByRole('dialog', { name: 'Новый совместный список' });
+  await act(page, 'В подборку');
+  await page.getByRole('button', { name: 'Новая подборка' }).click();
+  const form = page.getByRole('dialog', { name: 'Новая совместная подборка' });
   await form.getByLabel('Название').fill(name);
   await form.getByRole('checkbox').first().check();
   await form.getByRole('button', { name: 'Создать' }).click();

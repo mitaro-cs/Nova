@@ -73,7 +73,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--pw) - 8px)), 1fr));
     gap: 22px 16px;
   }
   .sk {

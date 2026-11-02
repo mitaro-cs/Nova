@@ -493,41 +493,6 @@ pub async fn titles_ru(app: Arc<App>) {
     }
 }
 
-/// Фильмы ленты со скачанным постером, у которых ещё не считали цвет.
-fn pending_accents(db: &crate::db::Db, limit: i64) -> rusqlite::Result<Vec<(String, String)>> {
-    db.with(|c| {
-        let mut st =
-            c.prepare("SELECT id, poster FROM ext_titles WHERE accent IS NULL AND poster IS NOT NULL AND poster != '' LIMIT ?")?;
-        let r = st.query_map([limit], |r| Ok((r.get(0)?, r.get(1)?)))?;
-        r.collect()
-    })
-}
-
-/// Цвет постера у фильмов ленты (у своих - `library::jobs`): понемногу и с низким приоритетом, чтобы хост не
-/// гудел. Не прочитался - пустая строка, чтобы не пробовать по кругу; карточка отдаёт её как «цвета нет».
-pub async fn accents(app: Arc<App>) {
-    tokio::time::sleep(Duration::from_secs(30)).await;
-    loop {
-        let ffmpeg = app.tools.read().ffmpeg.clone();
-        let todo = if ffmpeg.is_some() { pending_accents(&app.db, 20).unwrap_or_default() } else { vec![] };
-        if todo.is_empty() {
-            tokio::time::sleep(Duration::from_secs(600)).await;
-            continue;
-        }
-        let Some(ffmpeg) = ffmpeg else { continue };
-        for (id, poster) in todo {
-            let accent = match app.images.path(&poster) {
-                Some(src) => crate::library::probe::tiny_rgb(&ffmpeg, &src).await.ok().map(|px| crate::images::accent(&px)),
-                None => None,
-            };
-            let _ = app.db.with(|c| {
-                c.execute("UPDATE ext_titles SET accent = ? WHERE id = ?", params![accent.unwrap_or_default(), id])
-            });
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    }
-}
-
 /// Скачать до `limit` постеров (сначала - из подборок по порядку). Сколько пробовали.
 pub async fn posters_batch(app: &Arc<App>, limit: i64) -> usize {
     let todo: Vec<(String, String)> = app
@@ -800,8 +765,6 @@ pub struct ExtCard {
     pub mark: Option<String>,
     /// Просили хоста добавить.
     pub wished: bool,
-    /// Цвет по постеру (как `titles.accent`), пока не посчитан - нет.
-    pub accent: Option<String>,
 }
 
 pub fn card_sql(kids: bool) -> String {
@@ -812,8 +775,7 @@ pub fn card_sql(kids: bool) -> String {
            (SELECT t.id FROM titles t WHERE t.imdb_id = e.id AND {} LIMIT 1),
            CASE WHEN EXISTS (SELECT 1 FROM ext_dropped d WHERE d.ext_id = e.id AND d.profile_id = ?1) THEN 'dropped'
              ELSE (SELECT m.status FROM ext_marks m WHERE m.ext_id = e.id AND m.profile_id = ?1) END,
-           EXISTS (SELECT 1 FROM wishes w WHERE w.ext_id = e.id AND w.profile_id = ?1 AND w.dismissed_at IS NULL),
-           NULLIF(e.accent, '')
+           EXISTS (SELECT 1 FROM wishes w WHERE w.ext_id = e.id AND w.profile_id = ?1 AND w.dismissed_at IS NULL)
          FROM ext_titles e",
         crate::api::visible(kids)
     )
@@ -838,42 +800,12 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
         local: r.get(8)?,
         mark: r.get(9)?,
         wished: r.get(10)?,
-        accent: r.get(11)?,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn add_poster(db: &crate::db::Db, id: &str, poster: Option<&str>, accent: Option<&str>) {
-        add_ext(db, id, id, None);
-        db.with(|c| c.execute("UPDATE ext_titles SET poster = ?, accent = ? WHERE id = ?", params![poster, accent, id]))
-            .unwrap();
-    }
-
-    #[test]
-    fn pending_accents_takes_only_downloaded_without_color() {
-        let db = crate::db::Db::memory().unwrap();
-        add_poster(&db, "a", Some("a.jpg"), None);
-        add_poster(&db, "b", None, None);
-        add_poster(&db, "c", Some(""), None);
-        add_poster(&db, "d", Some("d.jpg"), Some("#112233"));
-        add_poster(&db, "e", Some("e.jpg"), Some(""));
-        assert_eq!(pending_accents(&db, 10).unwrap(), vec![("a".to_string(), "a.jpg".to_string())]);
-    }
-
-    #[test]
-    fn card_gives_color_and_hides_failed_attempt() {
-        let db = crate::db::Db::memory().unwrap();
-        add_poster(&db, "d", Some("d.jpg"), Some("#112233"));
-        add_poster(&db, "e", Some("e.jpg"), Some(""));
-        let accent = |id: &str| {
-            db.with(|c| c.query_row(&format!("{} WHERE e.id = ?2", card_sql(false)), params![0, id], card)).unwrap().accent
-        };
-        assert_eq!(accent("d").as_deref(), Some("#112233"));
-        assert_eq!(accent("e"), None);
-    }
 
     fn add_ext(db: &crate::db::Db, id: &str, title: &str, ru_at: Option<i64>) {
         db.with(|c| {

@@ -263,7 +263,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--pw) - 8px)), 1fr));
     gap: 22px 16px;
   }
   @media (max-width: 640px) {
@@ -289,13 +289,12 @@
   .ph-cards {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: calc((100% - 6.4 * 16px) / 7.4);
+    grid-auto-columns: var(--pw);
     gap: 16px;
     overflow: hidden;
   }
   @media (max-width: 640px) {
     .ph-cards {
-      grid-auto-columns: calc((100% - 1.6 * 10px) / 2.6);
       gap: 10px;
     }
   }

@@ -71,7 +71,7 @@
   .strip {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: 150px;
+    grid-auto-columns: calc(var(--pw) - 10px);
     gap: 14px;
     margin: 0;
     padding: 4px 2px 8px;
@@ -125,7 +125,6 @@
   }
   @media (max-width: 600px) {
     .strip {
-      grid-auto-columns: 112px;
       gap: 10px;
     }
   }

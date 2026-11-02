@@ -46,7 +46,6 @@
 <style>
   .shelf {
     margin-bottom: 30px;
-    --n: 5.3;
     --gap: 18px;
   }
   h2 {
@@ -61,7 +60,7 @@
   .strip {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: calc((100% - (var(--n) - 1) * var(--gap)) / var(--n));
+    grid-auto-columns: var(--fw);
     gap: var(--gap);
     overflow-x: auto;
     margin: -12px calc(var(--gutter) * -1);
@@ -101,20 +100,13 @@
     right: calc(var(--gutter) * -1);
     background: linear-gradient(270deg, rgba(0, 0, 0, 0.75), transparent);
   }
-  @media (max-width: 1280px) {
-    .shelf {
-      --n: 4.3;
-    }
-  }
   @media (max-width: 1000px) {
     .shelf {
-      --n: 3.2;
       --gap: 14px;
     }
   }
   @media (max-width: 640px) {
     .shelf {
-      --n: 1.75;
       --gap: 12px;
     }
   }

@@ -126,7 +126,7 @@
           <a href="/?tab=series">Сериалы</a>
           <a href="/?tab=anime">Аниме</a>
           <a href="/discover">Обзор</a>
-          <a href="/lists">Списки</a>
+          <a href="/lists">Подборки</a>
           <a href="/people">Люди</a>
           <a href="/chats">Чаты</a>
           <a href="/profile">Профиль</a>

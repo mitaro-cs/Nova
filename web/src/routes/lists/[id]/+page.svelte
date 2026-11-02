@@ -89,7 +89,7 @@
   }
 
   async function dropGroup(g: { id: number | null; name: string }) {
-    if (!g.id || !(await ask(`Удалить группу «${g.name}»? Фильмы останутся в списке.`, 'Удалить', true))) return;
+    if (!g.id || !(await ask(`Удалить группу «${g.name}»? Фильмы останутся в подборке.`, 'Удалить', true))) return;
     await del(`/api/lists/${id}/groups/${g.id}`).catch((x) => toast(errorText(x)));
     load();
   }
@@ -110,7 +110,7 @@
 
   async function leave() {
     if (!l) return;
-    const q = l.mine ? `Удалить список «${l.name}» у всех участников?` : `Выйти из списка «${l.name}»?`;
+    const q = l.mine ? `Удалить подборку «${l.name}» у всех участников?` : `Выйти из подборки «${l.name}»?`;
     if (!(await ask(q, l.mine ? 'Удалить' : 'Выйти', true))) return;
     await del(`/api/lists/${id}`).catch(() => {});
     goto('/lists', { replace: true });
@@ -127,7 +127,7 @@
     try {
       await post(`/api/lists/${id}/members`, { id: m.id });
       inviting = false;
-      toast(`${m.name} теперь в списке`);
+      toast(`${m.name} теперь в подборке`);
       load();
     } catch (x) {
       toast(errorText(x));
@@ -137,7 +137,7 @@
 
 <Sheet title={l?.name ?? 'Список'}>
   {#snippet above()}
-    <a class="back muted" href="/lists"><Icon name="back" size={16} /> Все списки</a>
+    <a class="back muted" href="/lists"><Icon name="back" size={16} /> Все подборки</a>
   {/snippet}
   {#snippet actions()}
     {#if l}
@@ -196,7 +196,7 @@
                         {#each l.groups as x (x.id)}<option value={x.id}>{x.name}</option>{/each}
                       </select>
                     {/if}
-                    <button class="mini" aria-label="Убрать из списка" title="Убрать из списка" onclick={() => remove(i)}><Icon name="close" size={15} /></button>
+                    <button class="mini" aria-label="Убрать из подборки" title="Убрать из подборки" onclick={() => remove(i)}><Icon name="close" size={15} /></button>
                   </div>
                 </div>
               {/each}
@@ -213,7 +213,7 @@
   {/if}
 </Sheet>
 
-<Modal bind:open={renaming} title="Название списка">
+<Modal bind:open={renaming} title="Название подборки">
   <form class="rename" onsubmit={rename}>
     <input class="input" bind:value={newName} maxlength="60" required aria-label="Название" />
     <button class="btn primary">Сохранить</button>
@@ -286,7 +286,7 @@
   }
   .tiles {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--pw) - 8px)), 1fr));
     gap: 22px 16px;
   }
   @media (max-width: 640px) {
