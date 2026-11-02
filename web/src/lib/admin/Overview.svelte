@@ -3,6 +3,7 @@
   import { clock, size } from '$lib/fmt';
   import { percent } from '$lib/library';
   import Icon from '$lib/ui/Icon.svelte';
+  import Metrics from './Metrics.svelte';
   import type { IconName } from '$lib/ui/icons';
   import type { Health, Status } from './types';
 
@@ -11,14 +12,10 @@
   // перестройки страницы: меняются только числа (размеры плиток и строк заданы заранее).
   let { status, reload }: { status: Status; reload: () => void } = $props();
   let copied = $state(false);
-  let people = $state<number | null>(null);
 
   $effect(() => {
     const t = setInterval(() => document.visibilityState === 'visible' && reload(), 5000);
     return () => clearInterval(t);
-  });
-  $effect(() => {
-    api<unknown[]>('/api/admin/users').then((u) => (people = u.length), () => {});
   });
 
   let health = $state<Health | null>(null);
@@ -145,28 +142,7 @@
   </div>
 </section>
 
-<div class="tiles">
-  <div class="tile">
-    <span>Фильмы и сериалы</span>
-    <b>{status.titles}</b>
-    <small>на сайте сейчас</small>
-  </div>
-  <div class="tile">
-    <span>Файлы</span>
-    <b>{status.files}</b>
-    <small>{size(status.size)} на дисках</small>
-  </div>
-  <div class="tile">
-    <span>Зрители</span>
-    <b>{people ?? '…'}</b>
-    <small>аккаунтов, вместе с вами</small>
-  </div>
-  <div class="tile">
-    <span>Смотрят сейчас</span>
-    <b>{status.watching.length}</b>
-    <small>{status.watching.length ? 'человек у экрана' : 'никого'}</small>
-  </div>
-</div>
+<Metrics {status} />
 
 <section class="card pane" aria-label="Состояние">
   <h3><Icon name="check" size={18} /> Состояние</h3>
@@ -330,34 +306,6 @@
   .summary.bad .dot {
     background: var(--danger);
     box-shadow: 0 0 0 6px rgba(255, 92, 108, 0.18);
-  }
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
-    gap: 12px;
-    margin-bottom: 18px;
-  }
-  .tile {
-    display: grid;
-    gap: 2px;
-    min-height: 104px;
-    padding: 16px 18px;
-    border-radius: 18px;
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-  }
-  .tile span {
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .tile b {
-    font-size: 30px;
-    line-height: 1.15;
-    font-variant-numeric: tabular-nums;
-  }
-  .tile small {
-    font-size: 12px;
-    color: var(--faint);
   }
   .pane {
     margin-bottom: 16px;

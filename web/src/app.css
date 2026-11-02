@@ -43,7 +43,9 @@
   --ok: #3ddc97;
   --warn: #ffb84d;
   --danger: #ff5c6c;
-  --radius: 20px;
+  --radius: 24px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
   --radius-sm: 10px;
   --gutter: clamp(16px, 4vw, 56px);
   /* Масштаб макета Rewind (1440 × 900): кадр, плашка и лист ниже растут вместе с окном. */
@@ -58,6 +60,8 @@
   --header: 64px;
   /* Высота нижней панели разделов (одна на всех экранах), чтобы ничего под ней не пряталось. */
   --tabbar: calc(64px + env(safe-area-inset-bottom));
+  /* Ширина колонки слева на компьютере (на телефоне её нет). */
+  --rail: 0px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   color-scheme: dark;
@@ -113,6 +117,37 @@ body {
   overflow-x: clip;
 }
 
+/* Компьютер («Витрина»): все разделы - в шапке сверху, нижней панели нет, шапка выше. */
+@media (min-width: 1001px) {
+  :root {
+    --header: 76px;
+    --tabbar: 0px;
+  }
+}
+
+/* Телефон и планшет: «оболочка». Окно не прокручивается вовсе, а body занимает весь экран и прокручивается
+   само: Safari не прячет свои панели (нет прокрутки страницы), поэтому нижняя панель разделов прибита к краю и не
+   ездит, резиновая прокрутка её не сдвигает, а щипок и двойное касание не масштабируют интерфейс. */
+@media (hover: none) and (pointer: coarse) {
+  html {
+    height: 100%;
+    overflow: hidden;
+    touch-action: pan-x pan-y;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -158,7 +193,7 @@ textarea {
   height: 42px;
   padding: 0 20px;
   /* Кнопки - скруглённые прямоугольники, как «Go to Show» у Apple TV. */
-  border-radius: 14px;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
@@ -487,7 +522,9 @@ select.input option {
 @keyframes loading-orbit { to { transform: translateX(100%); } }
 .no-motion .skeleton::after { animation: none; }
 .page { max-width: 1920px; margin-inline: auto; }
-.btn.primary { background: #000; color: #fff; border: 1px solid #ffffff60; }
+/* «Витрина»: главная кнопка - белая капсула с чёрной надписью. */
+.btn.primary { background: #fff; color: #0a0a0a; border: 1px solid #fff; }
+.btn.primary:hover { background: #fff; filter: brightness(0.9); }
 .btn:focus-visible, .chip:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 ::view-transition-old(root) { animation: nova-page-out 140ms ease both; }
 ::view-transition-new(root) { animation: nova-page-in 220ms cubic-bezier(.2,.8,.2,1) both; }

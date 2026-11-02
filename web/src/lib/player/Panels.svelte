@@ -177,27 +177,27 @@
   {:else if panel === 'quality' && linked}
     <h4>Качество</h4>
     <button role="menuitemradio" aria-checked={srcLevel === -1} class:on={srcLevel === -1} onclick={() => onlevel(-1)}>
-      <Icon name="check" size={16} /> Авто <small>под скорость интернета</small>
+      Авто <small>под скорость интернета</small>
     </button>
     {#each srcLevels as l (l.i)}
       <button role="menuitemradio" aria-checked={srcLevel === l.i} class:on={srcLevel === l.i} onclick={() => onlevel(l.i)}>
-        <Icon name="check" size={16} /> {l.label ?? qualityTier(l.height)}p
+        {l.label ?? qualityTier(l.height)}p
       </button>
     {/each}
   {:else if panel === 'quality'}
     <h4>Качество</h4>
     {#if origOk}
       <button role="menuitemradio" aria-checked={quality === 'orig'} class:on={quality === 'orig'} onclick={() => onquality('orig')}>
-        <Icon name="check" size={16} /> Оригинал
+        Оригинал
         <small>{info.play.height && tier(info.play.height, info.play.width) >= 1440 ? `${heightLabel(tier(info.play.height, info.play.width))}, как в файле` : 'как в файле'}</small>
       </button>
     {/if}
     <button role="menuitemradio" aria-checked={quality === 'auto'} class:on={quality === 'auto'} onclick={() => onquality('auto')}>
-      <Icon name="check" size={16} /> Авто <small>под скорость интернета</small>
+      Авто <small>под скорость интернета</small>
     </button>
     {#each ladder as l (l)}
       <button role="menuitemradio" aria-checked={quality === l} class:on={quality === l} onclick={() => onquality(l)}>
-        <Icon name="check" size={16} /> {heightLabel(l)}{#if l > 1080}<small>перекодирование, нагружает компьютер</small>{/if}
+        {heightLabel(l)}{#if l > 1080}<small>перекодирование, нагружает компьютер</small>{/if}
       </button>
     {/each}
   {/if}

@@ -56,15 +56,34 @@
     display: block;
     aspect-ratio: 16 / 9;
     margin-bottom: 8px;
-    border-radius: 12px;
+    border-radius: 18px;
     overflow: hidden;
     background: var(--tint);
     box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.9);
-    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.45s var(--ease);
+  }
+  .art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1.5px #ffffff66;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
   }
   .tile:hover .art,
   .wide:focus-visible .art {
-    transform: scale(1.04);
+    transform: translateY(-5px) scale(1.02);
+  }
+  .tile:hover .art::after,
+  .wide:focus-visible .art::after {
+    opacity: 1;
+  }
+  .wide:active .art {
+    transform: scale(0.97);
+    transition-duration: 0.12s;
   }
   .wide:focus-visible {
     outline: none;

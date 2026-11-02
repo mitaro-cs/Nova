@@ -1,22 +1,20 @@
 <script lang="ts">
   import { motionOn } from '$lib/motion';
+  import { logoBox, logoPaths, longestSubpath } from './introLogo';
 
-  // Заставка при входе в сервис (вариант «Стена постеров», выбор владельца): кадры слетаются на экран и
-  // складываются в стену, из неё проявляется NOVA, стена гаснет и сам чёрный экран плавно уходит.
-  // Идёт около 4,5 секунд. Постеры - со стены входа (`/api/site/wall`, без входа); их ещё нет или
-  // сайт не ответил - цветные плитки. Только прозрачность и сдвиг (их считает видеокарта): без
-  // размытия и без анимации самой страницы, иначе на слабом компьютере заставка «лагала». Раз за
-  // сессию вкладки; анимации выключены - сразу. Клики не держит (pointer-events: none).
+  // Заставка при входе в сервис (выбор владельца, 2 ноября): на чёрном светящейся линией рисуется контур
+  // нашего знака, заливается, по нему проходит свет, ниже проявляется NOVA; всё это чуть-чуть «дышит»
+  // (медленный наезд), в конце экран плавно уходит. Идёт 5,25 секунды. Знак берётся из `/logo.svg`
+  // (в сборку не входит), не загрузился - заставки нет. Только прозрачность и сдвиг (их считает
+  // видеокарта): без размытия и фильтров. Раз за сессию вкладки; анимации выключены - сразу. Клики не
+  // держит (pointer-events: none).
   const KEY = 'nova-intro';
   const LETTERS = ['N', 'O', 'V', 'A'];
-  const TOTAL = 4500;
-  const TILES = Array.from({ length: 18 }, (_, i) => i);
-  // Откуда слетается каждая плитка (px) и оттенок заглушки.
-  const XS = [-90, 70, -60, 100, -110, 60, 80, -70, 120, -50, 90, -100, 50, -120, 70, -60, 110, -80];
-  const YS = [-60, 80, 70, -90, 50, -70, -50, 90, -40, 70, -80, 40, 90, -60, -90, 50, -40, 80];
-  const HUES = [8, 205, 40, 140, 285, 340];
+  const TOTAL = 5250;
   let show = $state(false);
-  let posters = $state<string[]>([]);
+  let d = $state('');
+  let box = $state({ w: 100, h: 50.91 });
+  let len = $state(400);
 
   $effect(() => {
     let seen = false;
@@ -28,39 +26,48 @@
     }
     // Автотесты (Playwright) - без заставки: она на пару секунд закрывает страницу от проверок вёрстки.
     if (seen || !motionOn() || navigator.webdriver) return;
-    show = true;
-    const t = setTimeout(() => (show = false), TOTAL);
-    return () => clearTimeout(t);
-  });
-
-  $effect(() => {
-    if (!show) return;
     let live = true;
-    fetch('/api/site/wall', { headers: { 'X-Fsfy': '1' } })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: string[]) => live && (posters = list), () => {});
-    return () => (live = false);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    fetch('/logo.svg')
+      .then((r) => (r.ok ? r.text() : ''))
+      .then((svg) => {
+        const paths = logoPaths(svg);
+        if (!live || !paths.length) return;
+        d = paths.join(' ');
+        len = longestSubpath(d);
+        box = logoBox(svg) ?? box;
+        show = true;
+        timer = setTimeout(() => (show = false), TOTAL);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   });
 </script>
 
 {#if show}
   <div class="intro" aria-hidden="true">
-    <div class="wall">
-      {#each TILES as i (i)}
-        <span class="tile" style:--x="{XS[i]}px" style:--y="{YS[i]}px" style:--d={(i % 6) + Math.floor(i / 6)} style:--h={HUES[i % 6]}>
-          {#if posters.length}
-            <img
-              src={posters[(i * 5) % posters.length]}
-              alt=""
-              decoding="async"
-              onload={(e) => e.currentTarget.classList.add('on')}
-            />
-          {/if}
-        </span>
-      {/each}
-    </div>
-    <div class="word">
-      {#each LETTERS as l, i (i)}<span style:--i={i}>{l}</span>{/each}
+    <div class="glow"></div>
+    <div class="drift">
+      <svg class="mark" viewBox="0 0 {box.w} {box.h}" style:--len="{len}px">
+        <defs>
+          <clipPath id="intro-clip"><path {d} clip-rule="evenodd" /></clipPath>
+          <linearGradient id="intro-sweep" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stop-color="#8cbeff" stop-opacity="0" />
+            <stop offset="0.5" stop-color="#8cbeff" stop-opacity="0.95" />
+            <stop offset="1" stop-color="#8cbeff" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <path class="halo" {d} />
+        <path class="line" {d} />
+        <path class="fill" {d} fill-rule="evenodd" />
+        <g clip-path="url(#intro-clip)"><rect class="sweep" x="-30" y="-2" width="30" height={box.h + 4} fill="url(#intro-sweep)" /></g>
+      </svg>
+      <div class="word">
+        {#each LETTERS as l, i (i)}<span style:--i={i}>{l}</span>{/each}
+      </div>
     </div>
   </div>
 {/if}
@@ -75,78 +82,118 @@
     background: #000;
     pointer-events: none;
     will-change: opacity;
-    animation: intro-out 0.9s ease-in-out 3.5s both;
+    animation: intro-out 0.5s cubic-bezier(0.45, 0, 0.55, 1) 4.75s both;
   }
-  .wall {
+  .glow {
     position: absolute;
     inset: 0;
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    grid-template-rows: repeat(3, minmax(0, 1fr));
-    gap: 2px;
-    animation: wall-out 0.9s ease-in 2.4s both;
+    background: radial-gradient(ellipse 55% 60% at 50% 46%, rgba(120, 160, 255, 0.2), rgba(90, 120, 220, 0.07) 50%, transparent 75%);
+    animation: glow-in 2.4s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
   }
-  @media (max-width: 640px) {
-    .wall {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      grid-template-rows: repeat(6, minmax(0, 1fr));
-    }
-  }
-  .tile {
+  .drift {
     position: relative;
-    display: block;
-    overflow: hidden;
-    background: hsl(var(--h) 42% 30%);
-    will-change: transform, opacity;
-    animation: tile 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    animation-delay: calc(var(--d) * 80ms);
+    display: grid;
+    justify-items: center;
+    gap: clamp(18px, 4.5vw, 56px);
+    will-change: transform;
+    animation: drift 5.25s cubic-bezier(0.37, 0, 0.63, 1) both;
   }
-  .tile img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    opacity: 0;
-    transition: opacity 0.4s;
+  .mark {
+    width: clamp(240px, 42vw, 640px);
+    height: auto;
+    overflow: visible;
   }
-  .tile img:global(.on) {
-    opacity: 1;
+  .line,
+  .halo {
+    fill: none;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    stroke-dasharray: var(--len) calc(var(--len) * 3);
+    stroke-dashoffset: var(--len);
+    animation: draw 1.8s cubic-bezier(0.65, 0, 0.35, 1) 0.35s both;
+  }
+  .line {
+    stroke: #fff;
+    stroke-width: 0.26;
+    animation-name: draw, line-out;
+    animation-duration: 1.8s, 1.1s;
+    animation-delay: 0.35s, 1.7s;
+    animation-fill-mode: both, both;
+  }
+  .halo {
+    stroke: #96b9ff;
+    stroke-width: 1.1;
+    opacity: 0.22;
+    animation-name: draw, halo-out;
+    animation-duration: 1.8s, 1.1s;
+    animation-delay: 0.35s, 1.7s;
+    animation-fill-mode: both, both;
+  }
+  .fill {
+    fill: #fff;
+    will-change: opacity;
+    animation: fill-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1.7s both;
+  }
+  .sweep {
+    will-change: transform;
+    animation: sweep 1.1s cubic-bezier(0.65, 0, 0.35, 1) 2.4s both;
   }
   .word {
-    position: relative;
     display: flex;
-    gap: 0.06em;
+    gap: 0.42em;
     color: #fff;
-    font-size: clamp(48px, 8vw, 104px);
-    font-weight: 800;
+    font-size: clamp(22px, 3.9vw, 52px);
+    font-weight: 700;
     line-height: 1;
-    text-shadow: 0 2px 28px rgba(0, 0, 0, 0.7);
   }
   .word span {
     display: inline-block;
     will-change: transform, opacity;
-    animation: letter 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    animation-delay: calc(1.6s + var(--i) * 100ms);
+    animation: letter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(2.6s + var(--i) * 100ms);
   }
-  @keyframes tile {
+  @keyframes draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes line-out {
+    to {
+      opacity: 0.45;
+    }
+  }
+  @keyframes halo-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes fill-in {
     from {
       opacity: 0;
-      transform: translate(var(--x), var(--y)) scale(1.5);
+    }
+  }
+  @keyframes sweep {
+    from {
+      transform: translateX(0);
     }
     to {
-      opacity: 0.55;
+      transform: translateX(160px);
     }
   }
   @keyframes letter {
     from {
       opacity: 0;
-      transform: translateY(16px);
+      transform: translateY(14px);
     }
   }
-  @keyframes wall-out {
-    to {
+  @keyframes glow-in {
+    from {
       opacity: 0;
+    }
+  }
+  @keyframes drift {
+    to {
+      transform: scale(1.045);
     }
   }
   @keyframes intro-out {

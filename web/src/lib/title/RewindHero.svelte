@@ -5,6 +5,7 @@
   import { localized } from '$lib/localized.svelte';
   import { artSet, artW, placeholder } from '$lib/ui/art';
   import Icon from '$lib/ui/Icon.svelte';
+  import { posterLetterboxed } from '$lib/ui/letterbox';
 
   // Верх страницы фильма на компьютере - по макету Rewind: кадр из фильма на весь экран, слева
   // постер с «Смотреть», рядом название, «год | длительность», слоган, описание и жанры, справа -
@@ -54,6 +55,12 @@
 
   // Кадр - в полном разрешении: IMDb отдаёт его набором ширин, свой - 1920 px.
   const set = $derived(artSet(art));
+  // Постер - широкий кадр на ровных полосах: вместо него плитка с названием (см. letterbox.ts).
+  let boxed = $state(false);
+  $effect(() => {
+    void poster;
+    boxed = false;
+  });
 </script>
 
 <section class="rwh rw">
@@ -71,8 +78,8 @@
   </div>
 
   <div class="stage">
-    <div class="poster" style:background={poster ? undefined : placeholder(title)}>
-      {#if poster}<img use:fadeIn src={artW(poster, 640)} alt={title} width="460" height="690" decoding="async" />{:else}<span>{title}</span>{/if}
+    <div class="poster" style:background={poster && !boxed ? undefined : placeholder(title)}>
+      {#if poster && !boxed}<img use:fadeIn src={artW(poster, 640)} alt={title} width="460" height="690" decoding="async" onload={(e) => (boxed = posterLetterboxed(e.currentTarget as HTMLImageElement))} />{:else}<span>{title}</span>{/if}
     </div>
     <div class="text">
       <h1 use:fitTitle={title}>{title}</h1>
@@ -481,7 +488,7 @@
       grid-template-columns: 31% minmax(0, 1fr);
       grid-template-areas:
         'poster text'
-        'go text';
+        'go go';
       column-gap: 14px;
       row-gap: 12px;
       align-items: start;
@@ -514,11 +521,15 @@
     .go {
       margin-top: 0;
     }
+    /* Кнопка на всю ширину, надпись в одну строку: «Подготавливаем просмотр…» не лезет в узкую колонку. */
     .watch,
     .go :global(.rw-watch) {
-      min-height: 36px;
-      padding: 4px 8px;
-      font-size: 13px;
+      min-height: 44px;
+      padding: 4px 16px;
+      font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .pills,
     .plate {

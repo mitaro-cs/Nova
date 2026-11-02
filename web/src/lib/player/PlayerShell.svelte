@@ -569,7 +569,39 @@
     }
   }
 
+  const desktop = () => !!(window as Window & { __NOVA_DESKTOP__?: boolean }).__NOVA_DESKTOP__;
+
+  // Окно приложения: полный экран - у самого окна (одним шагом), а не у HTML-элемента поверх уже меняющегося окна.
+  // Раньше включались сразу два полных экрана, и WebView2 секунды три держал видео в размерах прежнего окна
+  // (картинка с широкими чёрными полосами), пока слой видео не пересоберётся. Теперь окно меняется один раз, а слой
+  // видео сразу и ещё несколько раз после перехода получает «толчок» пересчёта размера.
+  function setWindowFullscreen(enabled: boolean) {
+    full = enabled;
+    if (enabled) {
+      (box?.querySelector(':focus') as HTMLElement | null)?.blur();
+      poke();
+    }
+    void api('/api/host/fullscreen', { method: 'POST', json: { enabled } }).catch(() => (full = !enabled));
+    refreshVideoLayer();
+  }
+  // Наш собственный «толчок» размера не должен пересчитывать, полный ли экран: окно ещё могло не успеть измениться.
+  let nudging = false;
+  function refreshVideoLayer() {
+    for (const ms of [60, 350, 900, 1800, 3000]) {
+      setTimeout(() => {
+        const v = video;
+        if (!v) return;
+        v.style.width = 'calc(100% - 0.5px)';
+        requestAnimationFrame(() => requestAnimationFrame(() => (v.style.width = '')));
+        nudging = true;
+        window.dispatchEvent(new Event('resize'));
+        nudging = false;
+      }, ms);
+    }
+  }
+
   function fullscreen() {
+    if (desktop()) return setWindowFullscreen(!full);
     if (document.fullscreenElement) document.exitFullscreen();
     else if (box?.requestFullscreen) box.requestFullscreen().catch(() => {});
     else {
@@ -625,6 +657,7 @@
       const room = await api<{ id: string }>('/api/rooms', { method: 'POST', json: { ...(src?.linkId ? { linkId: src.linkId } : { fileId }), position: time } });
       video?.pause();
       if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      if (full && desktop()) setWindowFullscreen(false);
       await goto(`/room/${room.id}`);
     } catch {
       say('Не удалось начать совместный просмотр');
@@ -749,6 +782,7 @@
       case 'escape':
         // Esc не выводит окно из полноэкранного режима: закрывает меню, иначе - назад в сервис.
         if (panel) panel = '';
+        else if (full && desktop()) setWindowFullscreen(false);
         else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         else void back();
         break;
@@ -797,7 +831,13 @@
       nativeFullscreen(full);
     };
     document.addEventListener('fullscreenchange', fs);
+    // Окно приложения могли вывести из полного экрана и снаружи (F11, системная кнопка): сверяем с размером экрана.
+    const sync = () => {
+      if (native && !nudging) full = innerWidth >= screen.width - 1 && innerHeight >= screen.height - 1;
+    };
+    window.addEventListener('resize', sync);
     return () => {
+      window.removeEventListener('resize', sync);
       document.removeEventListener('fullscreenchange', fs);
       if (full) nativeFullscreen(false);
     };

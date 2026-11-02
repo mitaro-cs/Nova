@@ -442,7 +442,7 @@
     if (first) return { label: resumeAt ? 'Продолжить' : 'Смотреть', href: `/watch/link/${first.id}`, note: resumeAt ? left(resumeAt.position, resumeAt.duration) : undefined };
     const found = firstFound;
     if (found) return { label: 'Смотреть', onclick: () => playFound(found) };
-    if (sourcePending) return { label: 'Подготавливаем просмотр…', disabled: true };
+    if (sourcePending) return { label: 'Готовим просмотр…', disabled: true };
     return { label: 'Найти на другом источнике', onclick: () => (finding = true) };
   });
 </script>
@@ -458,7 +458,7 @@
   {:else if firstFound}
     <button class="btn white {cls}" onclick={() => playFound(firstFound)}><Icon name="play" size={16} /> Смотреть</button>
   {:else if sourcePending}
-    <button class="btn white {cls}" disabled><Icon name="search" size={16} /> Подготавливаем просмотр…</button>
+    <button class="btn white {cls}" disabled><Icon name="search" size={16} /> Готовим просмотр…</button>
   {:else}
     <button class="btn white {cls}" disabled={!d} onclick={() => (finding = true)}><Icon name="search" size={16} /> Найти на другом источнике</button>
   {/if}

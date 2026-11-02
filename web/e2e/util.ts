@@ -32,7 +32,9 @@ export async function expectClean(page: Page, what: string) {
   const problems = await page.evaluate(() => {
     const out: string[] = [];
     const W = document.documentElement.clientWidth;
-    if (document.documentElement.scrollWidth > W + 1) {
+    // На телефоне и планшете прокручивается body (оболочка), на компьютере - окно.
+    const scrollW = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
+    if (scrollW > W + 1) {
       // Кто распирает: самый глубокий элемент за правым краем без прокручиваемого предка.
       const culprits = [...document.body.querySelectorAll('*')].filter((e) => {
         if (e.getBoundingClientRect().right <= W + 1) return false;
@@ -42,7 +44,7 @@ export async function expectClean(page: Page, what: string) {
         return ![...e.children].some((c) => c.getBoundingClientRect().right > W + 1);
       });
       const who = culprits.slice(0, 3).map((e) => `<${e.tagName.toLowerCase()} class="${e.getAttribute('class') ?? ''}">`);
-      out.push(`страница шире экрана: ${document.documentElement.scrollWidth} > ${W} (${who.join(', ')})`);
+      out.push(`страница шире экрана: ${scrollW} > ${W} (${who.join(', ')})`);
     }
 
     const visible = (el: Element) => {

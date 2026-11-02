@@ -67,14 +67,16 @@ test('F скрывает оболочку, внешние серии перек�
   await page.waitForFunction(()=>!!document.querySelector('video')?.duration);
   await page.locator('video').evaluate(async(v:HTMLVideoElement)=>{v.muted=true;await v.play();});
   await page.keyboard.press('KeyF');
-  await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
+  // В окне приложения полный экран - один, у самого окна: HTML-полного экрана поверх него нет (WebView2 держал видео в
+  // размерах прежнего окна секунды три).
   await expect.poll(()=>native.at(-1)).toBe(true);
+  expect(await page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
   await page.locator('video').evaluate(v=>(window as any).__sameVideo=v);
   await expect(page.getByText('Следующая серия',{exact:true})).toBeVisible();
   await expect(page).toHaveURL(/\/watch\/link\/99002$/, {timeout:12000});
   await expect(player.getByText('Вторая серия',{exact:true})).toBeVisible();
   expect(await page.locator('video').evaluate(v=>v===(window as any).__sameVideo)).toBe(true);
-  expect(await page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
+  expect(native.at(-1)).toBe(true);
   await page.keyboard.press('Escape');
   await expect.poll(()=>native.at(-1)).toBe(false);
 });

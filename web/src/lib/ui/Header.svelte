@@ -1,8 +1,11 @@
 <script lang="ts">
-  import type { Component } from 'svelte';
+  import { untrack, type Component } from 'svelte';
+  import { goto } from '$app/navigation';
   import { page, navigating } from '$app/state';
+  import { tabOf } from '$lib/library';
   import { session } from '$lib/session.svelte';
   import { badges, watchBadges } from '$lib/social/badges.svelte';
+  import { scrolledBy } from '$lib/scroll';
   import Avatar from './Avatar.svelte';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
@@ -29,10 +32,15 @@
   });
 
   $effect(() => {
-    const on = () => (scrolled = window.scrollY > 8);
+    const on = () => (scrolled = scrolledBy() > 8);
     on();
+    // Окно прокручивается на компьютере, body - на телефоне и планшете (оболочка).
     window.addEventListener('scroll', on, { passive: true });
-    return () => window.removeEventListener('scroll', on);
+    document.body.addEventListener('scroll', on, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', on);
+      document.body.removeEventListener('scroll', on);
+    };
   });
 
   $effect(() => {
@@ -48,6 +56,49 @@
     menu = false;
   });
 
+  // Компьютер («Витрина»): вся навигация сверху - знак, разделы текстом с «бегущей» чертой под выбранным, поиск с
+  // фильтром, колокольчик и карточка профиля. Нижней панели на компьютере нет (она остаётся на телефоне и планшете).
+  const NAV: { id: string; to: string; label: string; wide?: boolean }[] = [
+    { id: 'home', to: '/', label: 'Главная' },
+    { id: 'feed', to: '/feed', label: 'Что смотреть' },
+    { id: 'movies', to: '/?tab=movies', label: 'Фильмы' },
+    { id: 'series', to: '/?tab=series', label: 'Сериалы' },
+    { id: 'anime', to: '/?tab=anime', label: 'Аниме', wide: true },
+    { id: 'discover', to: '/discover', label: 'Обзор' },
+    { id: 'my', to: '/my', label: 'Коллекция' },
+  ];
+  const activeNav = $derived(
+    path === '/' ? tabOf(navigationUrl.searchParams) : path.startsWith('/feed') ? 'feed' : path.startsWith('/discover') ? 'discover'
+      : path.startsWith('/my') || path.startsWith('/lists') ? 'my' : null,
+  );
+  // Черта под выбранным разделом: одна на всех, плавно переезжает (только transform и ширина через scaleX).
+  let navEl = $state<HTMLElement>();
+  let ink = $state<{ x: number; w: number } | null>(null);
+  // Первый раз черта встаёт на место сразу (без «заезда» слева), дальше - переезжает плавно.
+  let inkSlides = $state(false);
+  function placeInk() {
+    const on = navEl?.querySelector<HTMLElement>('a.on');
+    const next = on && navEl && on.offsetWidth > 0 ? { x: on.offsetLeft, w: on.offsetWidth } : null;
+    // Только если место и вправду изменилось: иначе запись в `ink` будила бы эффект снова и снова.
+    if (next?.x === ink?.x && next?.w === ink?.w) return;
+    ink = next;
+    if (next && !inkSlides) requestAnimationFrame(() => requestAnimationFrame(() => (inkSlides = true)));
+  }
+  $effect(() => {
+    void activeNav;
+    untrack(placeInk);
+    if (!navEl) return;
+    const ro = new ResizeObserver(placeInk);
+    ro.observe(navEl);
+    void document.fonts?.ready.then(placeInk);
+    return () => ro.disconnect();
+  });
+  let q = $state('');
+  function find(e: SubmitEvent) {
+    e.preventDefault();
+    const v = q.trim();
+    void goto(v ? `/search?q=${encodeURIComponent(v)}` : '/search');
+  }
   const inHome = $derived(path === '/' || path.startsWith('/discover'));
   const inFeed = $derived(path.startsWith('/feed'));
   const inCollection = $derived(path.startsWith('/my') || path.startsWith('/lists'));
@@ -59,7 +110,21 @@
 <header class:scrolled class:home={path === "/"} class:detail={path.startsWith("/title/") || path.startsWith("/ext/")}>
   <a href="/" class="brand" aria-label="На главную"><Logo /></a>
 
+  <nav class="pills" aria-label="Разделы кинотеатра" bind:this={navEl}>
+    {#each NAV as n (n.id)}
+      <a href={n.to} class="sec" class:on={activeNav === n.id} class:wide={n.wide} aria-current={activeNav === n.id ? 'page' : undefined}>{n.label}</a>
+    {/each}
+    {#if ink}<i class="ink" class:slide={inkSlides} aria-hidden="true" style:--x="{ink.x}px" style:--w={ink.w}></i>{/if}
+  </nav>
+
+  <form class="find" role="search" onsubmit={find}>
+    <Icon name="search" size={17} />
+    <input type="search" bind:value={q} placeholder="Поиск фильмов и актёров" aria-label="Быстрый поиск" autocomplete="off" />
+    <a class="tune" href="/search" aria-label="Все фильтры поиска" title="Фильтры"><Icon name="sliders" size={17} /></a>
+  </form>
+
   <div class="right">
+    <a class="round srch" href="/search" aria-label="Поиск" title="Поиск"><Icon name="search" size={21} /></a>
     <button class="round bell" aria-label={news ? `Уведомления: ${news}` : 'Уведомления'} title="Уведомления" aria-expanded={menu} onclick={() => (menu = !menu)}>
       <Icon name="bell" size={22} />{#if news}<i class="dot"></i>{/if}
     </button>
@@ -70,6 +135,12 @@
         </a>
       {/if}
       <a class="round" href="/admin?tab=folders" aria-label="Добавить фильмы" title="Добавить фильмы"><Icon name="plus" size={22} /></a>
+    {/if}
+    {#if profile}
+      <a class="chip" href="/people/{profile.id}" aria-label="Мой профиль" title="Мой профиль">
+        <Avatar avatar={profile.avatar ?? 0} photo={profile.photo} size={30} />
+        <span>{session.me?.user.name}</span>
+      </a>
     {/if}
   </div>
 </header>
@@ -106,6 +177,18 @@
     box-sizing: content-box;
     /* Над героем - только мягкая тень сверху, чтобы кнопки читались на светлом кадре. */
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent);
+    animation: head-in 0.7s var(--ease) both;
+  }
+  /* Над кадром фильма (страница фильма и главная): подложка гуще, чтобы разделы читались на светлом. */
+  header.detail,
+  header.home {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.4) 62%, transparent);
+  }
+  @keyframes head-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
   }
   header::before {
     content: '';
@@ -271,6 +354,169 @@
     right: -10px;
   }
 
+  .pills,
+  .find,
+  .chip {
+    display: none;
+  }
+
+  /* Компьютер («Витрина»): навигация - вся сверху. Разделы текстом, под выбранным - чёрта, которая плавно переезжает;
+     поиск с фильтром, колокольчик и карточка профиля. Нижней панели нет. */
+  @media (min-width: 1001px) {
+    header {
+      display: flex;
+      gap: clamp(14px, 1.8vw, 30px);
+    }
+    .tabs,
+    .srch {
+      display: none;
+    }
+    .brand {
+      flex: none;
+    }
+    .pills {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: clamp(16px, 1.7vw, 30px);
+      height: 100%;
+    }
+    .pills .sec {
+      position: relative;
+      padding: 10px 2px;
+      color: #ffffff94;
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: color 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .pills .sec:hover {
+      color: #fff;
+    }
+    .pills .sec.on {
+      color: #fff;
+    }
+    .pills .wide {
+      display: none;
+    }
+    /* Одна чёрта на всех: двигается и растягивается за выбранным разделом. */
+    .ink {
+      position: absolute;
+      left: 0;
+      bottom: 14px;
+      width: 1px;
+      height: 3px;
+      border-radius: 3px;
+      background: #fff;
+      transform-origin: 0 50%;
+      transform: translateX(var(--x)) scaleX(var(--w));
+      will-change: transform;
+    }
+    .ink.slide {
+      transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .pills .sec:active {
+      transform: scale(0.96);
+    }
+    .find {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      max-width: 360px;
+      min-width: 150px;
+      margin-left: auto;
+      height: 42px;
+      padding: 0 6px 0 16px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: #ffffff14;
+      color: #ffffff94;
+      transition: background 0.25s, border-color 0.25s, color 0.25s, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .find:hover {
+      background: #ffffff1c;
+    }
+    .find:focus-within {
+      border-color: #ffffffa0;
+      background: #ffffff1f;
+      color: #fff;
+      transform: scale(1.015);
+    }
+    .find input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: none;
+      color: #fff;
+      font: inherit;
+      font-size: 14px;
+    }
+    .tune {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      color: #ffffffb0;
+      transition: background 0.2s, color 0.2s;
+    }
+    .tune:hover {
+      background: #ffffff1f;
+      color: #fff;
+    }
+    .right {
+      flex: none;
+    }
+    .round {
+      border: 0;
+      background: #ffffff14;
+      box-shadow: none;
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      transition: background 0.2s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .round:hover {
+      transform: translateY(-1px);
+    }
+    .chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 42px;
+      max-width: 200px;
+      padding: 0 14px 0 5px;
+      border-radius: 999px;
+      background: #ffffff14;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.25s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .chip:hover {
+      background: #ffffff22;
+    }
+    .chip span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+  @media (min-width: 1001px) and (max-width: 1239px) {
+    .chip span {
+      display: none;
+    }
+    .chip {
+      padding: 0 5px;
+    }
+  }
+  @media (min-width: 1280px) {
+    .pills .wide {
+      display: block;
+    }
+  }
+
   @media (max-width: 1240px) {
     .brand :global(.word) {
       display: none;
@@ -290,7 +536,7 @@
     header:not(.home) {
       display: none;
     }
-    .right .round:not(.bell) {
+    .right .round:not(.bell):not(.srch) {
       display: none;
     }
     .brand :global(.logo svg),

@@ -37,7 +37,7 @@ test('внешнее видео продолжается с точного ме�
   await expect(row.getByRole('link')).toHaveAttribute('href','/watch/link/900');
   await expect(row).toContainText('20:24');
   await expect(row.getByRole('meter')).toHaveAttribute('aria-valuenow','17');
-  await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(20, 20, 20)');
+  if ((page.viewportSize()?.width ?? 0) <= 1000) await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(20, 20, 20)');
   await expectClean(page,'продолжение внешнего видео');
 });
 

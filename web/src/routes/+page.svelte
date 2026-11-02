@@ -6,7 +6,7 @@
   import { catalog, loadCatalog } from '$lib/catalog.svelte';
   import PosterRow from '$lib/discover/PosterRow.svelte';
   import { extSheet } from '$lib/discover/sheet.svelte';
-  import type { ExtCard, Marks, ResumeItem } from '$lib/types';
+  import type { Card, ExtCard, Marks, ResumeItem } from '$lib/types';
   import ContinueRow from '$lib/ui/ContinueRow.svelte';
   import Loading from '$lib/ui/Loading.svelte';
   import BrowseGenres from '$lib/ui/BrowseGenres.svelte';
@@ -28,6 +28,7 @@
   $effect(() => {
     loadCatalog();
   });
+
 
   const items = $derived(catalog.items ? ofTab(catalog.items, tab) : null);
   const hero = $derived(items ? featured(items) : []);
@@ -126,7 +127,10 @@
     for (const f of imdb.flatMap((row) => row.items)) if (mine.includes(`x:${f.id}`)) like(t, f.genres.map(genreRu), 3);
     return t;
   });
-  const recommended = $derived(recommend(imdb.flatMap((row) => row.items), taste, (f) => f.mark === 'watched' || f.mark === 'dropped' || !!session.me?.favorites?.includes(`x:${f.id}`), genreRu));  const rewatch = $derived((marks?.watched ?? []).filter(inSection));
+  const recommended = $derived(recommend(imdb.flatMap((row) => row.items), taste, (f) => f.mark === 'watched' || f.mark === 'dropped' || !!session.me?.favorites?.includes(`x:${f.id}`), genreRu));
+  // «Новое на Nova»: что хост добавил последним (только своё, не из ленты).
+  const fresh = $derived((catalog.items ?? []).slice().sort((a, b) => b.addedAt - a.addedAt).slice(0, 12).map((card) => ({ card })));
+  const rewatch = $derived((marks?.watched ?? []).filter(inSection));
 
   // Сетка всей коллекции рисуется частями: сотни карточек разом подтормаживали прокрутку
   // и открытие вкладки. Следующие 48 - когда до конца остаётся экран.
@@ -163,7 +167,7 @@
 <div class="home" class:flat={tab !== 'home' && items !== null && !hero.length} class:homepage={tab === 'home'}>
   <!-- Разделы полосой под шапкой, на всех ширинах. -->
   <nav class="strip" aria-label="Разделы кинотеатра">
-    {#each [['/', 'home', 'Моё кино'], ['/?tab=movies', 'movies', 'Фильмы'], ['/?tab=series', 'series', 'Сериалы'], ['/?tab=anime', 'anime', 'Аниме']] as [to, id, label] (id)}
+    {#each [['/', 'home', 'Главная'], ['/?tab=movies', 'movies', 'Фильмы'], ['/?tab=series', 'series', 'Сериалы'], ['/?tab=anime', 'anime', 'Аниме']] as [to, id, label] (id)}
       <a href={to} class:on={tab === id} aria-current={tab === id ? 'page' : undefined}>{label}</a>
     {/each}
     <a href="/discover">Обзор</a>
@@ -182,7 +186,10 @@
     </div>
   {:else}
     {#if tab === 'home'}
-      {#if showcase.length}<Showcase items={showcase} />{:else if !heroReady}
+      {#if showcase.length}
+        <Showcase items={showcase} />
+
+      {:else if !heroReady}
         <div class="ph-hero wait"><Loading label="Собираем ваш кинотеатр" /></div>
       {:else}
         <section class="welcome">
@@ -192,11 +199,14 @@
           <div class="welcome-actions"><a class="btn primary" href="/discover">Открыть обзор</a><a class="btn" href="/search">Найти фильм</a>{#if session.me?.manage}<a class="btn" href="/admin?tab=folders">Добавить с компьютера</a>{/if}</div>
         </section>
       {/if}
-    {:else if hero.length}<Showcase items={hero.map((card) => ({ card }))} />{/if}
+    {:else if hero.length}
+      <Showcase items={hero.map((card) => ({ card }))} />
+    {/if}
 
     <div class="rows">
       {#if tab === 'home'}
         {#if sectionResumes.length}<ContinueRow items={sectionResumes} />{:else if resumeFailed}{#each rows.filter((r) => r.key === 'continue') as row (row.key)}<Shelf title={row.title} items={row.items} eager droppable />{/each}{/if}
+        {#if fresh.length}<PosterRow title="Новое на Nova" note="свежие добавления" items={fresh} />{/if}
         {#if theme?.items.length}<PosterRow title={theme.title} note={theme.subtitle || 'тема недели'} items={theme.items} />{/if}
         {#if recommended.length}<PosterRow title="Вам может понравиться" note="По любимым жанрам и фильмам" items={recommended} />{/if}
         {#if rewatch.length}<PosterRow title="Хотите пересмотреть?" items={rewatch} />{/if}
@@ -289,6 +299,10 @@
     padding: 0 var(--edge);
   }
   .flat .rows { padding-top: 20px; }
+  /* Компьютер: разделы кинотеатра - в шапке, отдельной полосы нет. */
+  @media (min-width: 1001px) {
+    .home .strip { display: none; }
+  }
   /* Полоса разделов липнет под шапкой. Нижняя и верхняя панели этих разделов не содержат. */
   .strip {
     position: sticky;

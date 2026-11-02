@@ -47,8 +47,8 @@
   --muted: var(--sheet-text-2);
   --faint: var(--sheet-text-3);
   background: var(--sheet);
-  /* Плита - от края до края окна, без рамок и скруглений; поля - внутри. */
-  border-radius: 0;
+  /* Плита - от края до края окна; верхние углы мягко скруглены («Витрина»), поля - внутри. */
+  border-radius: clamp(24px, calc(40 * var(--rw)), 40px) clamp(24px, calc(40 * var(--rw)), 40px) 0 0;
   margin-inline: calc(-1 * var(--gutter));
   padding: calc(8 * var(--rw)) var(--gutter);
 }

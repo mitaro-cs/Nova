@@ -13,40 +13,60 @@ async function offline(page: Page) {
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Разделы', exact: true });
 
-test('одна панель разделов на телефоне, планшете и компьютере', async ({ page }) => {
+const desk = (page: Page) => page.viewportSize()!.width > 1000;
+const top = (page: Page) => page.getByRole('navigation', { name: 'Разделы кинотеатра' });
+/** Перейти в раздел: на телефоне и планшете - нижней панелью, на компьютере - шапкой («Витрина»). */
+async function goTo(page: Page, name: 'Коллекция' | 'Что смотреть' | 'Профиль') {
+  if (!desk(page)) return bar(page).getByRole('link', { name }).click();
+  if (name === 'Профиль') return page.getByRole('link', { name: 'Мой профиль' }).click();
+  return top(page).getByRole('link', { name }).click();
+}
+
+test('разделы: внизу на телефоне и планшете, сверху на компьютере', async ({ page }) => {
   await offline(page);
   await page.goto(url('/'));
-  const links = bar(page).getByRole('link');
-  // У вкладки «Профиль» бывает число (просьбы и сообщения) - название всё равно в тексте.
-  await expect(links).toHaveText([/Главное/, /Что смотреть/, /Профиль/, /Коллекция/, /Поиск/]);
-  await expect(bar(page)).toBeVisible();
-  await expect(bar(page)).toHaveCSS('background-color', 'rgb(20, 20, 20)');
-  // Панель - у нижнего края окна, вкладки на виду.
-  const box = await bar(page).boundingBox();
-  const height = page.viewportSize()!.height;
-  expect(box!.y + box!.height).toBeGreaterThan(height - 2);
-  for (const name of ['Главное', 'Что смотреть', 'Профиль', 'Коллекция', 'Поиск']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
-  // Аватарного меню в шапке больше нет: профиль - вкладка панели.
+  const { width, height } = page.viewportSize()!;
+  if (width > 1000) {
+    // Компьютер («Витрина»): знак, разделы текстом, поиск, колокольчик и профиль - всё в шапке; нижней панели нет.
+    await expect(bar(page)).toBeHidden();
+    const labels = [/Главная/, /Что смотреть/, /Фильмы/, /Сериалы/, ...(width >= 1280 ? [/Аниме/] : []), /Обзор/, /Коллекция/];
+    await expect(top(page).getByRole('link')).toHaveText(labels);
+    await expect(page.getByRole('searchbox', { name: 'Быстрый поиск' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Мой профиль' })).toBeVisible();
+    // Выбранный раздел подчёркнут одной чертой, она стоит под ним.
+    const on = await top(page).locator('a.on').boundingBox();
+    const ink = await top(page).locator('.ink').boundingBox();
+    expect(Math.abs(ink!.x - on!.x)).toBeLessThan(3);
+    expect(Math.abs(ink!.width - on!.width)).toBeLessThan(3);
+  } else {
+    const links = bar(page).getByRole('link');
+    // У вкладки «Профиль» бывает число (просьбы и сообщения) - название всё равно в тексте.
+    await expect(links).toHaveText([/Главное/, /Что смотреть/, /Профиль/, /Коллекция/, /Поиск/]);
+    await expect(bar(page)).toHaveCSS('background-color', 'rgb(20, 20, 20)');
+    const box = await bar(page).boundingBox();
+    expect(box!.y + box!.height).toBeGreaterThan(height - 2);
+    for (const name of ['Главное', 'Что смотреть', 'Профиль', 'Коллекция', 'Поиск']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
+  }
+  // Аватарного меню в шапке больше нет: профиль - ссылка.
   await expect(page.getByRole('button', { name: /^Меню/ })).toHaveCount(0);
 });
 
-test('вкладки панели ведут на свои страницы', async ({ page }) => {
+test('разделы ведут на свои страницы', async ({ page }) => {
   await offline(page);
   await page.goto(url('/'));
-  await bar(page).getByRole('link', { name: 'Коллекция' }).click();
+  await goTo(page, 'Коллекция');
   await expect(page).toHaveURL(/\/my$/);
   await expect(page.getByRole('heading', { name: 'Коллекция', level: 1 })).toBeVisible();
   await expect(page.locator('main').getByRole('link', { name: /Подборки/ })).toBeVisible();
-  await bar(page).getByRole('link', { name: 'Что смотреть' }).click();
+  await goTo(page, 'Что смотреть');
   await expect(page).toHaveURL(/\/feed$/);
-  await bar(page).getByRole('link', { name: 'Профиль' }).click();
+  await goTo(page, 'Профиль');
   await expect(page).toHaveURL(/\/people\/\d+$/);
   // Чаты, подборки и выход - на странице профиля (в меню аватара их больше нет).
   const quick = page.getByRole('navigation', { name: 'Быстрые разделы' });
   await expect(quick.getByRole('link', { name: /Чаты/ })).toBeVisible();
   await expect(quick.getByRole('link', { name: /Подборки/ })).toBeVisible();
 });
-
 test('полоса разделов и кнопки героя - на всех ширинах', async ({ page }) => {
   await offline(page);
   await page.goto(url('/?tab=movies'));
@@ -66,7 +86,8 @@ test('кнопка героя белая, цвета фильма нет', async
   expect(await page.evaluate(() => document.documentElement.getAttribute('style') ?? '')).not.toContain('--film');
 });
 
-test('пустая библиотека: полоса разделов не уезжает под шапку', async ({ page }) => {
+test('пустая библиотека: полоса разделов не уезжает под шапку', async ({ page }, info) => {
+  test.skip(info.project.name === 'desktop', 'на компьютере разделы - в шапке (капсула), отдельной полосы нет');
   await offline(page);
   await page.route('**/api/library', async (route) => {
     const res = await route.fetch();

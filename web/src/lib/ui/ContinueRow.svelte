@@ -84,9 +84,17 @@
     aspect-ratio: 16 / 9;
     overflow: hidden;
     margin-bottom: 8px;
-    border-radius: 16px;
+    border-radius: 18px;
     background: #111;
     box-shadow: 0 18px 40px -22px #000;
+    transition: transform 0.45s var(--ease);
+  }
+  a:hover .art {
+    transform: translateY(-5px);
+  }
+  a:active .art {
+    transform: scale(0.97);
+    transition-duration: 0.12s;
   }
   /* «Кинозал+»: низ кадра темнее - полоса просмотренного читается на любом кадре. */
   .art::after {
@@ -102,10 +110,10 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.3s;
+    transition: transform 0.6s var(--ease);
   }
   a:hover img {
-    transform: scale(1.04);
+    transform: scale(1.06);
   }
   .ph {
     position: absolute;

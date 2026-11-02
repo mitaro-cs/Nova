@@ -57,7 +57,8 @@ async function inspect(page: Page, found: Finding[]) {
     root.style.overflowX = 'visible';
     document.body.style.overflowX = 'visible';
     return {
-      wider: root.scrollWidth - root.clientWidth,
+      // На телефоне и планшете прокручивается body (оболочка), на компьютере - окно.
+      wider: Math.max(root.scrollWidth, document.body.scrollWidth) - root.clientWidth,
       broken: [...document.images]
         .filter((i) => i.complete && i.naturalWidth === 0 && i.currentSrc && visible(i))
         .map((i) => i.currentSrc.slice(-60)),

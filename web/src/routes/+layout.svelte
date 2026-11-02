@@ -1,16 +1,15 @@
 <script lang="ts">
   import '../app.css';
+  import type { Component } from 'svelte';
   import '$lib/ui/rewind.css';
-  import { goto } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+  import { lockZoom, touchShell } from '$lib/scroll';
   import Loading from '$lib/ui/Loading.svelte';
   import { applyMotion } from '$lib/motion';
   import { installDiag } from '$lib/diag';
   import { page, navigating } from '$app/state';
   import Ask from '$lib/ui/Ask.svelte';
   import Header from '$lib/ui/Header.svelte';
-  import Intro from '$lib/ui/Intro.svelte';
-  import Onboarding from '$lib/ui/Onboarding.svelte';
-  import Tour from '$lib/ui/Tour.svelte';
   import RoomByLink from '$lib/links/RoomByLink.svelte';
   import Icon from '$lib/ui/Icon.svelte';
   import Logo from '$lib/ui/Logo.svelte';
@@ -55,6 +54,55 @@
     };
     window.addEventListener('keydown', hold);
     return () => window.removeEventListener('keydown', hold);
+  });
+
+  // Телефон и планшет: масштабировать щипком нельзя, а прокручивается `body` (см. app.css) - SvelteKit этого не
+  // знает, поэтому новую страницу открываем сверху, а по «Назад» возвращаем место, где стояли.
+  $effect(() => lockZoom());
+  // Заставка входа грузится только тем, кто её ещё не видел в этой сессии (бюджет JS главной).
+  let IntroView = $state<Component<any> | null>(null);
+  // Знакомство и экскурсия - тоже не с первым кодом страницы: подгружаются чуть позже, экскурсия - и сразу по событию.
+  let GuideView = $state<Component<any> | null>(null);
+  let TourView = $state<Component<any> | null>(null);
+  const loadTour = () => import('$lib/ui/Tour.svelte').then((m) => (TourView = m.default));
+  $effect(() => {
+    if (!session.me) return;
+    const t = setTimeout(() => {
+      void import('$lib/ui/Onboarding.svelte').then((m) => (GuideView = m.default));
+      void loadTour();
+    }, 1500);
+    // Нажали «Экскурсия» раньше, чем она подгрузилась: догружаем и повторяем событие.
+    const early = () => {
+      if (TourView) return;
+      void loadTour().then(() => setTimeout(() => window.dispatchEvent(new Event('nova-tour')), 60));
+    };
+    window.addEventListener('nova-tour', early);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('nova-tour', early);
+    };
+  });
+  $effect(() => {
+    if (!session.me || navigator.webdriver || IntroView) return;
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem('nova-intro') === '1';
+    } catch {
+      /* без хранилища - покажем */
+    }
+    if (!seen) void import('$lib/ui/Intro.svelte').then((m) => (IntroView = m.default));
+  });
+  const places = new Map<string, number>();
+  const placeOf = (u: URL) => u.pathname + u.search;
+  beforeNavigate(({ from }) => {
+    if (touchShell() && from?.url) places.set(placeOf(from.url), document.body.scrollTop);
+  });
+  afterNavigate(({ type, from, to }) => {
+    if (!touchShell() || !to?.url || (from?.url && from.url.pathname === to.url.pathname)) return;
+    const top = type === 'popstate' ? (places.get(placeOf(to.url)) ?? 0) : 0;
+    document.body.scrollTop = top;
+    // Страница достраивается после перехода: повторяем, пока не доехали до нужного места.
+    if (top) for (const ms of [120, 400, 900]) setTimeout(() => (document.body.scrollTop = top), ms);
   });
 
   // Навигация без искусственной задержки: пока открывается страница, старая лишь тускнеет (мгновенный
@@ -111,9 +159,9 @@
 {#if bare}
   {@render children()}
 {:else if session.me}
-  <Intro />
-  <Onboarding />
-  <Tour />
+  {#if IntroView}<IntroView />{/if}
+  {#if GuideView}<GuideView />{/if}
+  {#if TourView}<TourView />{/if}
   <RoomByLink />
   <Header />
   <main class:leaving>{@render children()}</main>

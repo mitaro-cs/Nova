@@ -77,15 +77,35 @@
     display: block;
     aspect-ratio: 2 / 3;
     margin-bottom: 10px;
-    border-radius: 14px;
+    border-radius: 18px;
     overflow: hidden;
     background: var(--surface);
     box-shadow: 0 14px 30px -16px #000;
-    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.45s var(--ease);
+  }
+  /* Под мышью постер приподнимается, по краю загорается тонкое кольцо (прозрачность - её считает видеокарта). */
+  .art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1.5px #ffffff66;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
   }
   .tile:hover .art,
   .poster:focus-visible .art {
-    transform: scale(1.04);
+    transform: translateY(-6px) scale(1.025);
+  }
+  .tile:hover .art::after,
+  .poster:focus-visible .art::after {
+    opacity: 1;
+  }
+  .poster:active .art {
+    transform: scale(0.97);
+    transition-duration: 0.12s;
   }
   .poster:focus-visible {
     outline: none;
@@ -153,8 +173,8 @@
     position: absolute;
     top: 6px;
     left: 6px;
-    padding: 2px 6px;
-    border-radius: 2px;
+    padding: 2px 8px;
+    border-radius: 8px;
     background: #3bb33b;
     color: #fff;
     font-size: 12px;

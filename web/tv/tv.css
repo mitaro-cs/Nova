@@ -206,9 +206,9 @@ p {
 /* кнопки и ярлыки */
 .btn {
   display: inline-block;
-  padding: 1.1rem 2.6rem;
+  padding: 1.1rem 2.8rem;
   margin-right: 1.2rem;
-  border-radius: 0.9rem;
+  border-radius: 3rem;
   font-size: 1.7rem;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.16);
@@ -255,6 +255,17 @@ p {
 }
 .film {
   height: 74vh;
+}
+/* «Витрина»: баннер главной - скруглённая карточка с полями, а не кадр на весь экран. */
+.hero {
+  margin: 0 4rem;
+  height: 58vh;
+  border-radius: 2.6rem;
+  overflow: hidden;
+}
+.hero .info {
+  left: 3.4rem;
+  bottom: 3.2rem;
 }
 .shade {
   position: absolute;
@@ -351,12 +362,12 @@ p {
   display: block;
   flex: 0 0 auto;
   margin-right: 1.8rem;
-  border-radius: 1rem;
+  border-radius: 1.4rem;
 }
 .card .art {
   position: relative;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 1.4rem;
   background: #1c1c24;
 }
 .card.p {

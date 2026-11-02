@@ -52,3 +52,32 @@ export interface PlayNet {
   stalls: number;
   at: number;
 }
+
+/** `GET /api/admin/metrics`: показатели «Обзора» (библиотека, зрители, активность, диск). */
+export interface Metrics {
+  at: number;
+  library: {
+    movies: number;
+    series: number;
+    episodes: number;
+    /** Суммарная длительность всех видео, секунд. */
+    seconds: number;
+    addedWeek: number;
+    addedMonth: number;
+    hidden: number;
+    resolutions: { q: string; files: number; bytes: number }[];
+    codecs: { codec: string; files: number }[];
+  };
+  people: { users: number; newWeek: number; loginsDay: number; loginsWeek: number; failedWeek: number; activeWeek: number };
+  activity: {
+    /** Две недели, старые первыми: `day` - начало суток (мс Unix), `views` - сколько файлов смотрели, `people` - сколько человек. */
+    days: { day: number; views: number; people: number }[];
+    /** Просмотры по часам суток (24 числа) за месяц. */
+    hours: number[];
+    top: { id: number; title: string; year: number | null; kind: string; viewers: number; finished: number }[];
+  };
+  social: { reviews: number; messages: number; lists: number; friends: number; wishes: number };
+  disk: { db: number; images: number; hls: number; copy: number; cacheOther: number; backups: number; logs: number };
+  /** Сколько копий базы лежит в папке `backups`. */
+  backups: number;
+}
