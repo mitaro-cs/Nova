@@ -344,6 +344,12 @@ pub async fn progress(
     if !(b.position.is_finite() && b.duration.is_finite() && b.position >= 0.0 && b.duration > 0.0) {
         return Err(ApiError::bad("bad_progress", "Неверное место в видео"));
     }
+    store_link_progress(&app, v.profile.id, id, b.position, b.duration)?;
+    Ok(Json(json!({"ok": true})))
+}
+
+/// Записать место профиля в видео по ссылке (и «Смотрю»/«Просмотрел» у фильма из ленты).
+pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration: f64) -> ApiResult<()> {
     let target: Option<(Option<String>, Option<i64>, Option<i64>)> = app.db.with(|c| {
         c.query_row("SELECT ext_id, season, episode FROM links WHERE id = ?", [id], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
@@ -351,7 +357,8 @@ pub async fn progress(
         .optional()
     })?;
     let (ext, season, episode) = target.ok_or_else(ApiError::not_found)?;
-    let (me, now) = (v.profile.id, now_ms());
+    let now = now_ms();
+    let b = ProgressBody { position, duration };
     let done = b.position >= b.duration * 0.95;
     app.db.tx(|c| {
         c.execute(
@@ -377,7 +384,24 @@ pub async fn progress(
         }
         Ok(())
     })?;
-    Ok(Json(json!({"ok": true})))
+    Ok(())
+}
+
+/// Совместный просмотр видео по ссылке: место комнаты - у всех, кто в ней (длина - из ссылки; не знаем - не пишем).
+pub fn save_room_link_place(app: &App, profiles: &[i64], link: i64, position: f64) {
+    if !position.is_finite() || position < 5.0 {
+        return;
+    }
+    let duration: Option<i64> = app
+        .db
+        .with(|c| c.query_row("SELECT duration FROM links WHERE id = ?", [link], |r| r.get(0)).optional())
+        .ok()
+        .flatten()
+        .flatten();
+    let Some(duration) = duration.filter(|d| *d > 0) else { return };
+    for p in profiles {
+        let _ = store_link_progress(app, *p, link, position, duration as f64);
+    }
 }
 
 #[derive(Deserialize)]

@@ -592,26 +592,79 @@ pub async fn save_progress(
         return Err(ApiError::bad("bad_progress", "Неверное время"));
     }
     let f = file_row(&app, &v, id)?;
-    let pos = b.position.min(b.duration);
-    // Досмотрено: начались титры или осталось меньше 7 %.
-    let credits = markers_for(&app, &f).credits;
-    let done = pos >= b.duration * 0.93 || credits.is_some_and(|c| pos >= c);
-    app.db.with(|c| {
-        c.execute(
-            "INSERT INTO progress (profile_id, file_id, position, duration, done, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(profile_id, file_id) DO UPDATE SET position = excluded.position, duration = excluded.duration,
-               done = excluded.done, updated_at = excluded.updated_at",
-            params![v.profile.id, id, pos, b.duration, done, tick_ms()],
-        )
-    })?;
+    let (done, watched) = store_progress(&app, v.profile.id, &f, id, b.position, b.duration)?;
     if let Some(stat) = b.net.as_ref().and_then(NetBody::stat) {
         let mut all = app.playback.lock();
         // Старое (больше 10 минут) - убираем, чтобы карта не росла.
         all.retain(|_, s| stat.at - s.at < 600_000);
         all.insert(v.profile.id, stat);
     }
-    let watched = done && super::catalog::mark_if_finished(&app, v.profile.id, f.title_id)?;
     Ok(Json(json!({"ok": true, "done": done, "watched": watched})))
+}
+
+/// Записать место профиля в файле; вернуть (досмотрено, фильм/сериал стал «Просмотрено»).
+fn store_progress(
+    app: &App,
+    profile: i64,
+    f: &FileRow,
+    file_id: i64,
+    position: f64,
+    duration: f64,
+) -> ApiResult<(bool, bool)> {
+    let pos = position.min(duration);
+    // Досмотрено: начались титры или осталось меньше 7 %.
+    let credits = markers_for(app, f).credits;
+    let done = pos >= duration * 0.93 || credits.is_some_and(|c| pos >= c);
+    app.db.with(|c| {
+        c.execute(
+            "INSERT INTO progress (profile_id, file_id, position, duration, done, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(profile_id, file_id) DO UPDATE SET position = excluded.position, duration = excluded.duration,
+               done = excluded.done, updated_at = excluded.updated_at",
+            params![profile, file_id, pos, duration, done, tick_ms()],
+        )
+    })?;
+    let watched = done && super::catalog::mark_if_finished(app, profile, f.title_id)?;
+    Ok((done, watched))
+}
+
+/// Совместный просмотр: место комнаты - «смотреть дальше» у каждого, кто в ней. Плеер зрителя пишет своё
+/// место сам, но вкладка в фоне или видео, которое ещё не загрузилось, ничего не пишут - сервер
+/// страхует. Длину берём из базы; неизвестна или начало (< 5 с) - не пишем.
+pub fn save_room_place(app: &App, profiles: &[i64], file_id: i64, position: f64) {
+    if profiles.is_empty() || file_id <= 0 || !position.is_finite() || position < 5.0 {
+        return;
+    }
+    let row = app.db.with(|c| {
+        c.query_row(
+            "SELECT f.probe, t.id, t.kind, f.season, f.episode, f.duration
+             FROM files f JOIN titles t ON t.id = f.title_id WHERE f.id = ? AND f.missing = 0",
+            [file_id],
+            |r| {
+                Ok((
+                    FileRow {
+                        path: PathBuf::new(),
+                        probe: r.get::<_, Option<String>>(0)?.and_then(|p| serde_json::from_str(&p).ok()),
+                        title: String::new(),
+                        title_id: r.get(1)?,
+                        kind: r.get(2)?,
+                        season: r.get(3)?,
+                        episode: r.get(4)?,
+                        name: None,
+                        trickplay: None,
+                    },
+                    r.get::<_, Option<f64>>(5)?,
+                ))
+            },
+        )
+        .optional()
+    });
+    let Ok(Some((f, stored))) = row else { return };
+    let Some(duration) = stored.or_else(|| f.probe.as_ref().and_then(|p| p.duration)).filter(|d| *d > 0.0) else {
+        return;
+    };
+    for p in profiles {
+        let _ = store_progress(app, *p, &f, file_id, position, duration);
+    }
 }
 
 pub async fn clear_progress(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {

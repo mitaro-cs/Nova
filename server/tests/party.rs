@@ -253,6 +253,89 @@ async fn exercise_viewers(count: usize) {
     running.shutdown().await;
 }
 
+/// Смотрели вместе: у обоих «смотреть дальше» с места комнаты, даже если плеер гостя ничего не прислал.
+#[tokio::test(flavor = "multi_thread")]
+async fn room_place_is_remembered_for_everyone_in_the_room() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let media = dir.path().join("together.mp4");
+    std::fs::write(&media, vec![1u8; 4096]).unwrap();
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO titles(id,kind,key,title,added_at,updated_at) VALUES(9910,'movie','together','Together',0,0)",
+                [],
+            )?;
+            c.execute(
+                "INSERT INTO files(id,title_id,path,size,mtime,added_at,duration) VALUES(9910,9910,?,4096,0,0,6000)",
+                [media.to_string_lossy().as_ref()],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    assert!(host
+        .send(
+            "POST",
+            "/api/admin/users",
+            json!({"login":"guest","name":"Гость","password":"PartyPass123","role":"viewer"})
+        )
+        .await
+        .status()
+        .is_success());
+    let mut guest = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
+    assert!(guest
+        .send("POST", "/api/auth/login", json!({"login":"guest","password":"PartyPass123"}))
+        .await
+        .status()
+        .is_success());
+    let room = host.send("POST", "/api/rooms", json!({"fileId":9910})).await.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut host_events =
+        Events { response: host.get(&format!("/api/rooms/{room}/events")).await, buffer: String::new() };
+    host_events.event("snapshot").await;
+    let mut guest_events =
+        Events { response: guest.get(&format!("/api/rooms/{room}/events")).await, buffer: String::new() };
+    guest_events.event("snapshot").await;
+    let count = |app: &fsfy::App| -> Vec<f64> {
+        app.db
+            .with(|c| {
+                let mut s = c.prepare("SELECT position FROM progress WHERE file_id = 9910 ORDER BY profile_id")?;
+                let rows = s.query_map([], |r| r.get::<_, f64>(0))?.collect::<Result<Vec<_>, _>>();
+                rows
+            })
+            .unwrap()
+    };
+    assert!(count(&running.app).is_empty());
+    // Хост ставит паузу на 20-й минуте: место появляется у обоих (гость ничего не слал сам).
+    assert!(host
+        .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":1200}))
+        .await
+        .status()
+        .is_success());
+    assert_eq!(count(&running.app), vec![1200.0, 1200.0]);
+    // Начало (первые секунды) - не «смотреть дальше».
+    assert!(guest
+        .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":2}))
+        .await
+        .status()
+        .is_success());
+    assert_eq!(count(&running.app), vec![1200.0, 1200.0]);
+    // Гость закрыл вкладку: его место - там, где комната была в ту минуту (на паузе - то же).
+    assert!(host
+        .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":1500}))
+        .await
+        .status()
+        .is_success());
+    assert_eq!(count(&running.app), vec![1500.0, 1500.0]);
+    drop(guest_events);
+    drop(host_events);
+    running.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn play_link_does_not_wait_for_remote_thumbnail_and_cloudpub_url_survives_offline() {
     let dir = tempfile::tempdir().unwrap();

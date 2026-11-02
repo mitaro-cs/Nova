@@ -47,6 +47,27 @@ fn title_of_file(app: &App, v: &Viewer, file: i64) -> ApiResult<i64> {
         .ok_or_else(ApiError::not_found)
 }
 
+/// «Смотреть дальше» - у каждого в комнате с места комнаты (или только у `only`: вышедшего уже нет в списке).
+pub fn remember(app: &App, id: &str, only: Option<i64>) {
+    let Some((mut who, file, link, position)) = app.rooms.with(id, |r| {
+        let s = r.current();
+        (r.members.keys().copied().collect::<Vec<_>>(), s.file_id, s.link_id, s.position)
+    }) else {
+        return;
+    };
+    if let Some(p) = only {
+        who = vec![p];
+    }
+    save_place(app, &who, file, link, position);
+}
+
+pub fn save_place(app: &App, who: &[i64], file: i64, link: Option<i64>, position: f64) {
+    match link {
+        Some(l) => super::links::save_room_link_place(app, who, l, position),
+        None => super::play::save_room_place(app, who, file, position),
+    }
+}
+
 fn no_room() -> ApiError {
     ApiError::new(StatusCode::NOT_FOUND, "no_room", "Комната закрыта - создайте новую со страницы фильма")
 }
@@ -98,6 +119,8 @@ pub async fn events(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<Strin
     }
     impl Drop for Leave {
         fn drop(&mut self) {
+            // Вышел - своё место сохраняем, пока комната ещё помнит, где он остановился.
+            remember(&self.app, &self.id, Some(self.profile));
             self.app.rooms.leave(&self.id, self.profile);
         }
     }
@@ -151,6 +174,8 @@ pub async fn set_state(
     let who = me(&app, &v)?;
     let name = who["name"].as_str().unwrap_or_default().to_string();
     let st = app.rooms.set_state(&id, file, b.playing, b.position, name).ok_or_else(no_room)?;
+    // Пауза, перемотка, другая серия: у всех в комнате «смотреть дальше» - отсюда.
+    remember(&app, &id, None);
     Ok(Json(json!(st)))
 }
 

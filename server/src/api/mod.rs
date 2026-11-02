@@ -15,8 +15,9 @@ mod previews;
 mod profile;
 mod profiles;
 mod resume;
-mod rooms;
+pub(crate) mod rooms;
 mod social;
+mod stats;
 pub(crate) mod stream_link;
 
 pub use links::backfill_thumbs as backfill_link_thumbs;
@@ -173,6 +174,9 @@ pub fn router(app: Arc<App>) -> Router {
         // управление
         .route("/api/admin/status", get(admin::status))
         .route("/api/admin/health", get(admin::health))
+        .route("/api/admin/metrics", get(stats::metrics))
+        .route("/api/admin/cache/clear", post(stats::clear_cache))
+        .route("/api/admin/backup", post(stats::backup))
         .route("/api/diag/client", post(diag::client))
         .route("/api/admin/settings", get(admin::settings).put(admin::save_settings))
         .route("/api/admin/logins", get(admin::logins))

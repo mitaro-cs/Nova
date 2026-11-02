@@ -18,6 +18,14 @@ use std::sync::Arc;
 
 type Out = ApiResult<Json<Value>>;
 
+/// Путь для показа человеку: у Windows путь из системы бывает с служебным началом `\\?\` - оно ему ничего не говорит.
+fn pretty(path: &str) -> String {
+    match path.strip_prefix(r"\\?\UNC\") {
+        Some(rest) => format!(r"\\{rest}"),
+        None => path.strip_prefix(r"\\?\").unwrap_or(path).to_string(),
+    }
+}
+
 fn ok() -> Out {
     Ok(Json(json!({"ok": true})))
 }
@@ -72,7 +80,7 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
         "watching": watching,
         "canPick": app.host.can_pick(),
         "publicUrl": app.access.public_url(&app),
-        "inbox": app.db.setting("media.inbox"),
+        "inbox": app.db.setting("media.inbox").map(|p| pretty(&p)),
         "import": *app.inbox.state.lock(),
     })))
 }
@@ -97,7 +105,7 @@ pub async fn health(State(app): State<Arc<App>>, _m: Manager) -> Out {
 /// Своя папка для фильмов: создать (если нет) и подключить.
 pub async fn inbox(State(app): State<Arc<App>>, _m: Manager) -> Out {
     let dir = crate::library::inbox::folder(&app).map_err(|e| ApiError::bad("inbox", e.to_string()))?;
-    Ok(Json(json!({"path": dir.display().to_string()})))
+    Ok(Json(json!({"path": pretty(&dir.display().to_string())})))
 }
 
 /// Открыть свою папку в Finder/Проводнике - только в окне на компьютере хоста.
@@ -325,7 +333,7 @@ pub async fn libraries(State(app): State<Arc<App>>, _m: Manager) -> Out {
         let r = st.query_map([], |r| {
             let path: String = r.get(1)?;
             Ok(json!({
-                "id": r.get::<_, i64>(0)?, "exists": std::path::Path::new(&path).is_dir(), "path": path,
+                "id": r.get::<_, i64>(0)?, "exists": std::path::Path::new(&path).is_dir(), "path": pretty(&path),
                 "kind": r.get::<_, String>(2)?, "files": r.get::<_, i64>(3)?, "size": r.get::<_, i64>(4)?,
             }))
         })?;
@@ -1011,4 +1019,16 @@ pub async fn logins(State(app): State<Arc<App>>, _m: Manager) -> Out {
         r.collect()
     })?;
     Ok(Json(json!({"items": items})))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pretty;
+
+    #[test]
+    fn pretty_drops_the_windows_verbatim_prefix() {
+        assert_eq!(pretty(r"\\?\C:\Users\Me\Films"), r"C:\Users\Me\Films");
+        assert_eq!(pretty(r"\\?\UNC\nas\films"), r"\\nas\films");
+        assert_eq!(pretty("/home/me/films"), "/home/me/films");
+    }
 }

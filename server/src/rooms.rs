@@ -206,6 +206,18 @@ impl Rooms {
         self.with(id, |r| r.send(json!({"type": "react", "from": from, "emoji": emoji, "at": now_ms()})))
     }
 
+    /// Где сейчас идущие комнаты: (кто в них, файл, ссылка, место) - чтобы записать «смотреть дальше».
+    pub fn playing_places(&self) -> Vec<(Vec<i64>, i64, Option<i64>, f64)> {
+        let map = self.0.lock();
+        map.values()
+            .filter(|r| r.state.playing && !r.members.is_empty())
+            .map(|r| {
+                let s = r.current();
+                (r.members.keys().copied().collect(), s.file_id, s.link_id, s.position)
+            })
+            .collect()
+    }
+
     /// Закрыть пустые дольше 10 минут.
     pub fn sweep(&self) {
         let now = now_ms();
@@ -213,11 +225,15 @@ impl Rooms {
     }
 }
 
-/// Раз в минуту - убрать брошенные комнаты.
+/// Раз в минуту - убрать брошенные комнаты и записать место тем, кто смотрит (на случай, когда плеер
+/// зрителя молчит: вкладка в фоне, связь с хостом оборвалась).
 pub async fn janitor(app: Arc<crate::App>) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
         app.rooms.sweep();
+        for (who, file, link, position) in app.rooms.playing_places() {
+            crate::api::rooms::save_place(&app, &who, file, link, position);
+        }
     }
 }
 
