@@ -3,6 +3,7 @@
   import { ago, count, size } from '$lib/fmt';
   import { ask } from '$lib/ui/dialogs.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import Inbox from './Inbox.svelte';
   import type { Status } from './types';
 
@@ -85,9 +86,7 @@
       <button type="button" class="btn" onclick={pick}><Icon name="folder" size={16} /> Выбрать…</button>
     {/if}
     <input class="input" bind:value={path} placeholder={navigator.platform.startsWith('Win') ? 'D:\\Фильмы' : '/Users/имя/Movies'} required />
-    <select class="input kind" bind:value={kind} aria-label="Что в папке">
-      {#each Object.entries(KINDS) as [k, l] (k)}<option value={k}>{l}</option>{/each}
-    </select>
+    <Select class="kind" label="Что в папке" bind:value={kind} options={Object.entries(KINDS).map(([value, label]) => ({ value, label }))} />
     <button class="btn primary" disabled={busy || !path}><Icon name="plus" size={16} /> Добавить</button>
   </div>
   {#if error}<p class="error">{error}</p>{/if}
@@ -155,7 +154,7 @@
   .line .input {
     flex: 1 1 260px;
   }
-  .line .kind {
+  .line :global(.kind) {
     flex: 0 1 210px;
   }
   .head {

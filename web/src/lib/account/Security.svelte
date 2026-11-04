@@ -4,14 +4,14 @@
 
   // Вход в два шага (код из приложения-аутентификатора) и последние входы в аккаунт.
   type Login = { ok: boolean; agent: string | null; at: number };
-  let info = $state<{ totp: boolean; logins: Login[] } | null>(null);
+  let info = $state<{ totp: boolean; logins: Login[]; manages?: boolean; manageRemote?: boolean } | null>(null);
   let setup = $state<{ secret: string; uri: string } | null>(null);
   let code = $state('');
   let busy = $state(false);
   let error = $state('');
 
   function load() {
-    api<{ totp: boolean; logins: Login[] }>('/api/me/security').then((r) => (info = r), (e) => (error = errorText(e)));
+    api<NonNullable<typeof info>>('/api/me/security').then((r) => (info = r), (e) => (error = errorText(e)));
   }
   $effect(load);
 
@@ -70,6 +70,14 @@
       </div>
       <span class="state" class:on={info.totp}>{info.totp ? 'Включён' : 'Выключен'}</span>
     </div>
+
+    {#if info.manages}
+      <p class="muted small remote">
+        {#if !info.manageRemote}Управление с других устройств выключено: включается в окне приложения на компьютере - «Управление → Настройки → Безопасность».
+        {:else if info.totp}Управление включено для этого аккаунта на любом устройстве: войдите с паролем и кодом.
+        {:else}Чтобы управлять Nova с телефона и других устройств, включите вход в два шага.{/if}
+      </p>
+    {/if}
 
     {#if setup}
       <ol class="steps">
@@ -139,6 +147,12 @@
   .state.on {
     background: #1d3b2a;
     color: #9ce5b8;
+  }
+  .remote {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--surface-2);
   }
   .steps {
     margin: 0;

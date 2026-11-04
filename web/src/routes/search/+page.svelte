@@ -5,6 +5,7 @@
   import Poster from '$lib/discover/Poster.svelte';
   import type { Card, ExtCard } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
   import Wide from '$lib/ui/Wide.svelte';
   import { untrack } from 'svelte';
@@ -34,6 +35,13 @@
   let sort = $state('relevance');
   let failure = $state('');
   const cache = new Map<string, ExtCard[]>();
+  const RATINGS = [{ value: '', label: 'Любой' }, ...[5, 6, 7, 8, 9].map((n) => ({ value: String(n), label: `${n} и выше` }))];
+  const SORTS = [
+    { value: 'relevance', label: 'По совпадению' },
+    { value: 'rating', label: 'По рейтингу' },
+    { value: 'year', label: 'Сначала новые' },
+    { value: 'title', label: 'По названию' },
+  ];
   const genres = $derived([...new Set([...(items ?? []).flatMap((c) => c.genres), ...(found ?? []).flatMap((c) => c.genres)].map(genreRu))].sort((a,b) => a.localeCompare(b,'ru')));
   function refine<T extends Card | ExtCard>(cards: T[]): T[] {
     const rows = cards.filter((c) => (kind === 'all' || (kind === 'anime' ? isAnime(c) : c.kind === kind)) && (!year || c.year === Number(year)) && (!rating || c.rating != null && c.rating >= Number(rating)) && (!genre || c.genres.some((g) => genreRu(g) === genre)));
@@ -53,7 +61,17 @@
   const CATEGORIES = ['Боевики', 'Комедии', 'Драмы', 'Триллеры', 'Фантастика', 'Ужасы', 'Мелодрамы', 'Детективы', 'Приключения', 'Фэнтези', 'Мультфильмы', 'Криминал', 'Документальные', 'Военные'];
   $effect(() => {
     let live = true;
-    api<{ rows: Pick[] }>('/api/discover').then((f) => { if (live) picks = f.rows.filter((r) => r.items.length && r.items[0].poster).slice(0, 8); }, () => {});
+    api<{ rows: Pick[] }>('/api/discover').then((f) => {
+      if (!live) return;
+      // У подборок часто один и тот же первый фильм: каждой берём первый постер, которого ещё не было.
+      const used = new Set<string>();
+      picks = f.rows.flatMap((r) => {
+        const first = r.items.find((e) => e.poster && !used.has(e.poster));
+        if (!first) return [];
+        used.add(first.poster!);
+        return [{ ...r, items: [first, ...r.items.filter((e) => e !== first)] }];
+      }).slice(0, 8);
+    }, () => {});
     return () => { live = false; };
   });
 
@@ -118,9 +136,9 @@
   </nav>
   <div class="refine" class:open={showFilters} aria-label="Фильтры поиска">
     <label>Год<input type="text" inputmode="numeric" maxlength="4" placeholder="Любой" bind:value={year} /></label>
-    <label>Рейтинг<select aria-label="Рейтинг" bind:value={rating}><option value="">Любой</option>{#each [5,6,7,8,9] as n}<option value={String(n)}>{n} и выше</option>{/each}</select></label>
-    <label>Жанр<select aria-label="Жанр" bind:value={genre}><option value="">Все жанры</option>{#each genres as g}<option value={g}>{g}</option>{/each}</select></label>
-    <label>Порядок<select aria-label="Порядок" bind:value={sort}><option value="relevance">По совпадению</option><option value="rating">По рейтингу</option><option value="year">Сначала новые</option><option value="title">По названию</option></select></label>
+    <label>Рейтинг<Select label="Рейтинг" variant="inline" bind:value={rating} options={RATINGS} /></label>
+    <label>Жанр<Select label="Жанр" variant="inline" bind:value={genre} options={[{ value: '', label: 'Все жанры' }, ...genres.map((g) => ({ value: g, label: g }))]} /></label>
+    <label>Порядок<Select label="Порядок" variant="inline" bind:value={sort} options={SORTS} /></label>
   </div>
   </div>
   {#if failure}<p class="rw-block" role="status">{failure}</p>{/if}
@@ -178,10 +196,14 @@
   .filters button { gap: 7px; }
   .refine { display: flex; flex-wrap: wrap; gap: 12px; }
   .refine label { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); font-size: 12px; min-width: 0; }
-  .refine input, .refine select { background: var(--surface-3); color: #fff; border: 0; padding: 5px; font: inherit; max-width: 160px; }
-  .refine input { width: 65px; }
-  @media(max-width:600px) { .refine { gap: 8px; } .refine label { flex: 1 1 40%; } .refine select { flex: 1; min-width: 0; max-width: 100px; } }
-  @media(max-width:380px) { .refine label { flex-basis: 100%; justify-content: space-between; } .refine select { max-width: 160px; } }
+  .refine input { background: var(--surface-3); color: #fff; border: 0; padding: 5px; font: inherit; max-width: 160px; width: 65px; }
+  /* Телефон: подпись над списком, значение в плашке читается целиком. */
+  @media(max-width:600px) {
+    .refine { gap: 8px; }
+    .refine label { flex: 1 1 40%; flex-direction: column; align-items: stretch; gap: 6px; }
+    .refine label :global(.select.inline) { display: block; width: 100%; }
+    .refine input { width: 100%; max-width: none; box-sizing: border-box; padding: 6px 10px; border-radius: 10px; height: 30px; }
+  }
   .big {
     display: flex;
     align-items: center;
@@ -229,8 +251,10 @@
   .tiles { display: flex; gap: 12px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
   .tiles::-webkit-scrollbar { display: none; }
   .tile { flex: none; width: calc(var(--pw) - 20px); color: #fff; }
-  .cover { display: block; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 4px; background: #1c1c1e; }
-  .cover img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+  /* Постер целиком (2:3), а не квадратный обрезок: названия и лица не режутся. */
+  .cover { display: block; width: 100%; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 18px; background: #1c1c1e; transition: transform .45s var(--ease); }
+  .cover img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+  .tile:hover .cover { transform: translateY(-6px) scale(1.025); }
   .cap { display: -webkit-box; margin-top: 10px; overflow: hidden; font-size: 14px; font-weight: 500; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
   .cats { display: flex; flex-wrap: wrap; gap: 10px; }
   .cats button { height: 46px; padding: 0 20px; border: 0; border-radius: 23px; background: #1c1c1e; color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }

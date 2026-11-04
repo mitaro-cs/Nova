@@ -415,7 +415,8 @@ pub async fn security(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<
         })?;
         r.collect()
     })?;
-    Ok(Json(json!({"totp": totp.is_some(), "logins": logins})))
+    let manage_remote = app.db.setting_or("security.manage_remote", "0") == "1";
+    Ok(Json(json!({"totp": totp.is_some(), "logins": logins, "manages": v.manages(), "manageRemote": manage_remote})))
 }
 
 /// Начать включение: новый ключ (пока не сохранён - только после верного кода).

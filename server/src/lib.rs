@@ -24,6 +24,7 @@ pub mod meta;
 pub mod monitor;
 pub mod names;
 pub mod outbound;
+pub mod own_sites;
 pub mod release;
 pub mod rooms;
 pub mod ruwiki;

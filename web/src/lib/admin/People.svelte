@@ -5,6 +5,7 @@
   import { ask } from '$lib/ui/dialogs.svelte';
   import Icon from '$lib/ui/Icon.svelte';
   import Modal from '$lib/ui/Modal.svelte';
+  import Select from '$lib/ui/Select.svelte';
 
   interface U {
     id: number;
@@ -174,10 +175,7 @@
             {#if isHost}
               <label class="pick">
                 Роль
-                <select class="input role-sel" value={u.role} onchange={(e) => update(u, { role: (e.target as HTMLSelectElement).value })} aria-label="Роль">
-                  <option value="viewer">Зритель</option>
-                  <option value="admin">Администратор</option>
-                </select>
+                <Select variant="sm" fit label="Роль" value={u.role} onchange={(v) => update(u, { role: v })} options={[{ value: 'viewer', label: 'Зритель' }, { value: 'admin', label: 'Администратор' }]} />
               </label>
             {/if}
           </div>
@@ -208,11 +206,11 @@
       <div class="two">
         <label class="field">
           <span>Сколько человек</span>
-          <select class="input" bind:value={inv.uses}><option value="1">Один</option><option value="5">До 5</option><option value="0">Без ограничений</option></select>
+          <Select label="Сколько человек" bind:value={inv.uses} options={[{ value: '1', label: 'Один' }, { value: '5', label: 'До 5' }, { value: '0', label: 'Без ограничений' }]} />
         </label>
         <label class="field">
           <span>Действует</span>
-          <select class="input" bind:value={inv.days}><option value="1">1 день</option><option value="7">Неделю</option><option value="30">Месяц</option><option value="0">Всегда</option></select>
+          <Select label="Действует" bind:value={inv.days} options={[{ value: '1', label: '1 день' }, { value: '7', label: 'Неделю' }, { value: '30', label: 'Месяц' }, { value: '0', label: 'Всегда' }]} />
         </label>
       </div>
       <button class="btn primary">Создать ссылку</button>
@@ -228,7 +226,7 @@
     {#if isHost}
       <label class="field">
         <span>Роль</span>
-        <select class="input" bind:value={nu.role}><option value="viewer">Зритель</option><option value="admin">Администратор - управляет каталогом и людьми</option></select>
+        <Select label="Роль" bind:value={nu.role} options={[{ value: 'viewer', label: 'Зритель' }, { value: 'admin', label: 'Администратор - управляет каталогом и людьми' }]} />
       </label>
     {/if}
     <button class="btn primary">Добавить</button>
@@ -327,11 +325,6 @@
     gap: 4px;
     color: var(--muted);
     cursor: pointer;
-  }
-  .role-sel {
-    width: auto;
-    height: 34px;
-    font-size: 13px;
   }
   .form {
     display: grid;
@@ -448,9 +441,6 @@
     gap: 10px;
     font-size: 13px;
     color: var(--muted);
-  }
-  .pick .input {
-    width: auto;
   }
   .acts {
     display: flex;

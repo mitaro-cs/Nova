@@ -3,6 +3,7 @@
   import type { Card, ExtCard } from '$lib/types';
   import { artW, placeholder } from '$lib/ui/art';
   import QuickMarks from '$lib/ui/QuickMarks.svelte';
+  import { upcomingYear } from '$lib/title/upcoming';
   import { remember } from './sheet.svelte';
 
   // Постер 2:3: оценка плашкой в углу (от 7 - зелёная, ниже - серая), название и год, поверх - быстрые
@@ -22,6 +23,8 @@
       ? { title: local.title, year: local.year, rating: local.rating, poster: local.poster, here: false, kind: local.kind }
       : { title: card!.title, year: card!.year, rating: card!.rating, poster: card!.poster, here: !!card!.local, kind: card!.kind },
   );
+  // Не вышел: плашка «Скоро» на постере и «Скоро · год» вместо одного года.
+  const soon = $derived(!local && (!!card?.soon || !!upcomingYear(card?.release)));
   let replacement = $state<string | null>(null);
   let loaded = $state(false);
   // Запасной адрес тоже не дал картинку: остаётся заглушка с названием, без битого <img>.
@@ -42,9 +45,10 @@
     {#if c.rating}<span class="rate" class:low={c.rating < 7}>{c.rating.toFixed(1)}</span>{/if}
     {#if rank}<span class="rank">{rank}</span>{/if}
     {#if c.here}<span class="here">Есть у нас</span>{/if}
+    {#if soon}<span class="soon">Скоро</span>{/if}
   </span>
   <span class="name">{c.title}</span>
-  {#if c.year}<span class="sub">{c.year}</span>{/if}
+  {#if c.year}<span class="sub">{soon ? `Скоро · ${c.year}` : c.year}</span>{/if}
 {/snippet}
 
 <div class="tile" class:rise={i !== null} style:--i={i}>
@@ -186,5 +190,17 @@
   }
   .here {
     top: 32px;
+  }
+  .soon {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    background: #fff;
+    color: #0a0a0a;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 </style>

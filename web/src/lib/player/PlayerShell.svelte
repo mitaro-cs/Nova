@@ -952,6 +952,7 @@
     {qualityLabel}
     {rate}
     showEpisodes={info?.kind === 'series' && !src}
+    showAudio={(info?.play.audio.length ?? 0) > 1}
     showSubs={!!info?.play.subs.length}
     subsOn={!!subId}
     showQuality={!!info?.hls || (!!src && srcLevels.length > 1)}

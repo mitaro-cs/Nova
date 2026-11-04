@@ -370,8 +370,8 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
     Ok(Json(json!({
         "card": card, "overview": overview, "runtime": runtime, "votes": votes,
         "refreshing": refreshing,
-        "backdrop": img(&x["imdbBackdrop"]).or_else(|| crate::api::img(backdrop.filter(|b| crate::media_meta::is_imdb_art(b) || app.images.path(b).is_some_and(|p| p.is_file())))),
-        "posterLarge": img(&x["poster"]),
+        "backdrop": img(&x["picked"]["backdrop"]).or_else(|| img(&x["imdbBackdrop"])).or_else(|| crate::api::img(backdrop.filter(|b| crate::media_meta::is_imdb_art(b) || app.images.path(b).is_some_and(|p| p.is_file())))),
+        "posterLarge": img(&x["picked"]["poster"]).or_else(|| img(&x["poster"])),
         "tagline": x["tagline"], "age": x["age"], "releaseDate": x["releaseDate"],
         "countries": list("countries"), "languages": list("languages"), "aka": list("aka"),
         "people": people, "gallery": gallery, "similar": similar,
@@ -656,7 +656,8 @@ pub async fn wish(
         if b.value {
             c.execute(
                 "INSERT INTO wishes (profile_id, ext_id, at) VALUES (?, ?, ?)
-                 ON CONFLICT(profile_id, ext_id) DO UPDATE SET at = excluded.at, dismissed_at = NULL",
+                 ON CONFLICT(profile_id, ext_id) DO UPDATE SET at = excluded.at, dismissed_at = NULL,
+                   done_at = NULL, seen_at = NULL",
                 params![v.profile.id, id, now_ms()],
             )
         } else {
@@ -734,7 +735,7 @@ pub async fn wishes(State(app): State<Arc<App>>, m: Manager) -> ApiResult<Json<V
         let mut st = c.prepare(
             "SELECT w.ext_id, COUNT(*), GROUP_CONCAT(p.name, ', '), MAX(w.at) FROM wishes w
              JOIN profiles p ON p.id = w.profile_id
-             WHERE w.dismissed_at IS NULL
+             WHERE w.dismissed_at IS NULL AND w.done_at IS NULL
                AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.imdb_id = w.ext_id AND t.hidden = 0
                  AND EXISTS (SELECT 1 FROM files f WHERE f.title_id = t.id AND f.missing = 0))
              GROUP BY w.ext_id ORDER BY COUNT(*) DESC, MAX(w.at) DESC",
@@ -754,7 +755,7 @@ pub async fn wishes(State(app): State<Arc<App>>, m: Manager) -> ApiResult<Json<V
 pub fn open_wishes(app: &App) -> rusqlite::Result<i64> {
     app.db.with(|c| {
         c.query_row(
-            "SELECT COUNT(DISTINCT w.ext_id) FROM wishes w WHERE w.dismissed_at IS NULL
+            "SELECT COUNT(DISTINCT w.ext_id) FROM wishes w WHERE w.dismissed_at IS NULL AND w.done_at IS NULL
                AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.imdb_id = w.ext_id AND t.hidden = 0
                  AND EXISTS (SELECT 1 FROM files f WHERE f.title_id = t.id AND f.missing = 0))",
             [],
@@ -769,6 +770,52 @@ pub async fn dismiss_wish(State(app): State<Arc<App>>, _m: Manager, Path(id): Pa
         c.execute("UPDATE wishes SET dismissed_at = ? WHERE ext_id = ? AND dismissed_at IS NULL", params![now_ms(), id])
     })?;
     Ok(Json(json!({"ok": true})))
+}
+
+/// Хост добавил фильм и нажал «Выполнено»: просьба закрыта, каждому, кто просил, придёт уведомление.
+pub async fn done_wish(State(app): State<Arc<App>>, _m: Manager, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    let n = app.db.with(|c| {
+        c.execute(
+            "UPDATE wishes SET done_at = ? WHERE ext_id = ? AND dismissed_at IS NULL AND done_at IS NULL",
+            params![now_ms(), id],
+        )
+    })?;
+    Ok(Json(json!({"ok": true, "notified": n})))
+}
+
+/// Зритель открыл уведомление «добавлено» - значок гаснет.
+pub async fn seen_wish(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    app.db.with(|c| {
+        c.execute(
+            "UPDATE wishes SET seen_at = ? WHERE profile_id = ? AND ext_id = ? AND seen_at IS NULL",
+            params![now_ms(), v.profile.id, id],
+        )
+    })?;
+    Ok(Json(json!({"ok": true})))
+}
+
+/// О чём просил этот человек и что уже добавлено: хост нажал «Выполнено» или фильм появился в папке с тем же
+/// IMDb. Пока человек не открыл уведомление - висит на колокольчике.
+pub fn ready_wishes(app: &App, profile: i64) -> rusqlite::Result<Vec<Value>> {
+    let rows: Vec<(String, String, String, bool, Option<i64>)> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT w.ext_id, e.title, e.kind, w.done_at IS NOT NULL,
+                    (SELECT t.id FROM titles t WHERE t.imdb_id = w.ext_id AND t.hidden = 0
+                       AND EXISTS (SELECT 1 FROM files f WHERE f.title_id = t.id AND f.missing = 0)
+                     ORDER BY t.id LIMIT 1)
+             FROM wishes w JOIN ext_titles e ON e.id = w.ext_id
+             WHERE w.profile_id = ?1 AND w.dismissed_at IS NULL AND w.seen_at IS NULL
+             ORDER BY w.at DESC",
+        )?;
+        let r = st.query_map([profile], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?;
+        r.collect()
+    })?;
+    Ok(rows
+        .into_iter()
+        .filter(|(_, _, _, done, local)| *done || local.is_some())
+        .take(20)
+        .map(|(id, title, kind, _, local)| json!({"id": id, "title": title, "kind": kind, "titleId": local}))
+        .collect())
 }
 
 /// Обновить подборки сейчас (хост).

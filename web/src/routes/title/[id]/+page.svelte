@@ -4,6 +4,7 @@
   import { MediaQuery } from 'svelte/reactivity';
   import MobileHero from '$lib/title/MobileHero.svelte';
   import RewindHero from '$lib/title/RewindHero.svelte';
+  import ImdbArt from '$lib/title/ImdbArt.svelte';
   import '$lib/title/rewind-sheet.css';
   import RatingRing from '$lib/title/RatingRing.svelte';
   import Modal from '$lib/ui/Modal.svelte';
@@ -218,6 +219,13 @@
 
   // Обложка и фон - прямо отсюда, без файлов в папке фильма (хост и администраторы).
   let artBusy = $state('');
+  // Выбор картинок с IMDb (окно `ImdbArt`): постеры и кадры, качество на выбор.
+  let imdbArt = $state(false);
+  function artPicked(which: 'poster' | 'backdrop', url: string) {
+    if (!c) return;
+    if (which === 'poster') Object.assign(c, { poster: url, posterLarge: url });
+    else Object.assign(c, { backdrop: url, backdropSmall: null });
+  }
   async function setArt(which: 'poster' | 'backdrop', e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     const f = input.files?.[0];
@@ -248,6 +256,7 @@
 {#if error}
   <div class="page empty"><Icon name="info" size={40} /> {error}</div>
 {:else if t && c}
+  {#if session.me?.manage}<ImdbArt bind:open={imdbArt} base="/api/admin/titles/{c.id}" onpicked={artPicked} />{/if}
   {#if isSeries}
     <MobileHero
       title={c.title}
@@ -294,6 +303,7 @@
           <button class="ib" aria-label="В подборку" title="В подборку" onclick={() => (picking = true)}><Icon name="users" size={16} /><span>В подборку</span></button>
           <button class="ib" aria-label="Обсудить с другом" title="Обсудить с другом" onclick={() => (sharing = true)}><Icon name="share" size={16} /><span>Обсудить</span></button>
           {#if c.status === 'watching'}<button class="ib" aria-label="Больше не смотрю" title="Больше не смотрю" onclick={() => drop(c, c.title)}><Icon name="ban" size={16} /><span>Бросил</span></button>{/if}
+          {#if session.me?.manage}<button class="ib" aria-label="Картинки с IMDb" title="Обложка и фон с IMDb" onclick={() => (imdbArt = true)}><Icon name="image" size={16} /><span>Картинки</span></button>{/if}
         </div>
       {/snippet}
       {#snippet extra()}<FriendsStrip friends={t?.friends ?? []} />{/snippet}
@@ -377,6 +387,7 @@
             <Icon name="image" size={15} /> {artBusy === 'backdrop' ? 'Загружаем…' : 'Фон'}
             <input type="file" accept="image/jpeg,image/png,image/webp" onchange={(e) => setArt('backdrop', e)} hidden />
           </label>
+          <button class="glass" onclick={() => (imdbArt = true)}><Icon name="search" size={15} /> С IMDb</button>
         {/if}
       {/snippet}
       {#snippet under()}
@@ -398,7 +409,7 @@
               <Icon name="heart" size={30} /><span>Нравится</span>
             </button>
             <button class:on={c.status === 'want'} aria-pressed={c.status === 'want'} disabled={c.status === 'watching' || c.status === 'watched'} onclick={() => toggleList(c)}>
-              <Icon name="plus" size={30} /><span>Хочу</span>
+              <Icon name={c.status === 'want' ? 'bookmark' : 'plus'} size={30} /><span>{c.status === 'want' ? 'В планах' : 'Хочу'}</span>
             </button>
           </div>
           <div class="rw-rate"><small>Оценка</small><StarInput value={mine?.stars ?? null} onchange={setStars} size={28} label="Ваша оценка" /></div>
@@ -428,6 +439,7 @@
           <Icon name="image" size={15} /> {artBusy === 'backdrop' ? 'Загружаем…' : 'Фон'}
           <input type="file" accept="image/jpeg,image/png,image/webp" onchange={(e) => setArt('backdrop', e)} hidden />
         </label>
+        <button class="glass" onclick={() => (imdbArt = true)}><Icon name="search" size={15} /> С IMDb</button>
       </div>
     {/if}
     <div class="cinema-stage">{#if c.backdrop ?? c.posterLarge ?? c.poster}<img src={c.backdrop ?? c.posterLarge ?? c.poster} alt="" />{/if}</div>

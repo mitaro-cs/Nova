@@ -128,7 +128,20 @@ pub fn stats(app: &App, id: i64, now: i64) -> ApiResult<Value> {
             format!("{:04}-{:02}", m / 12, m % 12 + 1)
         })
         .collect::<Vec<_>>();
+    // «Смотрит больше, чем N% зрителей»: сравнение по времени с сервиса среди тех, у кого оно есть.
+    // Меньше трёх других зрителей - сравнивать не с кем, доли нет.
+    let (others, fewer): (i64, i64) = app.db.with(|c| {
+        c.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(m < ?1), 0) FROM (
+               SELECT SUM(MIN(position, duration)) / 60.0 AS m FROM progress WHERE profile_id != ?2
+               GROUP BY profile_id HAVING m > 0)",
+            params![minutes, id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+    })?;
+    let better = (minutes > 0.0 && others >= 3).then(|| (fewer as f64 / others as f64 * 100.0).round() as i64);
     Ok(json!({
+        "better": better,
         "hours": ((minutes + external_minutes) / 60.0 * 10.0).round() / 10.0,
         "movies": movies + external_movies, "episodes": episodes + external_episodes, "series": series + external_series, "reviews": reviews, "friends": friends,
         "outside": outside,
@@ -202,8 +215,8 @@ pub struct DecorBody {
     show_activity: Option<bool>,
 }
 
-/// Любимых в личном профиле: фильмов - четыре и сериалов - четыре (отдельно друг от друга).
-pub const MAX_FAVORITES: usize = 4;
+/// Любимых в личном профиле: любых пять фильмов и любых пять сериалов (отдельно друг от друга).
+pub const MAX_FAVORITES: usize = 5;
 /// Любимый режиссёр в личном профиле - один; «нравятся» можно ставить любым актёрам и режиссёрам
 /// (`liked_people`), а любимый - один.
 pub const MAX_DIRECTORS: usize = 1;

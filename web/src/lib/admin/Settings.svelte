@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Catalogs from './Catalogs.svelte';
   import MailSettings from './MailSettings.svelte';
   import NightMode from './NightMode.svelte';
   import { api, errorText, post, put } from '$lib/api';
@@ -6,6 +7,7 @@
   import LoginJournal from './LoginJournal.svelte';
   import ThemeSettings from './ThemeSettings.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import type { ExtCard } from '$lib/types';
 
   interface S {
@@ -92,18 +94,23 @@
 
   <section class="card pane">
     <h3>Сайт</h3>
-    <label class="field"><span>Язык описаний</span><select class="input" value={s.metadataLanguage} onchange={(e) => save({ metadataLanguage: e.currentTarget.value })}><option value="ru">Русский - без английских заглушек</option><option value="source">Разрешить текст на языке источника</option></select></label>
+    <label class="field"><span>Язык описаний</span><Select label="Язык описаний" value={s.metadataLanguage} onchange={(v) => save({ metadataLanguage: v })} options={[{ value: 'ru', label: 'Русский - без английских заглушек' }, { value: 'source', label: 'Разрешить текст на языке источника' }]} /></label>
     <form class="line" onsubmit={(e) => (e.preventDefault(), save({ siteName: s!.siteName }))}>
       <label class="field grow"><span>Название</span><input class="input" bind:value={s.siteName} maxlength="60" /></label>
       <button class="btn">Сохранить</button>
     </form>
     <label class="field">
       <span>Регистрация</span>
-      <select class="input" value={s.registration} onchange={(e) => save({ registration: (e.target as HTMLSelectElement).value })}>
-        <option value="invite">Только по приглашению</option>
-        <option value="open">Открытая - любой, у кого есть адрес</option>
-        <option value="closed">Закрыта - только те, кого добавили вы</option>
-      </select>
+      <Select
+        label="Регистрация"
+        value={s.registration}
+        onchange={(v) => save({ registration: v })}
+        options={[
+          { value: 'invite', label: 'Только по приглашению' },
+          { value: 'open', label: 'Открытая - любой, у кого есть адрес' },
+          { value: 'closed', label: 'Закрыта - только те, кого добавили вы' },
+        ]}
+      />
     </label>
     <label class="check">
       <input type="checkbox" checked={s.downloads} onchange={(e) => save({ downloads: (e.target as HTMLInputElement).checked })} />
@@ -175,7 +182,7 @@
       <label class="field grow"><span>Название</span><input class="input" bind:value={sourceQuery} placeholder="Название фильма или сериала" /></label>
       <button class="btn" disabled={sourceBusy || sourceQuery.trim().length < 2}>Найти</button>
     </form>
-    {#if sourceOptions.length}<label class="field"><span>Выберите из каталога</span><select class="input" value={sourceTitle?.id ?? ''} onchange={(e) => sourceTitle = sourceOptions.find(x => x.id === e.currentTarget.value) ?? null}><option value="">Выберите название</option>{#each sourceOptions as item (item.id)}<option value={item.id}>{item.title} {item.year ?? ''} · {item.kind === 'series' ? 'сериал' : 'фильм'}</option>{/each}</select></label>{/if}
+    {#if sourceOptions.length}<label class="field"><span>Выберите из каталога</span><Select label="Выберите из каталога" value={sourceTitle?.id ?? ''} onchange={(v) => sourceTitle = sourceOptions.find(x => x.id === v) ?? null} options={[{ value: '', label: 'Выберите название' }, ...sourceOptions.map((item) => ({ value: item.id, label: `${item.title} ${item.year ?? ''} · ${item.kind === 'series' ? 'сериал' : 'фильм'}` }))]} /></label>{/if}
     <form class="line" onsubmit={importSource}>
       <label class="field grow"><span>Ссылка на видео или страницу сериала</span><input class="input" type="url" bind:value={sourceUrl} placeholder="https://…" required /></label>
       <button class="btn" disabled={!sourceTitle || !sourceUrl.trim() || sourceBusy}>{sourceBusy ? 'Загружаем…' : 'Добавить и выбрать'}</button>
@@ -192,15 +199,21 @@
     {#if s.sites.length}
       <ul class="sites">
         {#each s.sites as d (d)}
-          <li><Icon name="globe" size={15} /><span>{d}</span><button class="btn sm ghost" aria-label="Убрать {d}" onclick={() => dropSite(d)}><Icon name="close" size={14} /></button></li>
+          <li><Icon name="globe" size={15} /><span>{d}</span>{#if session.me?.user.role === 'host'}<button class="btn sm ghost" aria-label="Убрать {d}" onclick={() => dropSite(d)}><Icon name="close" size={14} /></button>{/if}</li>
         {/each}
       </ul>
     {/if}
-    <form class="line" onsubmit={addSite}>
-      <label class="field grow"><span>Адрес сайта</span><input class="input" bind:value={site} placeholder="kino.example или https://kino.example/film/1" autocomplete="off" /></label>
-      <button class="btn" disabled={!site.trim()}><Icon name="plus" size={14} /> Добавить</button>
-    </form>
+    {#if session.me?.user.role === 'host'}
+      <form class="line" onsubmit={addSite}>
+        <label class="field grow"><span>Адрес сайта</span><input class="input" bind:value={site} placeholder="kino.example или https://kino.example/film/1" autocomplete="off" /></label>
+        <button class="btn" disabled={!site.trim()}><Icon name="plus" size={14} /> Добавить</button>
+      </form>
+    {:else}
+      <p class="muted small">Сайты выбирает только хост.</p>
+    {/if}
   </section>
+
+  <Catalogs />
 
   <section class="card pane">
     <h3>ffmpeg</h3>

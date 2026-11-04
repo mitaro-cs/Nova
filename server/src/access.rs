@@ -413,16 +413,17 @@ impl Access {
         }
         let port = app.ports.0;
         let saved = app.db.setting_or("access.cp.url", "");
-        let url = if !saved.is_empty() {
-            saved.clone()
-        } else {
-            match cp.registered(port).await? {
-                Some(u) => u,
-                None => {
-                    app.access.set(app, gen, "starting", Some("Получаем постоянный адрес в CloudPub…".into()), None);
-                    cp.register(port).await?
-                }
+        // Истина - кабинет CloudPub: адрес там могли сменить, и сохранённый тогда устарел (проверка шла
+        // по старому, не проходила, клиент перезапускался, а зрители видели «сервер недоступен»).
+        let listed = Self::cp_listed(cp, port).await;
+        let mut url = match listed {
+            Ok(Some(u)) => u,
+            _ if !saved.is_empty() => saved.clone(),
+            Ok(None) => {
+                app.access.set(app, gen, "starting", Some("Получаем постоянный адрес в CloudPub…".into()), None);
+                cp.register(port).await?
             }
+            Err(e) => return Err(e),
         };
         if url != saved {
             let _ = app.db.set_setting("access.cp.url", &url);
@@ -461,6 +462,13 @@ impl Access {
                     Some(l) => {
                         if crate::cloudpub::AUTH_ERROR.is_match(&l) {last_err = l; break;}
                         if l.to_lowercase().contains("error") || l.contains("Ошибка") {last_err = l.chars().take(200).collect();}
+                        // Клиент сам пишет, по какому адресу опубликован наш порт.
+                        if let Some(u) = crate::cloudpub::find_registered(&l, port) {
+                            if u != url {
+                                url = Self::cp_changed(app, gen, u);
+                                misses = 0;
+                            }
+                        }
                     }
                     None => logs_open = false,
                 },
@@ -470,7 +478,14 @@ impl Access {
                     let alive = app.http.get(format!("{url}/api/site")).timeout(Duration::from_secs(4)).send().await
                         .is_ok_and(|r|r.status().is_success() && r.headers().get("x-fsfy").is_some_and(|v|v=="1"));
                     if alive {misses=0;online=true;app.access.set(app,gen,"online",None,Some(Some(url.clone())));}
-                    else {misses+=1;if(online && misses>=2)||misses>=3 {app.access.set(app,gen,"retrying",Some("Восстанавливаем соединение; постоянный адрес сохранён".into()),Some(Some(url.clone())));}
+                    else {misses+=1;
+                        // Не сменили ли адрес в кабинете, пока клиент работал: тогда сверяемся с новым, а не рвём связь.
+                        if misses>=2 {
+                            if let Ok(Some(u)) = Self::cp_listed(cp, port).await {
+                                if u != url {url = Self::cp_changed(app, gen, u); misses = 0;}
+                            }
+                        }
+                        if misses>0 && ((online && misses>=2)||misses>=3) {app.access.set(app,gen,"retrying",Some("Восстанавливаем соединение; постоянный адрес сохранён".into()),Some(Some(url.clone())));}
                         if misses>=6 {last_err="Проверка соединения не прошла; перезапускаем клиент с прежним адресом".into();break;}
                     }
                 }
@@ -485,6 +500,26 @@ impl Access {
         let _ = child.wait().await;
         let _ = std::fs::remove_file(cp.pid_file());
         Ok(last_err)
+    }
+
+    /// Адрес нашего порта по списку сервисов в кабинете CloudPub (`clo ls`), не дольше 20 с.
+    async fn cp_listed(cp: &crate::cloudpub::CloudPub, port: u16) -> anyhow::Result<Option<String>> {
+        tokio::time::timeout(Duration::from_secs(20), cp.registered(port))
+            .await
+            .unwrap_or_else(|_| Err(anyhow::anyhow!("CloudPub не показал список сервисов")))
+    }
+
+    /// Адрес сменился (в кабинете CloudPub): запомнить и показать новый в Nova.
+    fn cp_changed(app: &Arc<App>, gen: u64, url: String) -> String {
+        let _ = app.db.set_setting("access.cp.url", &url);
+        app.access.set(
+            app,
+            gen,
+            "starting",
+            Some("Адрес в CloudPub изменился - проверяем новый".into()),
+            Some(Some(url.clone())),
+        );
+        url
     }
 
     /// Вход в CloudPub почтой и паролем или ключом API. Пароль не сохраняется.

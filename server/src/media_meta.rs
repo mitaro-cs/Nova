@@ -193,6 +193,7 @@ pub async fn show_search(app: &App, q: &str) -> anyhow::Result<Vec<String>> {
             votes: None,
             genres: vec![],
             poster_url: s["image"]["original"].as_str().map(String::from),
+            release: None,
         };
         discover::upsert(app, &[item])?;
         ids.push(id.into());

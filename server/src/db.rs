@@ -651,6 +651,20 @@ ALTER TABLE ext_titles ADD COLUMN ru_at INTEGER;
 ALTER TABLE person_names ADD COLUMN orig TEXT;
 CREATE INDEX person_names_orig ON person_names(orig);
 "#,
+    // 27 (alpha 0.7.5): дата выхода фильма ленты (YYYY-MM-DD) - не вышедшие помечаются «Скоро».
+    r#"
+ALTER TABLE ext_titles ADD COLUMN release TEXT;
+"#,
+    // 28 (alpha 0.7.6): администратор вручную отмечает фильм ленты «Ещё не вышел» (дата IMDb не всегда верна).
+    r#"
+ALTER TABLE ext_titles ADD COLUMN soon INTEGER NOT NULL DEFAULT 0;
+"#,
+    // 29 (alpha 0.7.6): хост нажал «Выполнено» у просьбы (`done_at`), зритель открыл уведомление «добавлено»
+    // (`seen_at`). Добавленный в папку фильм с тем же IMDb тоже считается выполненным - без `done_at`.
+    r#"
+ALTER TABLE wishes ADD COLUMN done_at INTEGER;
+ALTER TABLE wishes ADD COLUMN seen_at INTEGER;
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

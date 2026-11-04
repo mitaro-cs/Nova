@@ -1,5 +1,5 @@
 import { expect, test } from './util-test';
-import { expectClean, url } from './util';
+import { choose, expectClean, url } from './util';
 
 const cards = [
   {id:'tt0133093',title:'Матрица',original:'The Matrix',kind:'movie',year:1999,rating:8.7,genres:['Фантастика'],poster:null,local:null,mark:null,wished:false},
@@ -15,10 +15,10 @@ test('русский поиск, фильтры и кэш повторного �
   // Телефон: фильтры за значком справа в поле поиска.
   const tune = page.getByRole('button',{name:'Фильтры',exact:true});
   if (await tune.isVisible()) await tune.click();
-  await page.getByLabel('Рейтинг',{exact:true}).selectOption('8');
+  await choose(page,'Рейтинг','8 и выше');
   await expect(results.getByRole('link')).toHaveCount(1);
   await expect(results).toContainText('Матрица');
-  await page.getByLabel('Рейтинг',{exact:true}).selectOption('');
+  await choose(page,'Рейтинг','Любой');
   await page.getByLabel('Год',{exact:true}).fill('2003');
   await expect(results).toContainText('Перезагрузка');
   await expect(results.getByRole('link')).toHaveCount(1);
@@ -37,7 +37,7 @@ test('внешнее видео продолжается с точного ме�
   await expect(row.getByRole('link')).toHaveAttribute('href','/watch/link/900');
   await expect(row).toContainText('20:24');
   await expect(row.getByRole('meter')).toHaveAttribute('aria-valuenow','17');
-  if ((page.viewportSize()?.width ?? 0) <= 1000) await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(20, 20, 20)');
+  if ((page.viewportSize()?.width ?? 0) <= 1000) await expect(page.locator('nav.tabs')).toHaveCSS('background-color','rgb(0, 0, 0)');
   await expectClean(page,'продолжение внешнего видео');
 });
 

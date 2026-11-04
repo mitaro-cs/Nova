@@ -87,6 +87,36 @@ async fn two_step_login_journal_and_local_management() {
     assert_eq!(anna.json("/api/me").await["manage"], true);
     // Сам себе разрешить управление из интернета администратор не может.
     assert_eq!(anna.send("PUT", "/api/admin/settings", json!({"manageRemote": false})).await.status(), 403);
+
+    // Сайты для видео выбирает только хост: администратор их не меняет, а ссылка с чужого сайта отклоняется.
+    let r = anna.send("PUT", "/api/admin/settings", json!({"sites": ["kino.example"]})).await;
+    assert_eq!(r.status(), 403);
+    assert_eq!(r.json::<Value>().await.unwrap()["error"], "host_only");
+    let r = anna.send("POST", "/api/links", json!({"url": "https://kino.example/film/1"})).await;
+    assert_eq!(r.status(), 400);
+    assert_eq!(r.json::<Value>().await.unwrap()["error"], "unknown_site");
+    assert!(host.send("PUT", "/api/admin/settings", json!({"sites": ["kino.example"]})).await.status().is_success());
+    let r = anna.send("POST", "/api/links", json!({"url": "https://kino.example/film/1"})).await;
+    assert!(r.status().is_success(), "после разрешения хостом ссылка принимается: {}", r.status());
+
+    // Каталоги (сайты с множеством фильмов и сериалов) - тоже только хост; их домен становится «своим сайтом».
+    let items =
+        json!({"items": [{"domain": "https://www.catalog.example/films", "search": "https://catalog.example/?s={q}"}]});
+    let r = anna.send("PUT", "/api/admin/catalogs", items.clone()).await;
+    assert_eq!(r.status(), 403);
+    assert_eq!(r.json::<Value>().await.unwrap()["error"], "host_only");
+    let bad = json!({"items": [{"domain": "catalog.example", "search": "https://evil.example/?s={q}"}]});
+    assert_eq!(host.send("PUT", "/api/admin/catalogs", bad).await.status(), 400, "поиск - только на этом же сайте");
+    let r = host.send("PUT", "/api/admin/catalogs", items).await;
+    assert!(r.status().is_success(), "{}", r.status());
+    let list = host.json("/api/admin/catalogs").await;
+    assert_eq!(list["items"][0]["domain"], "catalog.example");
+    let sites = host.json("/api/admin/settings").await["sites"].clone();
+    assert!(sites.as_array().unwrap().iter().any(|s| s == "catalog.example"), "{sites}");
+    assert_eq!(
+        anna.send("POST", "/api/admin/catalogs/probe", json!({"domain": "catalog.example"})).await.status(),
+        403
+    );
     drop(running);
 }
 
@@ -199,6 +229,7 @@ async fn film_from_discover_in_chat() {
             votes: Some(900_000),
             genres: vec!["Fantasy".into()],
             poster_url: None,
+            release: None,
         }],
     )
     .unwrap();

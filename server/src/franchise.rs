@@ -99,7 +99,7 @@ async fn lookup(http: &reqwest::Client, imdb: &str) -> anyhow::Result<Vec<Group>
 
 const TITLES: &str = r#"query T($ids: [ID!]!) { titles(ids: $ids) {
   id titleText { text } originalTitleText { text } titleType { id isSeries }
-  releaseYear { year } ratingsSummary { aggregateRating voteCount }
+  releaseYear { year } releaseDate { year month day } ratingsSummary { aggregateRating voteCount }
   primaryImage { url } genres { genres { text } }
 } }"#;
 

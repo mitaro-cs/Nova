@@ -61,6 +61,15 @@ pub struct Video {
 }
 
 impl Video {
+    /// Высота для ступеней качества: у «скоупа» 3840×1600 кадр низкий, но это 4K - по ширине (3600+) считаем 2160.
+    pub fn quality_height(&self) -> i64 {
+        if self.width >= 3600 {
+            self.height.max(2160)
+        } else {
+            self.height
+        }
+    }
+
     /// HDR: при перекодировании в обычный H.264 нужен перевод цвета, иначе картинка блёклая.
     pub fn hdr(&self) -> bool {
         matches!(self.transfer.as_str(), "smpte2084" | "arib-std-b67")
@@ -396,6 +405,15 @@ pub async fn trickplay(
 mod tests {
     use super::*;
 
+    #[test]
+    fn scope_4k_counts_as_2160_for_quality_levels() {
+        let v =
+            |w, h| Video { codec: "hevc".into(), width: w, height: h, pix_fmt: String::new(), transfer: String::new() };
+        assert_eq!(v(3840, 1600).quality_height(), 2160);
+        assert_eq!(v(3840, 2160).quality_height(), 2160);
+        assert_eq!(v(1920, 1080).quality_height(), 1080);
+        assert_eq!(v(2560, 1080).quality_height(), 1080);
+    }
     #[test]
     fn reads_tracks() {
         let v = serde_json::json!({

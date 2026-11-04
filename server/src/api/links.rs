@@ -237,8 +237,12 @@ pub async fn import_source(
     }
     let series = card.kind == "series";
     let mut sites = extra_sites(&app);
-    // Администратор явно добавляет адрес: сохраняем домен, чтобы источник работал для зрителей.
+    // Хост явно добавляет адрес: сохраняем домен, чтобы источник работал для зрителей. Администратор сайты
+    // не выбирает - ему такой адрес откажут.
     if !series && parse_with(raw.as_str(), &sites).is_none() {
+        if m.0.role != "host" {
+            return Err(unknown_site_or_bad(&b.url));
+        }
         let domain = raw.host_str().and_then(site_domain).ok_or_else(|| ApiError::bad("bad_link", BAD_LINK))?;
         if !sites.contains(&domain) {
             if sites.len() >= 30 {
@@ -417,6 +421,21 @@ pub struct NewLink {
     episode: Option<i64>,
 }
 
+/// Ссылка с сайта, которого нет в «Своих сайтах» хоста: отдельная ошибка с доменом (хосту окно предложит разрешить его).
+fn unknown_site_or_bad(raw: &str) -> ApiError {
+    let site = Url::parse(raw.trim())
+        .ok()
+        .filter(|u| matches!(u.scheme(), "http" | "https"))
+        .and_then(|u| u.host_str().and_then(site_domain));
+    match site {
+        Some(d) => ApiError::bad(
+            "unknown_site",
+            format!("Сайт {d} хост не разрешил. Разрешает хост: «Управление → Настройки → Свои сайты»"),
+        ),
+        None => ApiError::bad("bad_link", BAD_LINK),
+    }
+}
+
 const BAD_LINK: &str =
     "Такую ссылку не открыть: нужна ссылка на Rutube, VK Видео, YouTube, прямая на .mp4, .webm, .m3u8 \
      или на сайт, который хост добавил в «Управление → Настройки → Свои сайты»";
@@ -492,7 +511,7 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
     {
         return Err(ApiError::bad("bad_episode", "Укажите сезон и номер серии"));
     }
-    let p = parse_with(&b.url, &extra_sites(&app)).ok_or_else(|| ApiError::bad("bad_link", BAD_LINK))?;
+    let p = parse_with(&b.url, &extra_sites(&app)).ok_or_else(|| unknown_site_or_bad(&b.url))?;
     if let Some((season, episode)) = Url::parse(&p.url).ok().as_ref().and_then(crate::lordfilm::episode_target) {
         if b.season != Some(season) || b.episode != Some(episode) {
             return Err(ApiError::bad("bad_episode", "Серия в ссылке не совпадает с выбранной серией"));

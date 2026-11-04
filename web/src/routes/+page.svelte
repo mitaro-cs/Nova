@@ -128,8 +128,6 @@
     return t;
   });
   const recommended = $derived(recommend(imdb.flatMap((row) => row.items), taste, (f) => f.mark === 'watched' || f.mark === 'dropped' || !!session.me?.favorites?.includes(`x:${f.id}`), genreRu));
-  // «Новое на Nova»: что хост добавил последним (только своё, не из ленты).
-  const fresh = $derived((catalog.items ?? []).slice().sort((a, b) => b.addedAt - a.addedAt).slice(0, 12).map((card) => ({ card })));
   const rewatch = $derived((marks?.watched ?? []).filter(inSection));
 
   // Сетка всей коллекции рисуется частями: сотни карточек разом подтормаживали прокрутку
@@ -206,7 +204,6 @@
     <div class="rows">
       {#if tab === 'home'}
         {#if sectionResumes.length}<ContinueRow items={sectionResumes} />{:else if resumeFailed}{#each rows.filter((r) => r.key === 'continue') as row (row.key)}<Shelf title={row.title} items={row.items} eager droppable />{/each}{/if}
-        {#if fresh.length}<PosterRow title="Новое на Nova" note="свежие добавления" items={fresh} />{/if}
         {#if theme?.items.length}<PosterRow title={theme.title} note={theme.subtitle || 'тема недели'} items={theme.items} />{/if}
         {#if recommended.length}<PosterRow title="Вам может понравиться" note="По любимым жанрам и фильмам" items={recommended} />{/if}
         {#if rewatch.length}<PosterRow title="Хотите пересмотреть?" items={rewatch} />{/if}

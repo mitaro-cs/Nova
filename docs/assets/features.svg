@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="348" viewBox="0 0 1280 348" role="img">
+<defs>
+  <style>
+    text { font-family: Inter, 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    .bg { fill: #121215; }
+    .edge { fill: none; stroke: #fff; stroke-opacity: .12; animation: edge 5s ease-in-out infinite; }
+    .card .edge { animation-delay: inherit; }
+    @keyframes edge { 0%,100% { stroke-opacity: .1 } 50% { stroke-opacity: .34 } }
+    .h { font-size: 22px; font-weight: 700; fill: #f6f6f8; }
+    .p { font-size: 15.5px; fill: #a1a1ab; }
+    .ring { transform-box: fill-box; transform-origin: center; animation: ring 2.8s ease-out infinite; }
+    .ring.r2 { animation-delay: 1.4s; }
+    @keyframes ring { 0% { transform: scale(.7); opacity: .9 } 100% { transform: scale(1.35); opacity: 0 } }
+    .beat { transform-box: fill-box; transform-origin: center; animation: beat 2.8s ease-in-out infinite; }
+    @keyframes beat { 0%,100% { transform: scale(1) } 50% { transform: scale(1.14) } }
+    .spin { animation: spin 5s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .b1 { animation: hop 2.6s ease-in-out infinite; } .b2 { animation: hop 2.6s ease-in-out .35s infinite; } .b3 { animation: hop 2.6s ease-in-out .7s infinite; }
+    @keyframes hop { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+    .orbit { animation: spin 6s linear infinite; }
+    .scan { animation: scan 4s ease-in-out infinite alternate; }
+    @keyframes scan { from { transform: translate(-5px, 2px) } to { transform: translate(6px, -3px) } }
+    .sc { animation: sc 2.2s ease-in-out infinite; }
+    @keyframes sc { 0%,100% { transform: translateY(0); opacity: 0 } 50% { transform: translateY(52px); opacity: .8 } }
+    .tick { stroke-dasharray: 1; animation: tick 3.4s ease-in-out infinite; }
+    @keyframes tick { 0% { stroke-dashoffset: 1 } 35%,85% { stroke-dashoffset: 0 } 100% { stroke-dashoffset: 1 } }
+  </style>
+</defs>
+<g transform="translate(8 4)"><g class="card" style="animation-delay:0.00s">
+  <rect class="bg" width="408" height="156" rx="26"/>
+  <rect class="edge" width="408" height="156" rx="26"/>
+  <g transform="translate(66 78)"><circle class="ring" cx="0" cy="0" r="26" fill="none" stroke="#fff" stroke-width="2"/><circle class="ring r2" cx="0" cy="0" r="26" fill="none" stroke="#fff" stroke-width="2"/><path class="beat" d="M-8 -13 L14 0 -8 13z" fill="#fff"/></g>
+  <text class="h" x="120" y="62">Любые файлы</text>
+  <text class="p" x="120" y="92">MP4, MKV, AVI, HEVC -</text>
+  <text class="p" x="120" y="114">плеер сам выберет способ</text>
+</g></g>
+<g transform="translate(444 4)"><g class="card" style="animation-delay:0.55s">
+  <rect class="bg" width="408" height="156" rx="26"/>
+  <rect class="edge" width="408" height="156" rx="26"/>
+  <g transform="translate(66 78)"><g class="spin"><path d="M-22 -4 A22 22 0 0 1 14 -17" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M14 -26 v10 h-10" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 4 A22 22 0 0 1 -14 17" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M-14 26 v-10 h10" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g></g>
+  <text class="h" x="120" y="62">Место везде</text>
+  <text class="p" x="120" y="92">Начали на ноутбуке -</text>
+  <text class="p" x="120" y="114">продолжите с телефона</text>
+</g></g>
+<g transform="translate(880 4)"><g class="card" style="animation-delay:1.10s">
+  <rect class="bg" width="408" height="156" rx="26"/>
+  <rect class="edge" width="408" height="156" rx="26"/>
+  <g transform="translate(66 78)"><g class="b1"><circle cx="-18" cy="-6" r="8" fill="#fff"/><path d="M-32 18 a14 12 0 0 1 28 0z" fill="#fff"/></g><g class="b2"><circle cx="18" cy="-6" r="8" fill="#fff" opacity=".7"/><path d="M4 18 a14 12 0 0 1 28 0z" fill="#fff" opacity=".7"/></g><g class="b3"><circle cx="0" cy="-14" r="9" fill="#fff"/><path d="M-15 12 a15 13 0 0 1 30 0z" fill="#fff"/></g></g>
+  <text class="h" x="120" y="62">Вместе с друзьями</text>
+  <text class="p" x="120" y="92">Комнаты, чат, голос,</text>
+  <text class="p" x="120" y="114">отзывы и общие подборки</text>
+</g></g>
+<g transform="translate(8 188)"><g class="card" style="animation-delay:1.65s">
+  <rect class="bg" width="408" height="156" rx="26"/>
+  <rect class="edge" width="408" height="156" rx="26"/>
+  <g transform="translate(66 78)"><circle r="24" fill="none" stroke="#fff" stroke-width="2.5"/><ellipse rx="10" ry="24" fill="none" stroke="#fff" stroke-width="2" opacity=".7"/><path d="M-24 0 H24 M-20 -12 H20 M-20 12 H20" stroke="#fff" stroke-width="2" opacity=".6" fill="none"/><g class="orbit"><circle cx="30" cy="0" r="4.5" fill="#fff"/></g></g>
+  <text class="h" x="120" y="62">Доступ из интернета</text>
+  <text class="p" x="120" y="92">Постоянная ссылка</text>
+  <text class="p" x="120" y="114">без настройки роутера</text>
+</g></g>
+<g transform="translate(444 188)"><g class="card" style="animation-delay:2.20s">
+  <rect class="bg" width="408" height="156" rx="26"/>
+  <rect class="edge" width="408" height="156" rx="26"/>
+  <g transform="translate(66 78)"><g class="scan"><circle cx="-4" cy="-4" r="17" fill="none" stroke="#fff" stroke-width="3"/><path d="M9 9 L24 24" stroke="#fff" stroke-width="4" stroke-linecap="round"/></g><rect class="sc" x="-26" y="-26" width="52" height="3" rx="1.5" fill="#fff" opacity=".7"/></g>
+  <text class="h" x="120" y="62">Описания сами</text>
+  <text class="p" x="120" y="92">Постеры, сюжет, актёры</text>
+  <text class="p" x="120" y="114">и кадры - с IMDb</text>
+</g></g>
+<g transform="translate(880 188)"><g class="card" style="animation-delay:2.75s">
+  <rect class="bg" width="408" height="156" rx="26"/>
+  <rect class="edge" width="408" height="156" rx="26"/>
+  <g transform="translate(66 78)"><path d="M0 -26 L22 -18 V2 C22 15 11 23 0 28 C-11 23 -22 15 -22 2 V-18z" fill="#ffffff14" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path class="tick" pathLength="1" d="M-9 2 L-2 10 L11 -6" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <text class="h" x="120" y="62">Безопасно</text>
+  <text class="p" x="120" y="92">Argon2id и вход в два шага,</text>
+  <text class="p" x="120" y="114">фильмы остаются у вас</text>
+</g></g>
+</svg>

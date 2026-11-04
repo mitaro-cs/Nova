@@ -1,5 +1,5 @@
 import {expect,test} from './util-test';
-import {url} from './util';
+import {choose,url} from './util';
 
 test('администратор выбирает источник в управлении',async({page})=>{
  let saved: unknown;
@@ -9,7 +9,7 @@ test('администратор выбирает источник в управ
  const section=page.getByRole('region',{name:'Источник для фильма или сериала'});
  await section.getByLabel('Название',{exact:true}).fill('Тестовый фильм');
  await section.getByRole('button',{name:'Найти',exact:true}).click();
- await section.getByLabel('Выберите из каталога').selectOption('tt7654325');
+ await choose(page,'Выберите из каталога',/Тестовый фильм/,section);
  await section.getByLabel('Ссылка на видео или страницу сериала').fill('https://example.com/video.mp4');
  await section.getByRole('button',{name:'Добавить и выбрать'}).click();
  await expect.poll(()=>saved).toEqual({extId:'tt7654325',url:'https://example.com/video.mp4'});

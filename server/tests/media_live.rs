@@ -147,6 +147,7 @@ async fn native_rutube_manifest_segment_and_series_metadata() {
             votes: None,
             genres: vec![],
             poster_url: None,
+            release: None,
         }],
     )
     .unwrap();

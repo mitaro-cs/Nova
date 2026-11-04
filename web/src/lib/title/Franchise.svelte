@@ -44,8 +44,7 @@
     <ol class="strip" bind:this={strips[n]}>
       {#each g.items as card, i (card.id)}
         <li class:here={card.id === imdb}>
-          <span class="no" aria-hidden="true">{i + 1}</span>
-          <Poster {card} />
+          <Poster {card} rank={i + 1} />
           {#if card.id === imdb}<span class="now">Этот фильм</span>{/if}
         </li>
       {/each}
@@ -89,27 +88,6 @@
     display: grid;
     gap: 6px;
     align-content: start;
-  }
-  .no {
-    position: absolute;
-    z-index: 2;
-    top: 8px;
-    left: 8px;
-    min-width: 26px;
-    height: 26px;
-    padding: 0 7px;
-    border-radius: 13px;
-    background: rgba(10, 10, 12, 0.82);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 26px;
-    text-align: center;
-    pointer-events: none;
-  }
-  .here .no {
-    background: #fff;
-    color: #0a0a0a;
   }
   .here :global(.art) {
     outline: 2px solid #fff;

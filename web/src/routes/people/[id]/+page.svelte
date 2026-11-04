@@ -5,6 +5,7 @@
   import { ago, count, plural } from '$lib/fmt';
   import Poster from '$lib/discover/Poster.svelte';
   import PosterRow from '$lib/discover/PosterRow.svelte';
+  import DirectorCard from '$lib/profile/DirectorCard.svelte';
   import FriendButton from '$lib/social/FriendButton.svelte';
   import PosterWall from '$lib/social/PosterWall.svelte';
   import ProfileStats from '$lib/social/ProfileStats.svelte';
@@ -183,19 +184,7 @@
     {#if p.decor.directors.length}
       <section class="rw-block" aria-labelledby="d">
         <h2 class="rw-h2" id="d">Любимый режиссёр</h2>
-        <ul class="dirs">
-          {#each p.decor.directors as d, i (d)}
-            {@const ph = p.decor.directorsInfo?.find((x) => x.name === d)?.photo}
-            <li class="rise" style:--i={i}>
-              <a class="dir" href="/person?name={encodeURIComponent(d)}&role=director">
-                <span class="dph" style:background={ph ? undefined : placeholder(d)}>
-                  {#if ph}<img use:fadeIn src={ph} alt="" loading="lazy" decoding="async" width="96" height="96" />{:else}{d.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}{/if}
-                </span>
-                <span class="dn">{d}</span>
-              </a>
-            </li>
-          {/each}
-        </ul>
+        {#each p.decor.directors as d (d)}<DirectorCard name={d} />{/each}
       </section>
     {/if}
 
@@ -499,9 +488,11 @@
   }
 
   /* ---------- лист с разделами ---------- */
+  /* Лист - от края до края окна (как у всех экранов): по бокам под обложкой нет чёрных полос. */
   .sheet {
-    width: calc(100% - 2 * var(--gutter));
-    margin: 0 auto 64px;
+    width: 100%;
+    margin: 0;
+    padding-bottom: 64px;
   }
   .sheet :global(.rw-h2) {
     display: flex;
@@ -705,7 +696,7 @@
       gap: 10px;
     }
     .sheet {
-      width: calc(100% - 2 * var(--gutter));
+      width: 100%;
     }
   }
 

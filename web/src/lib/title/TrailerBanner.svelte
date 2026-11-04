@@ -14,12 +14,17 @@
     bare = false,
     available = $bindable(false),
     muted = $bindable(true),
-  }: { imdbId: string | null; poster?: string | null; bare?: boolean; available?: boolean; muted?: boolean } = $props();
+    playing = $bindable(false),
+  }: { imdbId: string | null; poster?: string | null; bare?: boolean; available?: boolean; muted?: boolean; playing?: boolean } = $props();
   let root = $state<HTMLElement>();
   let video = $state<HTMLVideoElement>();
   let visible = $state(false);
-  let playing = $state(false);
   let userPaused = false;
+  // Трейлер играет тише обычного (громкость плеера 1): когда звук включают, он не оглушает.
+  const TRAILER_VOLUME = 0.25;
+  $effect(() => {
+    if (video) video.volume = TRAILER_VOLUME;
+  });
   // Чёрные полосы в трейлере уходят за край: наименьшая полоса по трём кадрам (1, 3 и 6 с).
   let zoom = $state(1);
   let bars: number[] = [];
@@ -37,7 +42,9 @@
         const bar = video ? measure(video) : null;
         if (bar === null) return;
         bars.push(bar);
-        if (bars.length >= 2) zoom = zoomFor(Math.min(...bars));
+        // Решаем один раз, по последнему замеру (наименьшая полоса из всех): раньше решение менялось на 3-й и 6-й секунде,
+        // и картинка то приближалась, то отъезжала.
+        if (ms === 6000 && bars.length >= 2) zoom = zoomFor(Math.min(...bars));
       }, ms),
     );
   }
@@ -180,5 +187,5 @@
   {#if available && !bare}<div class="controls"><span>Трейлер</span><button aria-label={playing?'Приостановить трейлер':'Включить трейлер'} onclick={togglePlay}><Icon name={playing?'pause':'play'} size={17}/></button><button aria-label={muted?'Включить звук трейлера':'Выключить звук трейлера'} onclick={toggleSound}><Icon name={muted?'mute':'volume'} size={18}/></button></div>{/if}
 </section>
 <style>
-  .trailer{position:absolute;inset:0;overflow:hidden;background:#000}.trailer.bare{background:transparent}img,video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%}video{opacity:0;transition:opacity .45s ease,transform .6s ease}video.ready{opacity:1}img{transition:opacity .45s ease}.dim{opacity:0}.shade{position:absolute;inset:0;background:linear-gradient(0deg,#000,transparent 30%,#0002);pointer-events:none}.controls{position:absolute;right:var(--gutter);bottom:28px;display:flex;align-items:center;gap:8px;color:#eee}.controls span{font-size:11px;letter-spacing:.08em;margin-right:8px}.controls button{width:38px;height:38px;border:1px solid #ffffff60;border-radius:50%;background:#000b;color:#fff;display:grid;place-items:center;cursor:pointer;transition:background .2s,transform .2s}.controls button:hover{background:#000;transform:scale(1.04)}
+  .trailer{position:absolute;inset:0;overflow:hidden;background:#000}.trailer.bare{background:transparent}img,video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%}video{opacity:0;transition:opacity .45s ease,transform 1.1s cubic-bezier(.22,1,.36,1)}video.ready{opacity:1}img{transition:opacity .45s ease}.dim{opacity:0}.shade{position:absolute;inset:0;background:linear-gradient(0deg,#000,transparent 30%,#0002);pointer-events:none}.controls{position:absolute;right:var(--gutter);bottom:28px;display:flex;align-items:center;gap:8px;color:#eee}.controls span{font-size:11px;letter-spacing:.08em;margin-right:8px}.controls button{width:38px;height:38px;border:1px solid #ffffff60;border-radius:50%;background:#000b;color:#fff;display:grid;place-items:center;cursor:pointer;transition:background .2s,transform .2s}.controls button:hover{background:#000;transform:scale(1.04)}
 </style>

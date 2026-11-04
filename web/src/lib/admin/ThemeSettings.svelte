@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, errorText } from '$lib/api';
+  import Select from '$lib/ui/Select.svelte';
   import { toast } from '$lib/ui/toast.svelte';
 
   // Тема недели на главной: сама по календарю, одна из готовых или своя (название + жанр или режиссёр).
@@ -34,11 +35,16 @@
     <p class="muted hint">Ряд на главной и пара кадров в герое. Сейчас по календарю: «{data.auto}».</p>
     <label class="field">
       <span>Тема</span>
-      <select class="input" bind:value={data.choice.mode} onchange={() => data && data.choice.mode !== 'custom' && save()}>
-        <option value="auto">Сама по неделям</option>
-        {#each data.themes as t (t.key)}<option value={t.key}>{t.title} - {t.subtitle}</option>{/each}
-        <option value="custom">Своя тема…</option>
-      </select>
+      <Select
+        label="Тема"
+        bind:value={data.choice.mode}
+        onchange={() => data && data.choice.mode !== 'custom' && save()}
+        options={[
+          { value: 'auto', label: 'Сама по неделям' },
+          ...data.themes.map((t) => ({ value: t.key, label: `${t.title} - ${t.subtitle}` })),
+          { value: 'custom', label: 'Своя тема…' },
+        ]}
+      />
     </label>
     {#if data.choice.mode === 'custom'}
       <form class="custom" onsubmit={save}>

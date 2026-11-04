@@ -4,7 +4,7 @@
   import { MAX_DIRECTORS as MAX_D, MAX_FAVORITES as MAX } from '$lib/social/favorites';
   import PosterWall from '$lib/social/PosterWall.svelte';
   import { session } from '$lib/session.svelte';
-  import type { MarkItem, ProfileDecor } from '$lib/types';
+  import type { ExtCard, MarkItem, ProfileDecor } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
   import { toast } from '$lib/ui/toast.svelte';
 
@@ -23,6 +23,31 @@
 
   const keyOf = (i: { card?: { id: number }; ext?: { id: string } }) => (i.card ? `t:${i.card.id}` : `x:${i.ext!.id}`);
   const favKeys = $derived(decor?.favorites.map((f) => f.key) ?? []);
+
+  // Любое кино: поиск по всему IMDb, найденное можно сразу сделать любимым (не только отмеченное «Хочу»/«Просмотрел»).
+  let query = $state('');
+  let found = $state<MarkItem[]>([]);
+  let searching = $state(false);
+  $effect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      found = [];
+      searching = false;
+      return;
+    }
+    let live = true;
+    searching = true;
+    const t = setTimeout(() => {
+      api<ExtCard[]>(`/api/discover/search?q=${encodeURIComponent(q)}`).then(
+        (r) => live && (found = r.filter((e) => !e.local).slice(0, 12).map((ext) => ({ ext, at: 0 }))),
+        () => live && (found = []),
+      ).finally(() => live && (searching = false));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  });
 
   function load() {
     api<{ decor: ProfileDecor; stats: { directors: { name: string }[] } }>(`/api/members/${profileId}`).then((r) => {
@@ -185,8 +210,22 @@
             </div>
           {/each}
         </div>
-      {:else}
-        <p class="muted small">Отметьте фильмы «Буду смотреть» или «Просмотрел» - их можно будет выбрать сюда.</p>
+      {/if}
+      <input class="input find" type="search" bind:value={query} placeholder="Найти любой фильм или сериал" aria-label="Найти фильм для любимого" />
+      {#if searching}<p class="muted small">Ищем…</p>{/if}
+      {#if found.length}
+        <div class="pool">
+          {#each found as i (keyOf(i))}
+            <div class="pick" class:on={favKeys.includes(keyOf(i))}>
+              <Poster card={i.ext} local={i.card ?? null} marks={false} />
+              <button class="star" aria-pressed={favKeys.includes(keyOf(i))} aria-label="В любимое" title="В любимое" onclick={() => toggleFav(i)}>
+                <Icon name="heart" size={15} />
+              </button>
+            </div>
+          {/each}
+        </div>
+      {:else if !pool.length && !query.trim()}
+        <p class="muted small">Найдите любой фильм или сериал в строке выше или отметьте «Буду смотреть» - и выберите сюда.</p>
       {/if}
     </div>
     <label class="share">

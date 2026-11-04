@@ -7,6 +7,7 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import { ask } from '$lib/ui/dialogs.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
   import Modal from '$lib/ui/Modal.svelte';
   import { toast } from '$lib/ui/toast.svelte';
@@ -191,10 +192,7 @@
                       <Icon name="check" size={15} stroke={2.6} />
                     </button>
                     {#if l.groups.length}
-                      <select class="move" aria-label="Группа" value={i.groupId ?? ''} onchange={(e) => move(i, e.currentTarget.value)}>
-                        <option value="">Без группы</option>
-                        {#each l.groups as x (x.id)}<option value={x.id}>{x.name}</option>{/each}
-                      </select>
+                      <Select class="move" variant="inline" label="Группа" value={String(i.groupId ?? '')} onchange={(v) => move(i, v)} options={[{ value: '', label: 'Без группы' }, ...l.groups.map((x) => ({ value: String(x.id), label: x.name }))]} />
                     {/if}
                     <button class="mini" aria-label="Убрать из подборки" title="Убрать из подборки" onclick={() => remove(i)}><Icon name="close" size={15} /></button>
                   </div>
@@ -304,16 +302,9 @@
     white-space: nowrap;
     font-size: 12px;
   }
-  .move {
+  .foot :global(.move) {
     flex: 1;
     min-width: 0;
-    height: 30px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: 8px;
-    background: var(--surface-2);
-    color: var(--text);
-    font: inherit;
     font-size: 12px;
   }
   .none {

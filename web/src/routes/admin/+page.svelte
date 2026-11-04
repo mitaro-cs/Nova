@@ -26,18 +26,9 @@
     ['settings', 'Настройки', 'sliders'],
     ['version', 'Версия', 'download'],
   ];
-  // У каждого раздела свой цвет: он же в значке меню, в шапке раздела и в плитках «Обзора», поэтому с первого
-  // взгляда видно, за что отвечает та или иная часть.
-  const TONE: Record<string, string> = {
-    overview: '#e4e4e7',
-    folders: '#6aa9ff',
-    catalog: '#ff7a9a',
-    people: '#3ddc97',
-    wishes: '#ffc15a',
-    access: '#4fd1c5',
-    settings: '#a1a1aa',
-    version: '#a98bff',
-  };
+  // Значки разделов - белые и серые, без цветов-украшений (решение владельца, 2 ноября): цвет в управлении значит
+  // только состояние - зелёный «работает», красный «ошибка».
+  const TONE: Record<string, string> = Object.fromEntries(['overview', 'folders', 'catalog', 'people', 'wishes', 'access', 'settings', 'version'].map((id) => [id, '#e4e4e7']));
 
   // Что в каждом разделе и что там можно сделать - хост видит это сверху раздела.
   const INFO: Record<string, { hint: string; title: string; text: string; can: string[] }> = {
@@ -97,20 +88,17 @@
       </ul>
     {/if}
   </header>
+  <nav class="sections" aria-label="Разделы управления">
+    {#each TABS as [id, label, icon] (id)}
+      <a href="?tab={id}" class:on={tab === id} style:--tone={TONE[id]} data-sveltekit-replacestate data-sveltekit-noscroll>
+        <span class="ic"><Icon name={icon} size={19} /></span><span class="lbl">{label}<small>{INFO[id]?.hint}</small></span>
+        {#if id === 'version' && status?.update?.state === 'available'}<i class="new" aria-label="есть обновление"></i>{/if}
+        {#if id === 'wishes' && badges.wishes}<i class="new" aria-label="есть просьбы"></i>{/if}
+      </a>
+    {/each}
+  </nav>
   <div class="cols">
-  <aside>
-    <nav>
-      {#each TABS as [id, label, icon] (id)}
-        <a href="?tab={id}" class:on={tab === id} style:--tone={TONE[id]} data-sveltekit-replacestate data-sveltekit-noscroll>
-          <span class="ic"><Icon name={icon} size={18} /></span><span class="lbl">{label}<small>{INFO[id]?.hint}</small></span>
-          {#if id === 'version' && status?.update?.state === 'available'}<i class="new" aria-label="есть обновление"></i>{/if}
-          {#if id === 'wishes' && badges.wishes}<i class="new" aria-label="есть просьбы"></i>{/if}
-        </a>
-      {/each}
-    </nav>
-    {#if status}<a class="faint ver" href="?tab=version">Версия {status.version}</a>{/if}
-  </aside>
-  <section class="rw-plate" aria-label={info.title}>
+  <section class="panel rw-plate" aria-label={info.title}>
     <header class="tab-head rw-block" style:--tone={TONE[tab] ?? TONE.overview}>
       <div class="title">
         <span class="badge"><Icon name={TABS.find((x) => x[0] === tab)?.[2] ?? 'pulse'} size={20} /></span>
@@ -136,90 +124,89 @@
 </div>
 
 <style>
-  .cols {
+  /* «Витрина»: разделы - плитки одной строкой сверху (на узком экране - лента), под ними один лист с содержимым.
+     Никаких боковых колонок и залезающих друг на друга плит: всё идёт сверху вниз. */
+  .sections {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    gap: calc(28 * var(--rw));
-    align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
   }
-  aside {
-    position: sticky;
-    top: calc(var(--header) + 24px);
-  }
-  nav {
-    display: grid;
-    gap: 4px;
-  }
-  nav a {
+  .sections a {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 14px;
+    min-width: 0;
+    padding: 12px 14px;
+    border-radius: 20px;
+    background: #ffffff0d;
     color: var(--muted);
     font-weight: 600;
     font-size: 14px;
+    transition: background 0.25s var(--ease), color 0.25s, transform 0.3s var(--ease);
   }
-  nav a:hover {
+  .sections a:hover {
     color: var(--text);
-    background: var(--surface);
+    background: #ffffff16;
+    transform: translateY(-2px);
+  }
+  .sections a:active {
+    transform: scale(0.97);
   }
   .ic {
-    width: 34px;
-    height: 34px;
+    flex: none;
+    width: 38px;
+    height: 38px;
     display: grid;
     place-items: center;
-    border-radius: 50%;
+    border-radius: 13px;
     background: color-mix(in srgb, var(--tone) 20%, transparent);
     color: var(--tone);
-    transition: background 0.2s, color 0.2s;
+    transition: background 0.25s, color 0.25s;
   }
-  nav a.on {
+  .sections a.on {
     color: var(--text);
     background: var(--sheet);
-    border-color: var(--sheet-line);
   }
-  nav a.on .ic {
+  .sections a.on .ic {
     background: var(--tone);
     color: #000;
   }
-  .ver {
-    display: block;
-    font-size: 12px;
-    margin: 18px 0 0 10px;
-  }
   .new {
+    position: absolute;
+    top: 10px;
+    right: 10px;
     width: 8px;
     height: 8px;
-    margin-left: auto;
     border-radius: 50%;
     background: #ff5c7a;
   }
-  section {
+  /* Лист содержимого: свой, со скруглением по всем углам, во всю ширину страницы. */
+  .cols .panel.rw-plate {
     min-width: 0;
+    margin-inline: 0;
+    padding: calc(10 * var(--rw)) clamp(18px, 2.4vw, 34px) clamp(18px, 2.4vw, 34px);
+    border-radius: 28px;
   }
   @media (max-width: 860px) {
     /* minmax(0, …): лента разделов прокручивается, а не распирает страницу. */
-    .cols {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 18px;
-    }
-    aside {
-      position: static;
-    }
-    nav {
+    .sections {
       display: flex;
       overflow-x: auto;
-      margin: 0 calc(var(--gutter) * -1);
-      padding: 0 var(--gutter);
+      margin-inline: calc(var(--gutter) * -1);
+      padding-inline: var(--gutter);
     }
-    nav a {
+    .sections a {
+      flex: none;
       white-space: nowrap;
     }
-    .ver,
     .lbl small {
       display: none;
+    }
+    .cols .panel.rw-plate {
+      margin-inline: calc(var(--gutter) * -1);
+      border-radius: 28px 28px 0 0;
     }
   }
 
@@ -229,6 +216,7 @@
     min-width: 0;
   }
   .lbl small {
+    display: none;
     font-size: 11.5px;
     font-weight: 500;
     color: var(--faint);
@@ -319,8 +307,8 @@
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent);
   }
   .lamps .wait i {
-    background: var(--warn);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 22%, transparent);
+    background: #8e8e93;
+    box-shadow: 0 0 0 4px #8e8e9333;
   }
   .lamps .bad i {
     background: var(--danger);

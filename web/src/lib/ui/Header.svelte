@@ -104,7 +104,7 @@
   const inCollection = $derived(path.startsWith('/my') || path.startsWith('/lists'));
   // Вкладка «Профиль»: своя страница, оформление, люди, чаты и управление.
   const inProfile = $derived(['/people', '/chats', '/profile', '/admin'].some((p) => path.startsWith(p)));
-  const news = $derived(badges.requests + badges.unread + (session.me?.manage ? badges.wishes : 0));
+  const news = $derived(badges.requests + badges.unread + badges.ready.length + (session.me?.manage ? badges.wishes : 0));
 </script>
 
 <header class:scrolled class:home={path === "/"} class:detail={path.startsWith("/title/") || path.startsWith("/ext/")}>
@@ -291,8 +291,9 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     padding: 8px max(4px, calc((100% - 640px) / 2)) calc(6px + env(safe-area-inset-bottom));
-    background: #141414;
-    border-top: 1px solid #ffffff12;
+    /* Чёрная, как страница: на iPhone под панелью (зона жеста «домой») был виден тёмный ободок другого цвета. */
+    background: #000;
+    border-top: 1px solid #ffffff1a;
   }
   .tabs a {
     display: grid;

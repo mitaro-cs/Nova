@@ -65,6 +65,7 @@ fn ext(id: &str, title: &str, series: bool) -> fsfy::discover::Ext {
         votes: Some(1000),
         genres: vec!["Драма".into()],
         poster_url: None,
+        release: None,
     }
 }
 
@@ -360,6 +361,22 @@ async fn feed_marks_wishes_groups_links() {
     assert_eq!(anna.get("/api/admin/wishes").await.status(), 403);
     host.send("DELETE", "/api/admin/wishes/tt0111161", json!({})).await;
     assert_eq!(host.json("/api/badges").await["wishes"], 0);
+    assert_eq!(anna.json("/api/badges").await["ready"], json!([]), "«Не будем» - без уведомления");
+
+    // «Выполнено»: просьба уходит у хоста, а тому, кто просил, приходит уведомление - пока не откроет.
+    anna.send("PUT", "/api/discover/title/tt0111161/wish", json!({"value": true})).await;
+    assert_eq!(anna.json("/api/badges").await["ready"], json!([]), "пока не выполнено - тишина");
+    assert_eq!(anna.send("POST", "/api/admin/wishes/tt0111161/done", json!({})).await.status(), 403);
+    assert_eq!(host.send("POST", "/api/admin/wishes/tt0111161/done", json!({})).await.status(), 200);
+    assert_eq!(host.json("/api/admin/wishes").await, json!([]));
+    assert_eq!(host.json("/api/badges").await["wishes"], 0);
+    let ready = anna.json("/api/badges").await["ready"].clone();
+    assert_eq!(ready.as_array().map(Vec::len), Some(1));
+    assert_eq!(ready[0]["id"], "tt0111161");
+    assert!(ready[0]["title"].as_str().is_some_and(|t| !t.is_empty()));
+    assert_eq!(host.json("/api/badges").await["ready"], json!([]), "хост ничего не просил");
+    anna.send("POST", "/api/me/wishes/tt0111161/seen", json!({})).await;
+    assert_eq!(anna.json("/api/badges").await["ready"], json!([]));
 
     // Свой список с группами и фильмом из ленты.
     let l: Value = anna.send("POST", "/api/lists", json!({"name": "Хоррор на Хэллоуин"})).await.json().await.unwrap();
@@ -467,16 +484,16 @@ async fn feed_marks_wishes_groups_links() {
         anna.send("PUT", "/api/me/favorites", json!({"key": "x:tt0111161", "value": true})).await.json().await.unwrap();
     assert_eq!(r["favorites"], json!(["x:tt0903747", "x:tt0111161"]));
     assert_eq!(anna.json("/api/me").await["favorites"], json!(["x:tt0903747", "x:tt0111161"]));
-    for i in 0..3 {
+    for i in 0..4 {
         let r = anna.send("PUT", "/api/me/favorites", json!({"key": format!("t:{}", 100 + i), "value": true})).await;
         assert!(r.status().is_success());
     }
-    // По четыре отдельно у фильмов и у сериалов: пятый фильм - нельзя, пока не убрать один.
-    let fifth = anna.send("PUT", "/api/me/favorites", json!({"key": "t:200", "value": true})).await;
-    assert_eq!(fifth.status(), 400, "пятый любимый фильм");
+    // По пять отдельно у фильмов и у сериалов: шестой фильм - нельзя, пока не убрать один.
+    let sixth = anna.send("PUT", "/api/me/favorites", json!({"key": "t:200", "value": true})).await;
+    assert_eq!(sixth.status(), 400, "шестой любимый фильм");
     let r: Value =
         anna.send("PUT", "/api/me/favorites", json!({"key": "t:100", "value": false})).await.json().await.unwrap();
-    assert_eq!(r["favorites"].as_array().unwrap().len(), 4);
+    assert_eq!(r["favorites"].as_array().unwrap().len(), 5);
     let again = anna.send("PUT", "/api/me/favorites", json!({"key": "t:200", "value": true})).await;
     assert!(again.status().is_success(), "место освободилось");
     assert_eq!(anna.send("PUT", "/api/me/favorites", json!({"key": "zz", "value": true})).await.status(), 400);
@@ -644,6 +661,83 @@ async fn sources_status_for_viewers_and_health_for_managers() {
     let health = host.json("/api/admin/health").await;
     assert!(health["sources"][0].get("fails").is_some(), "администратору - с числом ошибок");
     assert_eq!(anna.get("/api/sources/status").await.status(), 200);
+    running.shutdown().await;
+}
+
+/// «Ещё не вышел»: отметку ставит и снимает только администратор, у зрителя - 403.
+#[tokio::test(flavor = "multi_thread")]
+async fn manager_marks_feed_film_as_not_released_yet() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    fsfy::discover::upsert(&running.app, &[ext("tt0000777", "Будущий фильм", false)]).unwrap();
+    let flag = |app: &fsfy::App| -> bool {
+        app.db.with(|c| c.query_row("SELECT soon FROM ext_titles WHERE id = 'tt0000777'", [], |r| r.get(0))).unwrap()
+    };
+    assert!(!flag(&running.app));
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let mut anna = Client::new(public);
+    anna.send("POST", "/api/auth/register", json!({"name": "Анна", "login": "anna", "password": "пароль-12345"})).await;
+    let r = anna.send("PUT", "/api/admin/ext/tt0000777/soon", json!({"on": true})).await;
+    assert_eq!(r.status(), 403, "зрителю - нельзя");
+    assert!(!flag(&running.app));
+    let r = host.send("PUT", "/api/admin/ext/tt0000777/soon", json!({"on": true})).await;
+    assert!(r.status().is_success());
+    assert!(flag(&running.app));
+    // Обновление ленты IMDb отметку не стирает.
+    fsfy::discover::upsert(&running.app, &[ext("tt0000777", "Будущий фильм", false)]).unwrap();
+    assert!(flag(&running.app));
+    assert!(host.send("PUT", "/api/admin/ext/tt0000777/soon", json!({"on": false})).await.status().is_success());
+    assert!(!flag(&running.app));
+    assert_eq!(host.send("PUT", "/api/admin/ext/tt9999999/soon", json!({"on": true})).await.status(), 404);
+    running.shutdown().await;
+}
+
+/// Фон и обложка, выбранные хостом среди картинок IMDb, не заменяются своими картинками IMDb и обновлением ленты.
+#[tokio::test(flavor = "multi_thread")]
+async fn picked_feed_art_survives_refresh() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let id = "tt0000888";
+    fsfy::discover::upsert(&running.app, &[ext(id, "Выбранный фон", false)]).unwrap();
+    let imdb_back = fsfy::media_meta::art("https://m.media-amazon.com/images/imdb-back.jpg");
+    let extra = json!({"imdbBackdrop": imdb_back, "poster": imdb_back}).to_string();
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "UPDATE ext_titles SET detailed = ?1, extra = ?2, backdrop = ?3, poster = 'old.jpg' WHERE id = ?4",
+                rusqlite::params![fsfy::discover::DETAILED, extra, imdb_back, id],
+            )
+        })
+        .unwrap();
+    let page = host.json(&format!("/api/discover/title/{id}")).await;
+    assert_eq!(page["backdrop"], imdb_back, "пока ничего не выбрано - картинка IMDb");
+    // Хост выбрал: то, что записывает `set_ext_imdb_image` (скачивание из сети в тесте не нужно).
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "UPDATE ext_titles SET backdrop = 'mine.jpg', poster = 'mine-p.jpg',
+                 extra = json_set(extra, '$.picked.backdrop', 'mine.jpg', '$.picked.poster', 'mine-p.jpg') WHERE id = ?1",
+                [id],
+            )
+        })
+        .unwrap();
+    let page = host.json(&format!("/api/discover/title/{id}")).await;
+    assert_eq!(page["backdrop"], "/img/mine.jpg");
+    assert_eq!(page["posterLarge"], "/img/mine-p.jpg");
+    // Обновление ленты с другим постером обложку не сбрасывает.
+    let mut again = ext(id, "Выбранный фон", false);
+    again.poster_url = Some("https://m.media-amazon.com/images/other.jpg".into());
+    fsfy::discover::upsert(&running.app, &[again]).unwrap();
+    let kept: Option<String> = running
+        .app
+        .db
+        .with(|c| c.query_row("SELECT poster FROM ext_titles WHERE id = ?1", [id], |r| r.get(0)))
+        .unwrap();
+    assert_eq!(kept.as_deref(), Some("mine-p.jpg"));
     running.shutdown().await;
 }
 

@@ -351,6 +351,10 @@ export interface ExtCard {
   local: number | null;
   mark: 'want' | 'watching' | 'watched' | 'dropped' | null;
   wished: boolean;
+  /** Дата выхода: `2027-03-05`, `2027-03` или `2027`. В будущем - фильм ещё не вышел («Скоро»). */
+  release?: string | null;
+  /** Администратор отметил фильм «Ещё не вышел» вручную (дата IMDb не всегда верна). */
+  soon?: boolean;
 }
 
 export interface ExtDetail {
@@ -433,6 +437,8 @@ export interface ProfileStats {
   friends: number;
   outside: number;
   watched: number;
+  /** Доля зрителей Nova, которые смотрят меньше (в процентах); null - сравнивать не с кем. */
+  better?: number | null;
   genres: { genre: string; count: number }[];
   months: number[];
   monthLabels?: string[];

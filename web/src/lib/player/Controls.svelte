@@ -24,6 +24,7 @@
     qualityLabel = '',
     rate,
     showEpisodes = false,
+    showAudio = false,
     showSubs = false,
     subsOn = false,
     showQuality = false,
@@ -63,6 +64,7 @@
     qualityLabel?: string;
     rate: number;
     showEpisodes?: boolean;
+    showAudio?: boolean;
     showSubs?: boolean;
     subsOn?: boolean;
     showQuality?: boolean;
@@ -107,11 +109,15 @@
 
 {#if !busy}
   <div class="center" class:hide={!shown && !paused} class:covered={!!panel}>
-    <button class="cbig" aria-label="Назад на 10 секунд" onclick={() => onskip(-10)}><Icon name="rewind" size={34} /><small>10</small></button>
+    <button class="cbig" aria-label="Назад на 10 секунд" onclick={() => onskip(-10)}>
+      <svg class="skip" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.62 5.25A8 8 0 1 0 15.38 5.25M16.54 8.45 15.38 5.25 18.58 4.09" /><text x="12" y="15.5">10</text></svg>
+    </button>
     <button class="cbig main" aria-label={paused ? 'Смотреть' : 'Пауза'} onclick={ontoggle}>
       {#key paused}<span class="swap"><Icon name={paused ? 'play' : 'pause'} size={40} /></span>{/key}
     </button>
-    <button class="cbig" aria-label="Вперёд на 10 секунд" onclick={() => onskip(10)}><Icon name="forward" size={34} /><small>10</small></button>
+    <button class="cbig" aria-label="Вперёд на 10 секунд" onclick={() => onskip(10)}>
+      <svg class="skip" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.38 5.25A8 8 0 1 1 8.62 5.25M7.46 8.45 8.62 5.25 5.42 4.09" /><text x="12" y="15.5">10</text></svg>
+    </button>
   </div>
 {/if}
 
@@ -127,6 +133,7 @@
       <input type="range" min="0" max="1" step="0.02" value={muted ? 0 : volume} oninput={(e) => onvolume(Number((e.target as HTMLInputElement).value))} aria-label="Громкость" />
     </div>
     {#if showEpisodes}<button class="ibtn" class:on={panel === 'episodes'} aria-label="Сезоны и серии" title="Сезоны и серии" onclick={() => onpanel('episodes')}><Icon name="tv" size={22} /></button>{/if}
+    {#if showAudio}<button class="ibtn" class:on={panel === 'audio'} aria-label="Озвучка" title="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
     {#if showSubs}<button class="ibtn" class:on={panel === 'subs' || subsOn} aria-label="Субтитры" title="Субтитры" onclick={() => onpanel('subs')}><Icon name="captions" size={22} /></button>{/if}
     {#if showQuality}<button class="ibtn q" class:on={panel === 'quality'} aria-label="Качество" title="Качество" onclick={() => onpanel('quality')}>{qualityLabel}</button>{/if}
     <button class="ibtn q" class:on={panel === 'speed' || rate !== 1} aria-label="Скорость" title="Скорость" onclick={() => onpanel('speed')}>{rateText}</button>
@@ -291,14 +298,25 @@
   .cbig:hover {
     background: rgba(255, 255, 255, 0.28);
   }
-  .cbig small {
-    position: absolute;
-    font-size: 11px;
-    font-weight: 700;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -38%);
+  /* Стрелка и «10» - один рисунок: число стоит ровно в центре дуги, а не поверх чужого значка. */
+  .skip {
+    width: max(42px, calc(46 * var(--rw)));
+    height: max(42px, calc(46 * var(--rw)));
+    fill: none;
+    stroke: #fff;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     pointer-events: none;
+  }
+  .skip text {
+    fill: #fff;
+    stroke: none;
+    font-size: 8.4px;
+    font-weight: 700;
+    font-family: inherit;
+    text-anchor: middle;
+    font-variant-numeric: tabular-nums;
   }
   .swap {
     display: grid;

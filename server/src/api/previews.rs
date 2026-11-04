@@ -48,6 +48,7 @@ pub async fn trailer(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<Str
                 votes: None,
                 genres: vec![],
                 poster_url: None,
+                release: None,
             }],
         )?;
         (title, year)

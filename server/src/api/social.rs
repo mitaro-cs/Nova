@@ -762,9 +762,11 @@ pub async fn badges(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Va
         }
         Some(json!({"id": id, "from": from, "room": room}))
     });
-    Ok(Json(
-        json!({"requests": requests, "unread": unread, "wishes": wishes, "invitation": invitation, "watchedAt": watched_at(&app, me)?}),
-    ))
+    let ready = super::discover::ready_wishes(&app, me)?;
+    Ok(Json(json!({
+        "requests": requests, "unread": unread, "wishes": wishes, "ready": ready,
+        "invitation": invitation, "watchedAt": watched_at(&app, me)?
+    })))
 }
 
 /// Когда этот зритель последний раз сохранял место (файл или видео по ссылке): другие его

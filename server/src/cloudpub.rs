@@ -24,7 +24,8 @@ const BUILDS: &[(&str, &str, &str)] = &[
 ];
 
 /// «… -> https://имя.cloudpub.ru:443/» - адрес сервиса в строке клиента.
-pub static URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"->\s*(https://[a-z0-9.-]+\.cloudpub\.ru)").unwrap());
+/// Адрес не обязательно `*.cloudpub.ru`: в кабинете его можно сменить на свой домен.
+pub static URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"->\s*(https://[a-z0-9.-]+\.[a-z]{2,})").unwrap());
 static TOKEN_LINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^\s*token\s*=\s*"[^"]+""#).unwrap());
 pub static AUTH_ERROR: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(unauthori[sz]ed|invalid\s+(token|credentials|password)|token.{0,12}(invalid|expired)|expired\s+token|authentication failed|authorization failed|неверн.{0,20}(токен|парол)|ошибк.{0,20}авторизац)").unwrap()
@@ -182,10 +183,13 @@ pub fn find_url(text: &str) -> Option<String> {
     URL.captures_iter(text).last().map(|c| c[1].to_string())
 }
 
-fn find_registered(text: &str, port: u16) -> Option<String> {
-    let ours =
-        Regex::new(&format!(r"http://127\.0\.0\.1:{port}(?:/\S*)?\s*->\s*(https://[a-z0-9.-]+\.cloudpub\.ru)")).ok()?;
-    ours.captures(text).map(|c| c[1].to_string())
+/// Адрес сервиса, который смотрит на наш порт: из `clo ls` и из строк `clo run`.
+pub fn find_registered(text: &str, port: u16) -> Option<String> {
+    let ours = Regex::new(&format!(
+        r"https?://(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]):{port}(?:/\S*)?\s*->\s*(https://[a-z0-9.-]+\.[a-z]{{2,}})"
+    ))
+    .ok()?;
+    ours.captures_iter(text).last().map(|c| c[1].to_string())
 }
 
 fn from_zip(bytes: &[u8], name: &str) -> anyhow::Result<Vec<u8>> {
@@ -227,6 +231,14 @@ mod tests {
         let ls = "fsfy http://127.0.0.1:9999 -> https://other.cloudpub.ru\nfsfy http://127.0.0.1:17480 -> https://kino-abc.cloudpub.ru:443/";
         assert_eq!(find_registered(ls, 17480).as_deref(), Some("https://kino-abc.cloudpub.ru"));
         assert_eq!(find_registered(ls, 1748), None, "порт целиком, а не начало");
+        // Адрес сменили в кабинете: прежнее имя остаётся в списке не нужным, берём последний; свой домен тоже адрес.
+        let changed = "fsfy http://localhost:17480 -> https://old-name.cloudpub.ru\nfsfy http://localhost:17480 -> https://nova.example.com:443/";
+        assert_eq!(find_registered(changed, 17480).as_deref(), Some("https://nova.example.com"));
+        assert_eq!(
+            find_registered("Сервис опубликован: http://127.0.0.1:17480 -> https://new.cloudpub.ru:443/", 17480)
+                .as_deref(),
+            Some("https://new.cloudpub.ru")
+        );
         assert!(AUTH_ERROR.is_match("Ошибка: неверный токен"));
         assert!(!AUTH_ERROR.is_match("connection reset"));
         assert!(!AUTH_ERROR.is_match("login successful, token refreshed"));

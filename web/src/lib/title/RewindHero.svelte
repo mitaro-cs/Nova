@@ -346,7 +346,8 @@
   }
   .plate :global(.rw-tri) {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: calc(6 * var(--s));
   }
   .plate :global(.rw-tri button) {
     display: grid;
@@ -372,8 +373,17 @@
   .plate :global(.rw-tri button:active:not(:disabled)) {
     transform: scale(0.92);
   }
+  /* Включено («Смотрел», «Любимый», «Хочу»): мягкая светлая плитка, значок закрашен и подпись белая - видно сразу,
+     но без резкой белой коробки. */
   .plate :global(.rw-tri button.on) {
     color: #fff;
+    background: #ffffff2b;
+  }
+  .plate :global(.rw-tri button.on span) {
+    font-weight: 600;
+  }
+  .plate :global(.rw-tri button.on:hover:not(:disabled)) {
+    background: #ffffff38;
   }
   .plate :global(.rw-tri button.on svg) {
     fill: currentColor;

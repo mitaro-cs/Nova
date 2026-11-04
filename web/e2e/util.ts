@@ -208,6 +208,12 @@ export async function act(page: Page, name: string | RegExp) {
   await sheet.getByRole('button', { name, exact }).first().click();
 }
 
+/** Выбрать пункт в выпадающем списке интерфейса (`ui/Select.svelte`): открыть по подписи и нажать вариант. */
+export async function choose(page: Page, name: string, option: string | RegExp, scope: Pick<Page, 'getByRole'> = page) {
+  await scope.getByRole('combobox', { name, exact: true }).click();
+  await page.getByRole('option', { name: option, exact: typeof option === 'string' }).click();
+}
+
 /** Главная открылась: большой кадр «Рекомендуем» (на любом экране). */
 export async function expectHome(page: Page) {
   await expect(page.getByRole('region', { name: 'Рекомендуем' })).toBeVisible();

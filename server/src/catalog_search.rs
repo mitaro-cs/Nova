@@ -118,6 +118,7 @@ pub async fn wiki_search(app: &App, query: &str, people: bool) -> anyhow::Result
                 votes: None,
                 genres: vec![],
                 poster_url: None,
+                release: None,
             };
             discover::upsert(app, &[item])?;
             // Картинка статьи Википедии - часто постер прокатчика с его логотипом (у «Клана Сопрано» -
@@ -246,6 +247,7 @@ async fn search_full(app: &Arc<App>, query: &str) -> anyhow::Result<Vec<String>>
                 votes: None,
                 genres: vec![],
                 poster_url: c.poster,
+                release: None,
             })
             .collect::<Vec<_>>();
         discover::upsert(app, &items)?;

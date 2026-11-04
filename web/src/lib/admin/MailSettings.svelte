@@ -1,6 +1,7 @@
 <script lang="ts">
  import {api,errorText,post,put} from '$lib/api';
  import PasswordInput from '$lib/ui/PasswordInput.svelte';
+ import Select from '$lib/ui/Select.svelte';
  let config=$state({enabled:false,host:'smtp.gmail.com',port:465,tls:'tls',user:'',from:'',base:'',passwordSet:false});
  let password=$state(''),recipient=$state(''),message=$state(''),error=$state(''),busy=$state(false);
  $effect(()=>{api<typeof config>('/api/admin/mail').then(r=>config=r,e=>error=errorText(e));});
@@ -17,7 +18,7 @@
 <details><summary>Параметры SMTP и адрес Nova</summary>
 <label class="field"><span>SMTP-сервер</span><input class="input" bind:value={config.host} required/></label>
 <label class="field"><span>Порт</span><input class="input" type="number" bind:value={config.port} min="1" max="65535" required/></label>
-<label class="field"><span>Шифрование</span><select class="input" bind:value={config.tls}><option value="tls">TLS · 465</option><option value="starttls">STARTTLS · 587</option></select></label>
+<label class="field"><span>Шифрование</span><Select label="Шифрование" bind:value={config.tls} options={[{ value: 'tls', label: 'TLS · 465' }, { value: 'starttls', label: 'STARTTLS · 587' }]} /></label>
 <label class="field"><span>Адрес отправителя, если отличается</span><input class="input" type="email" bind:value={config.from}/></label>
 <label class="field"><span>Публичный адрес Nova для ссылок в письмах</span><input class="input" type="url" bind:value={config.base} placeholder="https://nova.example"/><small class="muted">Если оставить пустым, используется текущая ссылка доступа Nova. Для писем друзьям нужен адрес, доступный им из интернета.</small></label>
 </details>

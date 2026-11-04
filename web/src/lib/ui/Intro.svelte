@@ -49,18 +49,16 @@
 
 {#if show}
   <div class="intro" aria-hidden="true">
-    <div class="glow"></div>
     <div class="drift">
       <svg class="mark" viewBox="0 0 {box.w} {box.h}" style:--len="{len}px">
         <defs>
           <clipPath id="intro-clip"><path {d} clip-rule="evenodd" /></clipPath>
           <linearGradient id="intro-sweep" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" stop-color="#8cbeff" stop-opacity="0" />
-            <stop offset="0.5" stop-color="#8cbeff" stop-opacity="0.95" />
-            <stop offset="1" stop-color="#8cbeff" stop-opacity="0" />
+            <stop offset="0" stop-color="#fff" stop-opacity="0" />
+            <stop offset="0.5" stop-color="#cfd6e4" stop-opacity="0.9" />
+            <stop offset="1" stop-color="#fff" stop-opacity="0" />
           </linearGradient>
         </defs>
-        <path class="halo" {d} />
         <path class="line" {d} />
         <path class="fill" {d} fill-rule="evenodd" />
         <g clip-path="url(#intro-clip)"><rect class="sweep" x="-30" y="-2" width="30" height={box.h + 4} fill="url(#intro-sweep)" /></g>
@@ -84,12 +82,6 @@
     will-change: opacity;
     animation: intro-out 0.5s cubic-bezier(0.45, 0, 0.55, 1) 4.75s both;
   }
-  .glow {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 55% 60% at 50% 46%, rgba(120, 160, 255, 0.2), rgba(90, 120, 220, 0.07) 50%, transparent 75%);
-    animation: glow-in 2.4s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
-  }
   .drift {
     position: relative;
     display: grid;
@@ -103,28 +95,15 @@
     height: auto;
     overflow: visible;
   }
-  .line,
-  .halo {
+  .line {
     fill: none;
     stroke-linejoin: round;
     stroke-linecap: round;
     stroke-dasharray: var(--len) calc(var(--len) * 3);
     stroke-dashoffset: var(--len);
-    animation: draw 1.8s cubic-bezier(0.65, 0, 0.35, 1) 0.35s both;
-  }
-  .line {
     stroke: #fff;
     stroke-width: 0.26;
     animation-name: draw, line-out;
-    animation-duration: 1.8s, 1.1s;
-    animation-delay: 0.35s, 1.7s;
-    animation-fill-mode: both, both;
-  }
-  .halo {
-    stroke: #96b9ff;
-    stroke-width: 1.1;
-    opacity: 0.22;
-    animation-name: draw, halo-out;
     animation-duration: 1.8s, 1.1s;
     animation-delay: 0.35s, 1.7s;
     animation-fill-mode: both, both;
@@ -162,11 +141,6 @@
       opacity: 0.45;
     }
   }
-  @keyframes halo-out {
-    to {
-      opacity: 0;
-    }
-  }
   @keyframes fill-in {
     from {
       opacity: 0;
@@ -184,11 +158,6 @@
     from {
       opacity: 0;
       transform: translateY(14px);
-    }
-  }
-  @keyframes glow-in {
-    from {
-      opacity: 0;
     }
   }
   @keyframes drift {

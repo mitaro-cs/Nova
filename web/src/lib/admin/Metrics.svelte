@@ -8,10 +8,10 @@
   import { toast } from '$lib/ui/toast.svelte';
   import type { Metrics, Status } from './types';
 
-  // Показатели «Обзора» хоста. У каждого раздела свой цвет и значок: синий - библиотека, зелёный - зрители,
-  // жёлтый - активность, фиолетовый - место на диске, розовый - качество видео. Цвет один и тот же в плитке,
-  // в заголовке раздела и в боковом меню, поэтому видно, за что отвечает каждая часть. Данные считаются на
-  // сервере из базы и папок (`GET /api/admin/metrics`) и обновляются раз в 30 секунд.
+  // Показатели «Обзора» хоста. Цветов-«украшений» нет (решение владельца, 2 ноября): всё белое и серое, а цвет
+  // значит только состояние - зелёный «работает», красный «ошибка». Место на диске - кольцо, качество файлов -
+  // горизонтальные полосы, активность - столбики и сетка по часам. Данные считаются на сервере из базы и папок
+  // (`GET /api/admin/metrics`) и обновляются раз в 30 секунд.
   let { status }: { status: Status } = $props();
   let m = $state<Metrics | null>(null);
   let failed = $state('');
@@ -69,31 +69,46 @@
   const parts = $derived<Part[]>(
     m
       ? [
-          { key: 'hls', label: 'Кэш видео', bytes: m.disk.hls, tone: '#a98bff', note: 'перекодированное для слабого интернета' },
-          { key: 'copy', label: 'Копии «Оригинал»', bytes: m.disk.copy, tone: '#6aa9ff', note: 'быстрая перепаковка без потерь' },
-          { key: 'images', label: 'Постеры и кадры', bytes: m.disk.images, tone: '#ff7a9a', note: 'картинки фильмов и аватарки' },
-          { key: 'db', label: 'База', bytes: m.disk.db, tone: '#ffc15a', note: 'люди, отметки, отзывы, настройки' },
-          { key: 'backups', label: 'Копии базы', bytes: m.disk.backups, tone: '#3ddc97', note: 'перед обновлением и ручные' },
-          { key: 'other', label: 'Прочее', bytes: m.disk.cacheOther + m.disk.logs, tone: '#8e8e93', note: 'кадры перемотки, журнал' },
+          { key: 'hls', label: 'Кэш видео', bytes: m.disk.hls, tone: '#ffffff', note: 'перекодированное для слабого интернета' },
+          { key: 'copy', label: 'Копии «Оригинал»', bytes: m.disk.copy, tone: '#d4d4d8', note: 'быстрая перепаковка без потерь' },
+          { key: 'images', label: 'Постеры и кадры', bytes: m.disk.images, tone: '#a1a1aa', note: 'картинки фильмов и аватарки' },
+          { key: 'db', label: 'База', bytes: m.disk.db, tone: '#83838c', note: 'люди, отметки, отзывы, настройки' },
+          { key: 'backups', label: 'Копии базы', bytes: m.disk.backups, tone: '#63636b', note: 'перед обновлением и ручные' },
+          { key: 'other', label: 'Прочее', bytes: m.disk.cacheOther + m.disk.logs, tone: '#46464d', note: 'кадры перемотки, журнал' },
         ]
       : [],
   );
   const partsTotal = $derived(parts.reduce((a, p) => a + p.bytes, 0));
   const cacheBytes = $derived((m?.disk.hls ?? 0) + (m?.disk.copy ?? 0));
 
-  const QUALITY: Record<string, { label: string; tone: string }> = {
-    '4k': { label: '4K', tone: '#ff7a9a' },
-    '1440': { label: '1440p', tone: '#ffc15a' },
-    '1080': { label: '1080p', tone: '#6aa9ff' },
-    '720': { label: '720p', tone: '#3ddc97' },
-    sd: { label: 'до 720p', tone: '#8e8e93' },
+  const QUALITY: Record<string, { label: string }> = {
+    '4k': { label: '4K' },
+    '1440': { label: '1440p' },
+    '1080': { label: '1080p' },
+    '720': { label: '720p' },
+    sd: { label: 'до 720p' },
   };
   const resolutions = $derived(
     (m?.library.resolutions ?? [])
-      .map((r) => ({ ...r, ...(QUALITY[r.q] ?? { label: r.q, tone: '#8e8e93' }) }))
+      .map((r) => ({ ...r, ...(QUALITY[r.q] ?? { label: r.q }) }))
       .sort((a, b) => Object.keys(QUALITY).indexOf(a.q) - Object.keys(QUALITY).indexOf(b.q)),
   );
   const resTotal = $derived(resolutions.reduce((a, r) => a + r.files, 0));
+  const resMax = $derived(Math.max(1, ...resolutions.map((r) => r.files)));
+
+  // Кольцо «куда уходит место»: доли данных Nova по видам, от самой большой к самой малой.
+  const RING = 2 * Math.PI * 40;
+  const slices = $derived.by(() => {
+    let from = 0;
+    return parts
+      .filter((p) => p.bytes > 0)
+      .map((p) => {
+        const share = partsTotal ? p.bytes / partsTotal : 0;
+        const slice = { key: p.key, tone: p.tone, len: Math.max(0, share * RING - 2), from };
+        from += share * RING;
+        return slice;
+      });
+  });
 
   async function clearCache() {
     if (!(await ask(`Удалить кэш видео (${size(cacheBytes)})? Ничего нужного не пропадёт: при следующем просмотре видео соберётся заново.`, 'Очистить', true))) return;
@@ -121,16 +136,17 @@
     }
   }
 
+  const NEUTRAL = '#e4e4e7';
   type Kpi = { icon: IconName; tone: string; value: number; label: string; note: string; text?: string };
   const kpis = $derived<Kpi[]>(
     m
       ? [
-          { icon: 'film', tone: '#6aa9ff', value: m.library.movies, label: 'Фильмов', note: m.library.addedWeek ? `+${m.library.addedWeek} за неделю` : 'новых за неделю нет' },
-          { icon: 'tv', tone: '#a98bff', value: m.library.series, label: 'Сериалов', note: `${m.library.episodes} ${plural(m.library.episodes, 'серия', 'серии', 'серий')}` },
-          { icon: 'clock', tone: '#ffc15a', value: hours, label: 'Часов кино', note: fmtHours(hours), text: '' },
-          { icon: 'download', tone: '#4fd1c5', value: Math.round(status.size / 1024 ** 3), label: 'ГБ на дисках', note: size(status.size) },
-          { icon: 'users', tone: '#3ddc97', value: m.people.users, label: 'Зрителей', note: m.people.newWeek ? `+${m.people.newWeek} за неделю` : `${m.people.activeWeek} смотрели на этой неделе` },
-          { icon: 'play', tone: '#ff7a9a', value: status.watching.length, label: 'Смотрят сейчас', note: status.watching.length ? 'человек у экрана' : 'никого' },
+          { icon: 'film', tone: NEUTRAL, value: m.library.movies, label: 'Фильмов', note: m.library.addedWeek ? `+${m.library.addedWeek} за неделю` : 'новых за неделю нет' },
+          { icon: 'tv', tone: NEUTRAL, value: m.library.series, label: 'Сериалов', note: `${m.library.episodes} ${plural(m.library.episodes, 'серия', 'серии', 'серий')}` },
+          { icon: 'clock', tone: NEUTRAL, value: hours, label: 'Часов кино', note: fmtHours(hours), text: '' },
+          { icon: 'download', tone: NEUTRAL, value: Math.round(status.size / 1024 ** 3), label: 'ГБ на дисках', note: size(status.size) },
+          { icon: 'users', tone: NEUTRAL, value: m.people.users, label: 'Зрителей', note: m.people.newWeek ? `+${m.people.newWeek} за неделю` : `${m.people.activeWeek} смотрели на этой неделе` },
+          { icon: 'play', tone: NEUTRAL, value: status.watching.length, label: 'Смотрят сейчас', note: status.watching.length ? 'человек у экрана' : 'никого' },
         ]
       : [],
   );
@@ -144,7 +160,7 @@
   <div class="kpis" aria-label="Главные цифры">
     {#each kpis as k, i (k.label)}
       <div class="kpi rise" style:--tone={k.tone} style:--i={i}>
-        <span class="chip"><Icon name={k.icon} size={18} /></span>
+        <span class="mark"><Icon name={k.icon} size={18} /></span>
         <b use:tick={k.value}>{k.value}</b>
         <span class="lbl">{k.label}</span>
         <small>{k.note}</small>
@@ -153,9 +169,9 @@
   </div>
 
   <div class="two">
-    <section class="panel rise" style:--tone="#ffc15a" style:--i={6} aria-label="Активность">
+    <section class="panel rise" style:--tone={NEUTRAL} style:--i={6} aria-label="Активность">
       <header>
-        <span class="chip"><Icon name="pulse" size={17} /></span>
+        <span class="mark"><Icon name="pulse" size={17} /></span>
         <div><h3>Активность за две недели</h3><p>Сколько разных фильмов и серий смотрели каждый день. Помогает понять, когда Nova нужна сильнее всего.</p></div>
         <strong>{weekViews}<small>за 7 дней</small></strong>
       </header>
@@ -176,9 +192,9 @@
       <p class="hint">{busyHour >= 0 ? `Чаще всего смотрят около ${String(busyHour).padStart(2, '0')}:00.` : 'Когда начнут смотреть, здесь появится любимое время зрителей.'}</p>
     </section>
 
-    <section class="panel rise" style:--tone="#3ddc97" style:--i={7} aria-label="Самое смотримое">
+    <section class="panel rise" style:--tone={NEUTRAL} style:--i={7} aria-label="Самое смотримое">
       <header>
-        <span class="chip"><Icon name="star" size={17} /></span>
+        <span class="mark"><Icon name="star" size={17} /></span>
         <div><h3>Самое смотримое</h3><p>Фильмы и сериалы, которые открывало больше всего разных людей.</p></div>
       </header>
       {#if m.activity.top.length}
@@ -199,20 +215,25 @@
   </div>
 
   <div class="two">
-    <section class="panel rise" style:--tone="#a98bff" style:--i={8} aria-label="Место на диске">
+    <section class="panel rise" style:--tone={NEUTRAL} style:--i={8} aria-label="Место на диске">
       <header>
-        <span class="chip"><Icon name="download" size={17} /></span>
+        <span class="mark"><Icon name="download" size={17} /></span>
         <div><h3>Куда уходит место</h3><p>Что занимает диск с данными Nova. Сами фильмы лежат в ваших папках и сюда не считаются.</p></div>
         <strong>{size(partsTotal)}<small>данные Nova</small></strong>
       </header>
-      <div class="stack" role="img" aria-label="Доли места по видам">
-        {#each parts as p (p.key)}{#if p.bytes > 0}<i style:flex-grow={p.bytes} style:background={p.tone} title="{p.label}: {size(p.bytes)}"></i>{/if}{/each}
+      <div class="donut-row">
+        <svg class="donut" viewBox="0 0 100 100" role="img" aria-label="Доли места по видам">
+          <circle class="track" cx="50" cy="50" r="40" />
+          {#each slices as s (s.key)}
+            <circle class="slice" cx="50" cy="50" r="40" stroke={s.tone} stroke-dasharray="{s.len} {RING}" stroke-dashoffset={-s.from} />
+          {/each}
+        </svg>
+        <ul class="legend">
+          {#each parts as p (p.key)}
+            <li><i style:background={p.tone}></i><span><b>{p.label}</b><small>{p.note}</small></span><em>{size(p.bytes)}</em></li>
+          {/each}
+        </ul>
       </div>
-      <ul class="legend">
-        {#each parts as p (p.key)}
-          <li><i style:background={p.tone}></i><span><b>{p.label}</b><small>{p.note}</small></span><em>{size(p.bytes)}</em></li>
-        {/each}
-      </ul>
       {#if status.system?.diskFree != null && status.system.diskTotal}
         <p class="free"><Icon name="info" size={14} /> Свободно на диске {size(status.system.diskFree)} из {size(status.system.diskTotal)}.</p>
       {/if}
@@ -222,18 +243,19 @@
       </div>
     </section>
 
-    <section class="panel rise" style:--tone="#ff7a9a" style:--i={9} aria-label="Качество файлов">
+    <section class="panel rise" style:--tone={NEUTRAL} style:--i={9} aria-label="Качество файлов">
       <header>
-        <span class="chip"><Icon name="film" size={17} /></span>
+        <span class="mark"><Icon name="film" size={17} /></span>
         <div><h3>Качество видео</h3><p>В каком разрешении лежат ваши файлы. Выше качество - больше места и тяжелее перекодирование для слабого интернета.</p></div>
       </header>
       {#if resTotal}
-        <div class="stack" role="img" aria-label="Файлы по разрешению">
-          {#each resolutions as r (r.q)}<i style:flex-grow={r.files} style:background={r.tone} title="{r.label}: {r.files}"></i>{/each}
-        </div>
-        <ul class="legend">
+        <ul class="bars-h" aria-label="Файлы по разрешению">
           {#each resolutions as r (r.q)}
-            <li><i style:background={r.tone}></i><span><b>{r.label}</b><small>{Math.round((r.files / resTotal) * 100)}% файлов</small></span><em>{count(r.files, 'файл', 'файла', 'файлов')} · {size(r.bytes)}</em></li>
+            <li>
+              <b>{r.label}</b>
+              <span class="track"><i style:transform="scaleX({r.files / resMax})"></i></span>
+              <em>{count(r.files, 'файл', 'файла', 'файлов')} · {Math.round((r.files / resTotal) * 100)}%</em>
+            </li>
           {/each}
         </ul>
         {#if m.library.codecs.length}
@@ -245,9 +267,9 @@
     </section>
   </div>
 
-  <section class="panel wide rise" style:--tone="#3ddc97" style:--i={10} aria-label="Зрители и общение">
+  <section class="panel wide rise" style:--tone={NEUTRAL} style:--i={10} aria-label="Зрители и общение">
     <header>
-      <span class="chip"><Icon name="users" size={17} /></span>
+      <span class="mark"><Icon name="users" size={17} /></span>
       <div><h3>Зрители и общение</h3><p>Кто заходит в Nova и как люди общаются между собой.</p></div>
     </header>
     <div class="mini">
@@ -258,7 +280,7 @@
       <div><b>{m.social.reviews}</b><span>отзывов</span></div>
       <div><b>{m.social.messages}</b><span>сообщений</span></div>
       <div><b>{m.social.lists}</b><span>подборок</span></div>
-      <div class:warn={m.social.wishes > 0}><b>{m.social.wishes}</b><span>просьб добавить фильм</span></div>
+      <div><b>{m.social.wishes}</b><span>просьб добавить фильм</span></div>
     </div>
   </section>
 {/if}
@@ -285,11 +307,13 @@
     border-color: transparent;
     background: var(--surface);
   }
-  .chip {
+  /* Не `.chip`: у общего класса из app.css есть отступы и подъём при наведении - значок уезжал из центра круга. */
+  .mark {
     display: grid;
     place-items: center;
     width: 34px;
     height: 34px;
+    padding: 0;
     border-radius: 50%;
     background: color-mix(in srgb, var(--tone) 24%, transparent);
     color: var(--tone);
@@ -475,16 +499,63 @@
     font-size: 13px;
     font-variant-numeric: tabular-nums;
   }
-  .stack {
-    display: flex;
-    gap: 3px;
-    height: 16px;
-    margin-bottom: 14px;
+  /* Кольцо и подписи рядом; на узком экране - друг под другом. */
+  .donut-row {
+    display: grid;
+    grid-template-columns: clamp(120px, 14vw, 168px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: center;
   }
-  .stack i {
-    min-width: 5px;
-    border-radius: 6px;
-    transition: flex-grow 0.6s;
+  .donut {
+    width: 100%;
+    height: auto;
+    transform: rotate(-90deg);
+    fill: none;
+    stroke-width: 14;
+  }
+  .donut .track {
+    stroke: #ffffff10;
+  }
+  .donut .slice {
+    transition: stroke-dasharray 0.6s;
+  }
+  .bars-h {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .bars-h li {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+  }
+  .bars-h b {
+    font-size: 13.5px;
+  }
+  .bars-h .track {
+    display: block;
+    height: 10px;
+    overflow: hidden;
+    border-radius: 5px;
+    background: #ffffff12;
+  }
+  .bars-h .track i {
+    display: block;
+    height: 100%;
+    border-radius: 5px;
+    background: #fff;
+    transform-origin: left;
+    animation: sweep 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .bars-h em {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .legend {
     display: grid;
@@ -574,7 +645,10 @@
     font-size: 12px;
   }
   .mini .warn {
-    background: rgba(255, 184, 77, 0.12);
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+  }
+  .mini .warn b {
+    color: var(--danger);
   }
   .empty-note {
     margin: 4px 0;
@@ -587,6 +661,19 @@
     }
   }
   @media (max-width: 640px) {
+    .donut-row {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: center;
+    }
+    .donut-row .legend {
+      justify-self: stretch;
+    }
+    .bars-h li {
+      grid-template-columns: 54px minmax(0, 1fr);
+    }
+    .bars-h em {
+      grid-column: 1 / -1;
+    }
     .top li {
       grid-template-columns: 26px minmax(0, 1fr) auto;
     }
@@ -595,7 +682,8 @@
     }
   }
   :global(.no-motion) .col i,
-  :global(.no-motion) .meter i {
+  :global(.no-motion) .meter i,
+  :global(.no-motion) .bars-h .track i {
     animation: none;
   }
   @keyframes grow {

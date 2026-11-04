@@ -2,7 +2,7 @@
   import { fadeIn } from '$lib/ui/fade';
   import { goto } from '$app/navigation';
   import { untrack } from 'svelte';
-  import { errorText, post, put } from '$lib/api';
+  import { ApiError, api, errorText, post, put } from '$lib/api';
   import { session } from '$lib/session.svelte';
   import { searchVideos, sourceName } from './search';
   import type { VideoLink } from '$lib/types';
@@ -34,6 +34,9 @@
   let controller: AbortController | null = null;
 
   const isUrl = $derived(/^https?:\/\//i.test(text.trim()));
+  // Ссылка с сайта, которого хост ещё не разрешил: хосту предлагаем разрешить его тут же (список «Свои сайты»).
+  let blocked = $state<{ url: string; domain: string } | null>(null);
+  const isHost = $derived(session.me?.user.role === 'host');
 
   // Только при открытии: поиск читает `text`, и без untrack каждая буква сбрасывала поле.
   $effect(() => {
@@ -109,9 +112,32 @@
       }
     } catch (x) {
       error = errorText(x);
+      blocked = null;
+      if (x instanceof ApiError && x.code === 'unknown_site') {
+        try {
+          blocked = { url, domain: new URL(url).hostname.replace(/^www\./, '') };
+        } catch { /* адрес не разобрать - просто текст ошибки */ }
+      }
     } finally {
       busy = false;
     }
+  }
+
+  async function allowSite() {
+    if (!blocked) return;
+    const { url, domain } = blocked;
+    busy = true;
+    error = '';
+    try {
+      const cur = await api<{ sites: string[] }>('/api/admin/settings');
+      await put('/api/admin/settings', { sites: [...new Set([...cur.sites, domain])] });
+      blocked = null;
+    } catch (x) {
+      error = errorText(x);
+      busy = false;
+      return;
+    }
+    await save(url, {}, true);
   }
 
   async function prefer(link: VideoLink) {
@@ -145,7 +171,10 @@
     {/if}
   </form>
   <p class="muted hint">Для выбранной серии можно вставить страницу сериала LordFilm: сезон и серия добавятся к ссылке автоматически. Другие сайты зависят от поддержки источника.</p>
-  {#if error}<p class="error">{error}</p>{/if}
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if blocked && isHost}
+    <button type="button" class="btn" disabled={busy} onclick={allowSite}><Icon name="globe" size={16} /> Разрешить {blocked.domain} и смотреть</button>
+  {/if}
   {#if searching && found}<p class="muted small" role="status">Дополняем результаты из других источников…</p>{/if}
   {#if searching && !found}
     <div class="grid">{#each Array(6) as _, i (i)}<div class="ph skeleton"></div>{/each}</div>

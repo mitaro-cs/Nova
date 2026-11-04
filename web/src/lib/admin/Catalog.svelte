@@ -4,6 +4,7 @@
   import { placeholder } from '$lib/ui/art';
   import Icon from '$lib/ui/Icon.svelte';
   import Modal from '$lib/ui/Modal.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import { ask } from '$lib/ui/dialogs.svelte';
 
   interface Row {
@@ -33,6 +34,13 @@
   let q = $state('');
   // Фильтр можно задать в адресе: `?tab=catalog&filter=none` - только фильмы без описания (ссылка из «Обзора»).
   const FILTERS = ['none', 'pending', 'manual', 'hidden'];
+  const FILTER_OPTIONS = [
+    { value: '', label: 'Все' },
+    { value: 'none', label: 'Описание не найдено' },
+    { value: 'pending', label: 'Ищем описание' },
+    { value: 'manual', label: 'Выбрано вручную' },
+    { value: 'hidden', label: 'Скрытые' },
+  ];
   const fromUrl = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('filter');
   let filter = $state(fromUrl && FILTERS.includes(fromUrl) ? fromUrl : '');
   let error = $state('');
@@ -187,13 +195,7 @@
     <Icon name="search" size={16} />
     <input bind:value={q} placeholder="Название или путь к файлу" aria-label="Поиск по каталогу" />
   </div>
-  <select class="input sel" bind:value={filter} aria-label="Фильтр">
-    <option value="">Все</option>
-    <option value="none">Описание не найдено</option>
-    <option value="pending">Ищем описание</option>
-    <option value="manual">Выбрано вручную</option>
-    <option value="hidden">Скрытые</option>
-  </select>
+  <Select fit label="Фильтр" bind:value={filter} options={FILTER_OPTIONS} />
   {#if empty}<button class="btn sm danger" onclick={removeEmpty}><Icon name="trash" size={14} /> Убрать все без файлов ({empty})</button>{/if}
 </div>
 {#if error}<p class="error">{error}</p>{/if}
@@ -231,7 +233,7 @@
       <label class="field"><span>Год</span><input class="input" bind:value={form.year} inputmode="numeric" maxlength="4" /></label>
       <label class="field">
         <span>Вид</span>
-        <select class="input" bind:value={form.kind}><option value="movie">Фильм</option><option value="series">Сериал</option></select>
+        <Select label="Тип" bind:value={form.kind} options={[{ value: 'movie', label: 'Фильм' }, { value: 'series', label: 'Сериал' }]} />
       </label>
     </div>
     <label class="field">
@@ -296,10 +298,6 @@
     border: 0;
     outline: none;
     background: none;
-  }
-  .sel {
-    width: auto;
-    max-width: 100%;
   }
   .list {
     list-style: none;

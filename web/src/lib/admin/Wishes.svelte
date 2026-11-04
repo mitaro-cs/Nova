@@ -8,7 +8,8 @@
   import { toast } from '$lib/ui/toast.svelte';
 
   // Что зрители просят добавить (кнопка «Хочу на сервисе» в Обзоре). Добавили фильм с тем же
-  // IMDb - просьба уходит сама; «Не будем» - убрать вручную.
+  // IMDb - просьба уходит сама, а зритель получает уведомление; «Выполнено» - то же вручную (например, добавили
+  // ссылкой); «Не будем» - убрать без уведомления.
   interface Wish {
     card: ExtCard;
     count: number;
@@ -33,6 +34,19 @@
     wishes = wishes?.filter((x) => x !== w) ?? null;
     badges.wishes = Math.max(0, badges.wishes - 1);
     await del(`/api/admin/wishes/${w.card.id}`).catch(load);
+  }
+
+  // «Выполнено»: фильм добавлен - просьба закрывается, а тем, кто просил, приходит уведомление.
+  async function done(w: Wish) {
+    wishes = wishes?.filter((x) => x !== w) ?? null;
+    badges.wishes = Math.max(0, badges.wishes - 1);
+    try {
+      await post(`/api/admin/wishes/${w.card.id}/done`);
+      toast(w.count > 1 ? `Готово - ${w.count} зрителей получат уведомление` : 'Готово - зритель получит уведомление');
+    } catch (x) {
+      toast(errorText(x));
+      load();
+    }
   }
 
   async function refresh() {
@@ -65,7 +79,10 @@
             <b>{w.card.title}{#if w.card.year}<span class="muted"> · {w.card.year}</span>{/if}</b>
             <span class="muted">Просят: {w.people}{w.count > 1 ? ` (${w.count})` : ''} · {day(w.at)}</span>
           </div>
-          <button class="btn sm ghost" onclick={() => dismiss(w)}>Не будем</button>
+          <div class="acts">
+            <button class="btn sm" onclick={() => done(w)}><Icon name="check" size={14} /> Выполнено</button>
+            <button class="btn sm ghost" onclick={() => dismiss(w)}>Не будем</button>
+          </div>
         </li>
       {/each}
     </ul>
@@ -126,6 +143,13 @@
   }
   .info span {
     font-size: 13px;
+  }
+  .acts {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
   }
   .ph {
     height: 120px;

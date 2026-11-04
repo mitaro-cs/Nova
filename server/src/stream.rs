@@ -280,7 +280,7 @@ pub fn play_info(video: &Path, p: Option<&Probe>, has_ffmpeg: bool) -> PlayInfo 
         ten_bit,
         duration: p.duration,
         width: p.video.as_ref().map(|v| v.width),
-        height: p.video.as_ref().map(|v| v.height),
+        height: p.video.as_ref().map(|v| v.quality_height()),
         audio,
         subs,
     }

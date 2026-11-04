@@ -1,16 +1,19 @@
 <script lang="ts">
-  import { badges } from '$lib/social/badges.svelte';
+  import { badges, readyHref, seeReady } from '$lib/social/badges.svelte';
   import { session } from '$lib/session.svelte';
   import Icon from './Icon.svelte';
 
-  // Лист колокольчика: просьбы дружбы, непрочитанные сообщения и (у хоста) просьбы зрителей. Пружинит из угла.
-  // Грузится по нажатию (бюджет JS главной).
+  // Лист колокольчика: добавленное по просьбе, просьбы дружбы, непрочитанные сообщения и (у хоста) просьбы зрителей.
+  // Пружинит из угла. Грузится по нажатию (бюджет JS главной).
   let { close }: { close: () => void } = $props();
-  const news = $derived(badges.requests + badges.unread + (session.me?.manage ? badges.wishes : 0));
+  const news = $derived(badges.requests + badges.unread + badges.ready.length + (session.me?.manage ? badges.wishes : 0));
 </script>
 
 <div class="menu" role="menu" aria-label="Уведомления">
   {#if news}
+    {#each badges.ready as r (r.id)}
+      <a href={readyHref(r)} role="menuitem" onclick={() => (seeReady(r), close())}><span class="ic"><Icon name="check" size={19} /></span><span class="lbl">{r.kind === 'series' ? 'Сериал' : 'Фильм'} добавлен: {r.title}</span></a>
+    {/each}
     {#if badges.requests}<a href="/people" role="menuitem" onclick={close}><span class="ic"><Icon name="users" size={19} /></span><span class="lbl">Просьбы дружбы</span><i class="cnt">{badges.requests}</i></a>{/if}
     {#if badges.unread}<a href="/chats" role="menuitem" onclick={close}><span class="ic"><Icon name="mail" size={19} /></span><span class="lbl">Новые сообщения</span><i class="cnt">{badges.unread}</i></a>{/if}
     {#if session.me?.manage && badges.wishes}<a href="/admin?tab=wishes" role="menuitem" onclick={close}><span class="ic"><Icon name="flag" size={19} /></span><span class="lbl">Просьбы зрителей</span><i class="cnt">{badges.wishes}</i></a>{/if}

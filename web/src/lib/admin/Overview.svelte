@@ -4,6 +4,7 @@
   import { percent } from '$lib/library';
   import Icon from '$lib/ui/Icon.svelte';
   import Metrics from './Metrics.svelte';
+  import Scheme from './Scheme.svelte';
   import type { IconName } from '$lib/ui/icons';
   import type { Health, Status } from './types';
 
@@ -126,6 +127,9 @@
       action: 'Подробнее',
     },
   ]);
+  const cpuPct = $derived(Math.round(status.system?.cpu ?? 0));
+  const memPct = $derived(status.system?.memoryUsed && status.system.memoryTotal ? Math.round((status.system.memoryUsed / status.system.memoryTotal) * 100) : 0);
+  const diskPct = $derived(status.system?.diskFree != null && status.system.diskTotal ? Math.round(100 - (status.system.diskFree / status.system.diskTotal) * 100) : 0);
   const problems = $derived(checks.filter((c) => c.ok === false).length);
   const waiting = $derived(checks.filter((c) => c.ok === null).length);
 </script>
@@ -141,6 +145,8 @@
     </p>
   </div>
 </section>
+
+<Scheme {status} />
 
 <Metrics {status} />
 
@@ -178,21 +184,9 @@
     <h3><Icon name="pulse" size={18} /> Компьютер хоста</h3>
     <p class="muted small">Насколько занят компьютер, который раздаёт фильмы. Высокая загрузка процессора - обычно перекодирование видео для слабого интернета у зрителя.</p>
     <div class="meters">
-      <div class="meter">
-        <span>Процессор</span>
-        <b>{status.system.cpu == null ? '…' : `${Math.round(status.system.cpu)}%`}</b>
-        <i style:transform="scaleX({(status.system.cpu ?? 0) / 100})"></i>
-      </div>
-      <div class="meter">
-        <span>Память</span>
-        <b>{status.system.memoryUsed == null ? '-' : size(status.system.memoryUsed)}</b>
-        <i style:transform="scaleX({status.system.memoryUsed && status.system.memoryTotal ? status.system.memoryUsed / status.system.memoryTotal : 0})"></i>
-      </div>
-      <div class="meter" class:low={diskLow}>
-        <span>Диск занят</span>
-        <b>{status.system.diskFree == null || !status.system.diskTotal ? '-' : `${Math.round(100 - (status.system.diskFree / status.system.diskTotal) * 100)}%`}</b>
-        <i style:transform="scaleX({status.system.diskFree != null && status.system.diskTotal ? 1 - status.system.diskFree / status.system.diskTotal : 0})"></i>
-      </div>
+      {@render ring('Процессор', cpuPct, status.system.cpu == null ? '…' : `${cpuPct}%`, cpuPct >= 90)}
+      {@render ring('Память', memPct, status.system.memoryUsed == null ? '-' : size(status.system.memoryUsed), memPct >= 90)}
+      {@render ring('Диск занят', diskPct, status.system.diskFree == null || !status.system.diskTotal ? '-' : `${diskPct}%`, diskLow)}
     </div>
     <p class="faint small">Обновляется каждые 5 секунд, пока вкладка открыта.</p>
   </section>
@@ -221,6 +215,17 @@
     <p class="muted">Никто не смотрит. Когда кто-то включит фильм, он появится здесь с местом просмотра, скоростью интернета и качеством.</p>
   {/if}
 </section>
+
+{#snippet ring(label: string, pct: number, text: string, bad: boolean)}
+  <div class="ring" class:low={bad}>
+    <svg viewBox="0 0 44 44" aria-hidden="true">
+      <circle class="track" cx="22" cy="22" r="18" />
+      <circle class="arc" cx="22" cy="22" r="18" pathLength="100" stroke-dasharray="{Math.min(100, pct)} 100" />
+    </svg>
+    <b>{text}</b>
+    <span>{label}</span>
+  </div>
+{/snippet}
 
 {#if health}
   <section class="card pane" aria-label="Недавние ошибки">
@@ -265,7 +270,7 @@
     font-variant-numeric: tabular-nums;
   }
   .errors b {
-    color: var(--warn);
+    color: var(--muted);
   }
   .errors li.err b {
     color: var(--danger);
@@ -281,8 +286,8 @@
     margin-bottom: 18px;
     padding: 18px 20px;
     border-radius: 20px;
-    background: rgba(48, 209, 88, 0.08);
-    border: 1px solid rgba(48, 209, 88, 0.3);
+    background: color-mix(in srgb, var(--ok) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
   }
   .summary.bad {
     background: rgba(255, 92, 108, 0.08);
@@ -357,8 +362,8 @@
     color: var(--danger);
   }
   .checks .wait .ic {
-    background: rgba(255, 184, 77, 0.14);
-    color: var(--warn);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--muted);
   }
   .checks b {
     display: block;
@@ -389,36 +394,49 @@
     gap: 12px;
     margin-bottom: 10px;
   }
-  .meter {
+  /* Кольца загрузки: белое - обычно, красное - когда пора вмешаться (диск почти полон, процессор или память на пределе). */
+  .ring {
     position: relative;
     display: grid;
-    gap: 2px;
-    padding: 14px 16px 18px;
-    overflow: hidden;
-    border-radius: 14px;
-    background: #0b0b0d;
-    border: 1px solid var(--line);
+    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
+    column-gap: 14px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: #ffffff0a;
   }
-  .meter span {
-    font-size: 12px;
-    color: var(--muted);
+  .ring svg {
+    grid-row: 1 / 3;
+    width: 76px;
+    height: 76px;
+    transform: rotate(-90deg);
+    fill: none;
+    stroke-width: 4.4;
   }
-  .meter b {
+  .ring .track {
+    stroke: #ffffff1c;
+  }
+  .ring .arc {
+    stroke: #fff;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.6s ease;
+  }
+  .ring.low .arc {
+    stroke: var(--danger);
+  }
+  .ring b {
+    align-self: end;
     font-size: 22px;
     font-variant-numeric: tabular-nums;
   }
-  .meter i {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 4px;
-    background: #fff;
-    transform-origin: left;
-    transition: transform 0.6s ease;
+  .ring.low b {
+    color: var(--danger);
   }
-  .meter.low i {
-    background: var(--danger);
+  .ring span {
+    align-self: start;
+    font-size: 12px;
+    color: var(--muted);
   }
   .watching {
     display: grid;
@@ -452,7 +470,7 @@
     font-variant-numeric: tabular-nums;
   }
   .watching .net.slow {
-    color: #f5c46b;
+    color: var(--danger);
   }
   .watching .bar {
     grid-column: 1 / -1;

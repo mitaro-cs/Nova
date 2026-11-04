@@ -9,3 +9,15 @@ export function upcomingYear(value: string | null | undefined, now = new Date())
   if (!match[3]) return year * 100 + month > now.getFullYear() * 100 + now.getMonth() + 1 ? year : null;
   return year * 10000 + month * 100 + day > current ? year : null;
 }
+
+/** Дата выхода словами: «5 марта 2027», «март 2027», «2027 год»; не разобрали - пустая строка. */
+export function releaseLabel(value: string | null | undefined): string {
+  const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(value ?? '');
+  if (!m) return '';
+  const year = Number(m[1]);
+  if (!m[2]) return `${year} год`;
+  const date = new Date(year, Number(m[2]) - 1, m[3] ? Number(m[3]) : 1);
+  return m[3]
+    ? date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    : date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}

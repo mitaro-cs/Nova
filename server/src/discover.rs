@@ -189,7 +189,7 @@ pub const FEEDS: &[(&str, &str, Src)] = &[
 ];
 
 const NODE: &str = "id titleText { text } originalTitleText { text } titleType { id isSeries }
-    releaseYear { year } ratingsSummary { aggregateRating voteCount }
+    releaseYear { year } releaseDate { year month day } ratingsSummary { aggregateRating voteCount }
     primaryImage { url } genres { genres { text } }";
 
 /// Поиск IMDb: `POPULARITY` - сначала модное сейчас, `USER_RATING_COUNT` - больше всего оценок (классика жанра).
@@ -288,6 +288,8 @@ pub struct Ext {
     pub votes: Option<i64>,
     pub genres: Vec<String>,
     pub poster_url: Option<String>,
+    /// Дата выхода (YYYY-MM-DD, у неточной - YYYY или YYYY-MM): по ней видно, что фильм ещё не вышел.
+    pub release: Option<String>,
 }
 
 fn text(v: &Value) -> Option<String> {
@@ -330,9 +332,20 @@ pub fn parse_chart(v: &Value) -> Vec<Ext> {
                     .take(3)
                     .collect(),
                 poster_url: text(&n["primaryImage"]["url"]).map(|u| sized(&u, 342)),
+                release: release_of(&n["releaseDate"]),
             })
         })
         .collect()
+}
+
+/// Дата выхода из releaseDate { year month day } IMDb: 2027-03-05, без дня - 2027-03, только год - 2027.
+fn release_of(v: &Value) -> Option<String> {
+    let y = v["year"].as_i64()?;
+    Some(match (v["month"].as_i64(), v["day"].as_i64()) {
+        (Some(m), Some(d)) => format!("{y:04}-{m:02}-{d:02}"),
+        (Some(m), None) => format!("{y:04}-{m:02}"),
+        _ => format!("{y:04}"),
+    })
 }
 
 pub fn upsert(app: &App, items: &[Ext]) -> rusqlite::Result<()> {
@@ -340,15 +353,16 @@ pub fn upsert(app: &App, items: &[Ext]) -> rusqlite::Result<()> {
     app.db.tx(|tx| {
         for e in items {
             tx.execute(
-                "INSERT INTO ext_titles (id, kind, title, original, year, rating, votes, genres, poster_url, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                "INSERT INTO ext_titles (id, kind, title, original, year, rating, votes, genres, poster_url, updated_at, release)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET kind = ?2, title = ?3, original = COALESCE(?4, original),
                    year = COALESCE(?5, year), rating = COALESCE(?6, rating), votes = COALESCE(?7, votes),
                    genres = CASE WHEN ?8 = '[]' THEN genres ELSE ?8 END,
                    poster = CASE WHEN COALESCE(poster_url, '') NOT LIKE '%tmdb.org/%' AND poster_url IS NOT ?9 AND ?9 IS NOT NULL
+                     AND json_extract(COALESCE(extra, '{}'), '$.picked.poster') IS NULL
                      THEN NULL ELSE poster END,
                    poster_url = CASE WHEN poster_url LIKE '%tmdb.org/%' THEN poster_url ELSE COALESCE(?9, poster_url) END,
-                   updated_at = ?10",
+                   updated_at = ?10, release = COALESCE(?11, release)",
                 params![
                     e.id,
                     if e.series { "series" } else { "movie" },
@@ -359,7 +373,8 @@ pub fn upsert(app: &App, items: &[Ext]) -> rusqlite::Result<()> {
                     e.votes,
                     serde_json::to_string(&crate::meta::genres_ru(&e.genres)).unwrap_or_else(|_| "[]".into()),
                     e.poster_url,
-                    now
+                    now,
+                    e.release
                 ],
             )?;
         }
@@ -619,6 +634,7 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
         votes: d.votes,
         genres: d.genres.clone(),
         poster_url: d.poster.as_deref().map(|u| sized(u, 342)),
+        release: d.release_date.clone(),
     };
     upsert(app, &[e])?;
     // Есть ключ TMDB - русский постер вместо промо-плаката IMDb (upsert его потом не затирает).
@@ -639,7 +655,7 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
     if extra["seasons"].as_array().is_some_and(|s| s.is_empty()) {
         extra.as_object_mut().expect("extra object").remove("seasons");
     }
-    app.db.with(|c|c.execute("UPDATE ext_titles SET overview=COALESCE(overview,?1),runtime=?2,backdrop=COALESCE(?3,NULLIF(backdrop,'')),extra=json_patch(COALESCE(extra,'{}'),?4),detailed=?5 WHERE id=?6",params![d.overview,d.runtime,d.backdrop.as_deref().map(crate::media_meta::art),extra.to_string(),DETAILED,id]))?;
+    app.db.with(|c|c.execute("UPDATE ext_titles SET overview=COALESCE(overview,?1),runtime=?2,backdrop=CASE WHEN json_extract(COALESCE(extra,'{}'),'$.picked.backdrop') IS NOT NULL THEN backdrop ELSE COALESCE(?3,NULLIF(backdrop,'')) END,extra=json_patch(COALESCE(extra,'{}'),?4),detailed=?5 WHERE id=?6",params![d.overview,d.runtime,d.backdrop.as_deref().map(crate::media_meta::art),extra.to_string(),DETAILED,id]))?;
     let a = app.clone();
     let id = id.to_string();
     let rich_job = format!("rich:{id}");
@@ -765,6 +781,10 @@ pub struct ExtCard {
     pub mark: Option<String>,
     /// Просили хоста добавить.
     pub wished: bool,
+    /// Дата выхода (см. Ext::release); в будущем - фильм ещё не вышел.
+    pub release: Option<String>,
+    /// Администратор отметил фильм «Ещё не вышел» вручную.
+    pub soon: bool,
 }
 
 pub fn card_sql(kids: bool) -> String {
@@ -775,7 +795,8 @@ pub fn card_sql(kids: bool) -> String {
            (SELECT t.id FROM titles t WHERE t.imdb_id = e.id AND {} LIMIT 1),
            CASE WHEN EXISTS (SELECT 1 FROM ext_dropped d WHERE d.ext_id = e.id AND d.profile_id = ?1) THEN 'dropped'
              ELSE (SELECT m.status FROM ext_marks m WHERE m.ext_id = e.id AND m.profile_id = ?1) END,
-           EXISTS (SELECT 1 FROM wishes w WHERE w.ext_id = e.id AND w.profile_id = ?1 AND w.dismissed_at IS NULL)
+           EXISTS (SELECT 1 FROM wishes w WHERE w.ext_id = e.id AND w.profile_id = ?1 AND w.dismissed_at IS NULL AND w.done_at IS NULL),
+           e.release, e.soon
          FROM ext_titles e",
         crate::api::visible(kids)
     )
@@ -800,6 +821,8 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
         local: r.get(8)?,
         mark: r.get(9)?,
         wished: r.get(10)?,
+        release: r.get(11)?,
+        soon: r.get(12)?,
     })
 }
 
@@ -889,5 +912,13 @@ mod tests {
         let keys: std::collections::HashSet<_> = FEEDS.iter().map(|f| f.0).collect();
         assert_eq!(keys.len(), FEEDS.len());
         assert!(FEEDS.iter().all(|f| f.0.ends_with("_movies") || f.0.ends_with("_series")));
+    }
+
+    #[test]
+    fn release_dates_keep_the_precision_imdb_gives() {
+        assert_eq!(release_of(&json!({"year": 2027, "month": 3, "day": 5})).as_deref(), Some("2027-03-05"));
+        assert_eq!(release_of(&json!({"year": 2027, "month": 11, "day": null})).as_deref(), Some("2027-11"));
+        assert_eq!(release_of(&json!({"year": 2028})).as_deref(), Some("2028"));
+        assert_eq!(release_of(&json!(null)), None);
     }
 }

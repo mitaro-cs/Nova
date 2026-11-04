@@ -403,7 +403,7 @@ fn hls_source(app: &App, v: &Viewer, id: i64) -> ApiResult<(FileRow, f64, i64)> 
     let height = p
         .video
         .as_ref()
-        .map(|v| v.height)
+        .map(|v| v.quality_height())
         .filter(|h| *h > 0)
         .ok_or_else(|| ApiError::bad("no_video", "В файле нет видео"))?;
     Ok((f, duration, height))

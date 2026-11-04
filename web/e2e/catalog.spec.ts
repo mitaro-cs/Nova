@@ -1,5 +1,5 @@
 import { expect, test } from './util-test';
-import { act, env, narrow, resetStatuses, url, wide } from './util';
+import { act, choose, env, narrow, resetStatuses, url, wide } from './util';
 
 // Главная как у Apple TV: герой-карусель, ряды широких карточек, вкладки Фильмы и Сериалы
 // с фильтром по статусу. Демо-данные общие: перед каждым тестом статусы - как после setup.
@@ -114,7 +114,7 @@ test('совместный список: из фильма - в список с 
   const g = page.getByRole('dialog', { name: 'Новая группа' });
   await g.getByLabel('Название группы').fill('На выходные');
   await g.getByRole('button', { name: 'Создать' }).click();
-  await page.getByRole('combobox', { name: 'Группа' }).selectOption({ label: 'На выходные' });
+  await choose(page, 'Группа', 'На выходные');
   await expect(page.getByRole('region', { name: 'На выходные' }).getByRole('link', { name: /Дюна/ })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('region', { name: 'На выходные' }).getByRole('link', { name: /Дюна/ })).toBeVisible();

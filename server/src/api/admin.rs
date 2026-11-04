@@ -219,6 +219,74 @@ pub struct SettingsBody {
     sites: Option<Vec<String>>,
 }
 
+/// Каталоги хоста - сайты, где много фильмов и сериалов (`own_sites`).
+pub async fn catalogs(State(app): State<Arc<App>>, _m: Manager) -> Out {
+    Ok(Json(json!({ "items": crate::own_sites::load(&app) })))
+}
+
+#[derive(Deserialize)]
+pub struct CatalogsBody {
+    items: Vec<crate::own_sites::Catalog>,
+}
+
+fn host_only_catalogs(m: &Manager) -> ApiResult<()> {
+    if m.0.role == "host" {
+        Ok(())
+    } else {
+        Err(ApiError::new(StatusCode::FORBIDDEN, "host_only", "Каталоги сайтов выбирает только хост"))
+    }
+}
+
+/// Список каталогов целиком. Домены каталогов сразу становятся «своими сайтами»: ссылка с них открывается в плеере.
+pub async fn save_catalogs(State(app): State<Arc<App>>, m: Manager, Json(b): Json<CatalogsBody>) -> Out {
+    host_only_catalogs(&m)?;
+    let mut keep: Vec<crate::own_sites::Catalog> = Vec::new();
+    for c in b.items {
+        let domain = super::links::site_domain(&c.domain).ok_or_else(|| {
+            ApiError::bad("bad_site", format!("«{}» - не адрес сайта (нужно вроде kino.example)", c.domain))
+        })?;
+        let search = c.search.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        if search.as_deref().is_some_and(|s| !crate::own_sites::valid_template(&domain, s)) {
+            return Err(ApiError::bad(
+                "bad_search",
+                "Адрес поиска должен вести на этот же сайт и содержать {q} - туда подставится название фильма",
+            ));
+        }
+        if !keep.iter().any(|k| k.domain == domain) {
+            keep.push(crate::own_sites::Catalog { domain, search });
+        }
+    }
+    if keep.len() > crate::own_sites::MAX {
+        return Err(ApiError::bad("too_many", "Каталогов - не больше 20"));
+    }
+    let mut sites = super::links::extra_sites(&app);
+    for c in &keep {
+        if !sites.contains(&c.domain) {
+            sites.push(c.domain.clone());
+        }
+    }
+    if sites.len() > 30 {
+        return Err(ApiError::bad("too_many", "Своих сайтов - не больше 30"));
+    }
+    app.db.set_setting("video.sites", &serde_json::to_string(&sites).unwrap_or_else(|_| "[]".into()))?;
+    crate::own_sites::store(&app, &keep)?;
+    Ok(Json(json!({ "items": keep })))
+}
+
+#[derive(Deserialize)]
+pub struct ProbeBody {
+    domain: String,
+}
+
+/// Найти у сайта обычный адрес поиска (хост потом может поправить его вручную).
+pub async fn probe_catalog(State(_app): State<Arc<App>>, m: Manager, Json(b): Json<ProbeBody>) -> Out {
+    host_only_catalogs(&m)?;
+    let domain = super::links::site_domain(&b.domain)
+        .ok_or_else(|| ApiError::bad("bad_site", "Нужен адрес сайта вроде kino.example"))?;
+    let search = crate::own_sites::probe(&domain).await;
+    Ok(Json(json!({ "domain": domain, "search": search })))
+}
+
 fn url_or_empty(s: &str) -> ApiResult<String> {
     let s = s.trim().trim_end_matches('/');
     if s.is_empty() || s.starts_with("https://") || s.starts_with("http://") {
@@ -299,6 +367,10 @@ pub async fn save_settings(State(app): State<Arc<App>>, m: Manager, Json(b): Jso
         app.meta_kick.notify_one();
     }
     if let Some(list) = b.sites {
+        // Откуда брать видео, решает только хост: администратор список не меняет.
+        if m.0.role != "host" {
+            return Err(ApiError::new(StatusCode::FORBIDDEN, "host_only", "Сайты для видео выбирает только хост"));
+        }
         let mut keep: Vec<String> = Vec::new();
         for s in &list {
             let d = super::links::site_domain(s).ok_or_else(|| {
@@ -699,6 +771,12 @@ pub async fn upload_image(
         .await
         .map_err(ApiError::internal)?
         .map_err(|e| ApiError::bad("bad_image", e.to_string()))?;
+    apply_image(&app, id, col, &name)
+}
+
+/// Записать готовую картинку обложкой или фоном фильма (сброс маленьких копий, фильм «закреплён» - описание
+/// больше не затирает выбор хоста).
+fn apply_image(app: &App, id: i64, col: &str, name: &str) -> Out {
     app.db.with(|c| {
         c.execute(
             &format!("UPDATE titles SET {col} = ?, poster_sm = CASE WHEN '{col}' = 'poster' THEN NULL ELSE poster_sm END, backdrop_sm = CASE WHEN '{col}' = 'backdrop' THEN NULL ELSE backdrop_sm END, backdrop_md = CASE WHEN '{col}' = 'backdrop' THEN NULL ELSE backdrop_md END, locked = 1, updated_at = ? WHERE id = ?"),
@@ -706,6 +784,172 @@ pub async fn upload_image(
         )
     })?;
     Ok(Json(json!({"ok": true, "url": format!("/img/{name}")})))
+}
+
+const IMDB_IMG_HOST: &str = "https://m.media-amazon.com/images/";
+
+fn imdb_image_url(u: &str) -> ApiResult<&str> {
+    if u.starts_with(IMDB_IMG_HOST) && !u.contains(char::is_whitespace) {
+        Ok(u)
+    } else {
+        Err(ApiError::bad("bad_url", "Это не картинка IMDb"))
+    }
+}
+
+const IMDB_ART: &str = r#"query I($id: ID!) { title(id: $id) {
+  primaryImage { url width height }
+  images(first: 200) { edges { node { url width height type caption { plainText } } } }
+} }"#;
+
+/// Картинки фильма на IMDb: постеры и кадры, чтобы хост выбрал обложку и фон сам.
+pub async fn imdb_art(State(app): State<Arc<App>>, _m: Manager, Path(id): Path<i64>) -> Out {
+    let imdb: Option<String> = app
+        .db
+        .with(|c| c.query_row("SELECT imdb_id FROM titles WHERE id = ?", [id], |r| r.get(0)).optional())?
+        .flatten();
+    let imdb = imdb
+        .ok_or_else(|| ApiError::bad("no_imdb", "У этого фильма нет страницы на IMDb - сначала выберите описание"))?;
+    art_list(&app, imdb).await
+}
+
+/// То же для фильма из ленты IMDb (у него id IMDb - сам адрес).
+pub async fn ext_imdb_art(State(app): State<Arc<App>>, _m: Manager, Path(id): Path<String>) -> Out {
+    art_list(&app, id).await
+}
+
+async fn art_list(app: &App, imdb: String) -> Out {
+    let t = crate::meta::imdb::Imdb::new(app.http.clone())
+        .data(IMDB_ART, json!({ "id": imdb }), "title")
+        .await
+        .map_err(|e| ApiError::bad("imdb_unavailable", format!("IMDb не ответил: {e}")))?;
+    let mut out: Vec<Value> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |n: &Value, kind: &str| {
+        let (Some(url), Some(w), Some(h)) = (n["url"].as_str(), n["width"].as_u64(), n["height"].as_u64()) else {
+            return;
+        };
+        if !url.starts_with(IMDB_IMG_HOST) || !seen.insert(url.to_string()) {
+            return;
+        }
+        out.push(json!({"url": url, "width": w, "height": h, "kind": kind, "caption": n["caption"]["plainText"]}));
+    };
+    push(&t["primaryImage"], "poster");
+    for e in t["images"]["edges"].as_array().into_iter().flatten() {
+        let n = &e["node"];
+        let kind = if n["type"] == "poster" || n["height"].as_u64() > n["width"].as_u64() { "poster" } else { "frame" };
+        push(n, kind);
+    }
+    Ok(Json(json!({ "imdbId": imdb, "items": out })))
+}
+
+#[derive(Deserialize)]
+pub struct ArtPreview {
+    u: String,
+    w: Option<u32>,
+}
+
+/// Превью картинки IMDb для выбора: скачиваем сами (страница к IMDb не ходит), не больше 800 px.
+pub async fn imdb_art_preview(
+    State(app): State<Arc<App>>,
+    _m: Manager,
+    Query(q): Query<ArtPreview>,
+) -> ApiResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    let u = imdb_image_url(&q.u)?;
+    let url = crate::meta::imdb::sized(u, q.w.unwrap_or(342).clamp(100, 800));
+    let res = app.http.get(&url).send().await.map_err(|e| ApiError::bad("imdb_unavailable", e.to_string()))?;
+    if !res.status().is_success() {
+        return Err(ApiError::not_found());
+    }
+    let bytes = res.bytes().await.map_err(|e| ApiError::bad("imdb_unavailable", e.to_string()))?;
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "image/jpeg"),
+            (axum::http::header::CACHE_CONTROL, "private, max-age=3600"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+#[derive(Deserialize)]
+pub struct ImdbPick {
+    url: String,
+    /// Ширина, которую скачать: от неё зависит качество (500 - обычное, 1000 - высокое, 2000+ - максимум).
+    width: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct SoonBody {
+    on: bool,
+}
+
+/// Фильм ленты: отметить «Ещё не вышел» (или снять отметку) вручную.
+pub async fn set_ext_soon(
+    State(app): State<Arc<App>>,
+    _m: Manager,
+    Path(id): Path<String>,
+    Json(b): Json<SoonBody>,
+) -> Out {
+    let n = app.db.with(|c| c.execute("UPDATE ext_titles SET soon = ? WHERE id = ?", params![b.on, id]))?;
+    if n == 0 {
+        return Err(ApiError::not_found());
+    }
+    Ok(Json(json!({"ok": true, "soon": b.on})))
+}
+
+/// Фильм из ленты IMDb: поставить обложкой или фоном выбранную картинку (скачивается к нам в нужном качестве).
+pub async fn set_ext_imdb_image(
+    State(app): State<Arc<App>>,
+    _m: Manager,
+    Path((id, which)): Path<(String, String)>,
+    Json(b): Json<ImdbPick>,
+) -> Out {
+    let col = match which.as_str() {
+        "poster" => "poster",
+        "backdrop" => "backdrop",
+        _ => return Err(ApiError::not_found()),
+    };
+    let u = imdb_image_url(&b.url)?;
+    let url = crate::meta::imdb::sized(u, b.width.unwrap_or(1000).clamp(300, 4000));
+    let name = app
+        .images
+        .download(&url)
+        .await
+        .map_err(|e| ApiError::bad("imdb_unavailable", format!("Не удалось скачать картинку: {e}")))?;
+    // Выбор хоста - в `extra.picked`: страница и обновление с IMDb смотрят туда раньше, чем на картинки самого IMDb.
+    let n = app.db.with(|c| {
+        c.execute(
+            &format!("UPDATE ext_titles SET {col} = ?1, extra = json_set(COALESCE(extra, '{{}}'), '$.picked.{col}', ?1) WHERE id = ?2"),
+            params![name, id],
+        )
+    })?;
+    if n == 0 {
+        return Err(ApiError::not_found());
+    }
+    Ok(Json(json!({"ok": true, "url": format!("/img/{name}")})))
+}
+
+/// Поставить обложкой или фоном выбранную картинку IMDb в нужном качестве.
+pub async fn set_imdb_image(
+    State(app): State<Arc<App>>,
+    _m: Manager,
+    Path((id, which)): Path<(i64, String)>,
+    Json(b): Json<ImdbPick>,
+) -> Out {
+    let col = match which.as_str() {
+        "poster" => "poster",
+        "backdrop" => "backdrop",
+        _ => return Err(ApiError::not_found()),
+    };
+    let u = imdb_image_url(&b.url)?;
+    let url = crate::meta::imdb::sized(u, b.width.unwrap_or(1000).clamp(300, 4000));
+    let name = app
+        .images
+        .download(&url)
+        .await
+        .map_err(|e| ApiError::bad("imdb_unavailable", format!("Не удалось скачать картинку: {e}")))?;
+    apply_image(&app, id, col, &name)
 }
 
 #[derive(Deserialize)]
@@ -1023,12 +1267,19 @@ pub async fn logins(State(app): State<Arc<App>>, _m: Manager) -> Out {
 
 #[cfg(test)]
 mod tests {
-    use super::pretty;
+    use super::{imdb_image_url, pretty};
 
     #[test]
     fn pretty_drops_the_windows_verbatim_prefix() {
         assert_eq!(pretty(r"\\?\C:\Users\Me\Films"), r"C:\Users\Me\Films");
         assert_eq!(pretty(r"\\?\UNC\nas\films"), r"\\nas\films");
         assert_eq!(pretty("/home/me/films"), "/home/me/films");
+    }
+    #[test]
+    fn only_imdb_images_can_be_fetched() {
+        assert!(imdb_image_url("https://m.media-amazon.com/images/M/MV5B.jpg").is_ok());
+        assert!(imdb_image_url("http://127.0.0.1:8080/x.jpg").is_err());
+        assert!(imdb_image_url("https://evil.example/images/M/a.jpg").is_err());
+        assert!(imdb_image_url("https://m.media-amazon.com/images/M/a b.jpg").is_err());
     }
 }

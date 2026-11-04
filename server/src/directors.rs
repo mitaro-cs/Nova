@@ -322,6 +322,7 @@ pub async fn information(app: &Arc<App>, id: &str, name: &str, role: &str) -> an
                 votes: None,
                 genres: vec![],
                 poster_url: None,
+                release: None,
             });
         }
     }

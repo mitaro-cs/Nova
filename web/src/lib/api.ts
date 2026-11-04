@@ -22,18 +22,32 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     headers.set('content-type', 'application/json');
     body = JSON.stringify(init.json);
   }
-  let res: Response;
-  try {
-    res = await fetch(path, { ...init, method, headers, body, credentials: 'same-origin' });
-  } catch (e) {
-    if (init.signal?.aborted) throw e;
-    net.down = true;
-    throw new ApiError(0, 'offline', 'Нет связи с сервером');
-  }
-  // Ответ не от нашего сервера (нет метки) - это страница туннеля: компьютер хоста выключен.
-  if (!res.headers.get('x-fsfy') && res.status >= 500) {
-    net.down = true;
-    throw new ApiError(res.status, 'offline', 'Компьютер хоста сейчас выключен');
+  // Чтение безопасно повторить: туннель иногда отдаёт одиночный сбой (пока клиент переподключается),
+  // и из-за него не стоит писать «сервер недоступен» на весь экран.
+  const retry = method === 'GET' || method === 'HEAD';
+  let res!: Response;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(path, { ...init, method, headers, body, credentials: 'same-origin' });
+    } catch (e) {
+      if (init.signal?.aborted) throw e;
+      if (retry && attempt === 0) {
+        await new Promise((r) => setTimeout(r, 700));
+        continue;
+      }
+      net.down = true;
+      throw new ApiError(0, 'offline', 'Нет связи с сервером');
+    }
+    // Ответ не от нашего сервера (нет метки) - это страница туннеля: компьютер хоста выключен.
+    if (!res.headers.get('x-fsfy') && res.status >= 500) {
+      if (retry && attempt === 0) {
+        await new Promise((r) => setTimeout(r, 700));
+        continue;
+      }
+      net.down = true;
+      throw new ApiError(res.status, 'offline', 'Компьютер хоста сейчас выключен');
+    }
+    break;
   }
   net.down = false;
   init.headersReceived?.(res.headers);

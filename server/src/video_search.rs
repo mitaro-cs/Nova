@@ -319,7 +319,7 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
     let query = q.q.trim();
     let provider = q.provider.as_deref();
     anyhow::ensure!(
-        provider.is_none_or(|p| matches!(p, "rutube" | "vk" | "archive" | "peertube" | "commons" | "lordfilm")),
+        provider.is_none_or(|p| matches!(p, "rutube" | "vk" | "archive" | "peertube" | "commons" | "lordfilm" | "own")),
         "Неизвестный источник"
     );
     let enabled = |name: &str| provider.is_none_or(|p| p == name);
@@ -338,7 +338,13 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         q.episode.unwrap_or(0),
         q.mode.as_deref().unwrap_or("")
     );
-    let key = format!("{key}:{}:{}", util::sha256_hex(token.as_bytes()), provider.unwrap_or("all"));
+    let catalogs = serde_json::to_string(&crate::own_sites::load(app)).unwrap_or_default();
+    let key = format!(
+        "{key}:{}:{}:{}",
+        util::sha256_hex(token.as_bytes()),
+        provider.unwrap_or("all"),
+        &util::sha256_hex(catalogs.as_bytes())[..8]
+    );
     if let Some(result) = cached(&key) {
         return result;
     }
@@ -480,8 +486,46 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         })
         .await
     };
-    let (ru, vk, open, peer, wiki, lord) = tokio::join!(ru, vk, open, peer, wiki, lord);
-    if ru.is_none() && vk.is_none() && open.is_none() && peer.is_none() && wiki.is_none() && lord.is_none() {
+    // Каталоги хоста («Управление → Настройки → Каталоги»): ищем на каждом их собственным поиском, фильмы и сериалы
+    // целиком (по серии такой поиск не работает - у каждого сайта своя вёрстка серий).
+    let own = async {
+        if !enabled("own") || q.mode.as_deref() == Some("trailer") || q.season.is_some() || q.episode.is_some() {
+            return None;
+        }
+        let catalogs: Vec<_> = crate::own_sites::load(app).into_iter().filter(|c| c.search.is_some()).collect();
+        if catalogs.is_empty() {
+            return None;
+        }
+        let (name, year) = expected.as_ref().map(|(name, _, year)| (name.as_str(), *year)).unwrap_or((query, None));
+        let names: Vec<&str> = std::iter::once(name)
+            .chain(expected.as_ref().and_then(|(_, original, _)| original.as_deref()))
+            .chain(aka.iter().map(String::as_str))
+            .collect();
+        let each = catalogs.iter().map(|c| {
+            let names = &names;
+            async move {
+                let site = format!("own:{}", c.domain);
+                tracked(&site, async {
+                    tokio::time::timeout(Duration::from_secs(10), crate::own_sites::search(c, names, year))
+                        .await
+                        .ok()
+                        .flatten()
+                })
+                .await
+            }
+        });
+        let results: Vec<Option<Vec<Value>>> = futures_util::future::join_all(each).await;
+        results.iter().any(Option::is_some).then(|| results.into_iter().flatten().flatten().collect())
+    };
+    let (ru, vk, open, peer, wiki, lord, own) = tokio::join!(ru, vk, open, peer, wiki, lord, own);
+    if ru.is_none()
+        && vk.is_none()
+        && open.is_none()
+        && peer.is_none()
+        && wiki.is_none()
+        && lord.is_none()
+        && own.is_none()
+    {
         let message = "Источники видео сейчас не отвечают";
         remember(key, Err(message.to_owned()));
         anyhow::bail!(message);
@@ -493,9 +537,14 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         .chain(peer)
         .chain(wiki)
         .chain(lord)
+        .chain(own)
         .flatten()
-        // LordFilm movie cards do not publish a duration. Do not invent one or drop exact movie matches.
-        .filter(|i| i["site"] == "lordfilm" || q.min.is_none_or(|m| i["duration"].as_i64().unwrap_or(0) >= m))
+        // Страницы LordFilm и каталогов хоста не публикуют длительность: не выдумываем её и не отбрасываем точные совпадения.
+        .filter(|i| {
+            i["site"] == "lordfilm"
+                || i["site"] == "own"
+                || q.min.is_none_or(|m| i["duration"].as_i64().unwrap_or(0) >= m)
+        })
         .filter(|i| {
             let label = i["label"].as_str().unwrap_or("");
             if let Some((title, original, year)) = &expected {

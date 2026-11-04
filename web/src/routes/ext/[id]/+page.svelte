@@ -3,6 +3,7 @@
   import { akaShown } from '$lib/aka';
   import { MediaQuery } from 'svelte/reactivity';
   import MobileHero from '$lib/title/MobileHero.svelte';
+  import ImdbArt from '$lib/title/ImdbArt.svelte';
   import RewindHero from '$lib/title/RewindHero.svelte';
   import '$lib/title/rewind-sheet.css';
   import RatingRing from '$lib/title/RatingRing.svelte';
@@ -30,7 +31,7 @@
   import Franchise from '$lib/title/Franchise.svelte';
   import RatingsGrid from '$lib/title/RatingsGrid.svelte';
   import SeriesHero, { type Ep } from '$lib/title/SeriesHero.svelte';
-  import { upcomingYear } from '$lib/title/upcoming';
+  import { releaseLabel, upcomingYear } from '$lib/title/upcoming';
   import type { ExtCard, ExtDetail, ExtEpisode, FoundVideo, VideoLink, Review, Reviews as ReviewsData } from '$lib/types';
   import { left, percent } from '$lib/library';
   import { personHref } from '$lib/people';
@@ -315,6 +316,13 @@
 
   const seed = $derived(extSheet.seed?.id === id ? extSheet.seed : null);
   const c = $derived<ExtCard | null>(d?.card ?? (session.me?.site.metadataLanguage === 'source' || localized(seed?.title) ? seed : null));  const isSeries = $derived(c?.kind === 'series');
+  // Хост выбирает обложку и фон среди картинок IMDb (окно `ImdbArt`).
+  let imdbArt = $state(false);
+  function artPicked(which: 'poster' | 'backdrop', url: string) {
+    if (!d) return;
+    if (which === 'poster') d.posterLarge = url;
+    else d.backdrop = url;
+  }
   const videoQuery = $derived(isSeries && selected ? `${c?.title} ${selected.season} сезон ${selected.episode} серия` : `${c?.title ?? ''} ${c?.year ?? ''}`);
   const people = $derived(d?.people ?? []);
   const team = $derived([
@@ -436,9 +444,29 @@
       .join('');
   const me = $derived(session.me?.user.profile?.id);
   let moreOpen = $state(false);
+  // Фильм ещё не вышел: вместо поиска видео - «Выйдет 5 марта 2027», «Скоро» в сведениях.
+  const soonYear = $derived(upcomingYear(d?.releaseDate ?? c?.release));
+  const soonLabel = $derived(soonYear ? releaseLabel(d?.releaseDate ?? c?.release) : '');
+  // Не вышел: по дате IMDb или по отметке администратора («Ещё не вышел»).
+  const notOut = $derived(!!c?.soon || !!soonYear);
+  const notOutText = $derived(soonYear ? `Выйдет ${soonLabel}` : 'Ещё не вышел');
+  async function toggleSoon() {
+    if (!d) return;
+    const next = !d.card.soon;
+    d.card.soon = next;
+    try {
+      await put(`/api/admin/ext/${d.card.id}/soon`, { on: next });
+      extSheet.version++;
+      toast(next ? 'Фильм отмечен: ещё не вышел' : 'Отметка «Ещё не вышел» снята');
+    } catch (e) {
+      d.card.soon = !next;
+      toast(errorText(e));
+    }
+  }
   const mobilePlay = $derived.by(() => {
     if (!c) return null;
     if (c.local) return { label: 'Смотреть на Nova', href: `/title/${c.local}` };
+    if (notOut) return { label: notOutText, disabled: true };
     if (first) return { label: resumeAt ? 'Продолжить' : 'Смотреть', href: `/watch/link/${first.id}`, note: resumeAt ? left(resumeAt.position, resumeAt.duration) : undefined };
     const found = firstFound;
     if (found) return { label: 'Смотреть', onclick: () => playFound(found) };
@@ -450,6 +478,8 @@
 {#snippet watch(cls: string)}
   {#if c?.local}
     <a class="btn white {cls}" href="/title/{c.local}"><Icon name="play" size={16} /> Смотреть на Nova</a>
+  {:else if notOut}
+    <button class="btn white {cls}" disabled><Icon name="clock" size={16} /> {notOutText}</button>
   {:else if first}
     <a class="btn white {cls}" href="/watch/link/{first.id}">
       <Icon name="play" size={16} />
@@ -464,6 +494,7 @@
   {/if}
 {/snippet}
 
+{#if !error && c && session.me?.manage}<ImdbArt bind:open={imdbArt} base="/api/admin/ext/{c.id}" onpicked={artPicked} />{/if}
 {#if !error && c && isSeries}
   <MobileHero
     title={c.title}
@@ -514,6 +545,9 @@
         <button class="ib" aria-label="В список" title="В список" aria-expanded={lists} disabled={!d} onclick={() => (lists = !lists)}><Icon name="list" size={16} /><span>В список</span></button>
         <button class="ib" aria-label="Смотреть вместе" title="Смотреть вместе" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={16} /><span>Вместе</span></button>
         <a class="ib" href="https://www.imdb.com/title/{c?.id}/" target="_blank" rel="noopener noreferrer" aria-label="Открыть на IMDb" title="IMDb"><b class="imdb-s">IMDb</b></a>
+        {#if session.me?.manage}
+          <button class="ib" aria-label="Картинки с IMDb" title="Обложка и фон с IMDb" onclick={() => (imdbArt = true)}><Icon name="image" size={16} /><span>Картинки</span></button>
+        {/if}
       </div>
     {/snippet}
     {#snippet extra()}
@@ -594,7 +628,7 @@
     fallback={c.poster}
     tall={!d?.backdrop}
     imdbId={id}
-    meta={[c.year ? String(c.year) : '', c.genres[0] ?? '', countriesRu(d?.countries)[0] ?? '', d?.runtime ? runtime(d.runtime) : '', d?.age ?? ''].filter(Boolean)}
+    meta={[notOut ? 'Скоро' : '', c.year ? String(c.year) : '', c.genres[0] ?? '', countriesRu(d?.countries)[0] ?? '', d?.runtime ? runtime(d.runtime) : '', d?.age ?? ''].filter(Boolean)}
     rating={c.rating}
     badge={c.mark === 'watching' ? 'Смотрю' : c.mark === 'watched' ? 'Просмотрено' : null}
     overview={d?.overview ? localized(d.overview, '') : ''}
@@ -615,13 +649,19 @@
       art={d?.backdrop ?? d?.posterLarge ?? c.poster}
       poster={d?.posterLarge ?? c.poster}
       tall={!d?.backdrop}
-      meta={[c.year ? String(c.year) : '', d?.runtime ? runtime(d.runtime) : ''].filter(Boolean)}
+      meta={[notOut ? 'Скоро' : '', c.year ? String(c.year) : '', d?.runtime ? runtime(d.runtime) : ''].filter(Boolean)}
       age={d?.age ?? null}
       tagline={d?.tagline ?? null}
       overview={d?.overview ? localized(d.overview, '') : ''}
       genres={c.genres}
     >
       {#snippet action()}{@render watch('rw-watch')}{/snippet}
+      {#snippet tools()}
+        {#if session.me?.manage}
+          <button class="glass" onclick={() => (imdbArt = true)}><Icon name="image" size={15} /> Обложка и фон с IMDb</button>
+          <button class="glass" class:on={c.soon} aria-pressed={!!c.soon} disabled={!d} onclick={toggleSoon}><Icon name="clock" size={15} /> {c.soon ? 'Снять «Ещё не вышел»' : 'Ещё не вышел'}</button>
+        {/if}
+      {/snippet}
       {#snippet under()}
         {#if resumeAt}
           <div class="resume">
@@ -641,7 +681,7 @@
               <Icon name="heart" size={30} /><span>Любимый</span>
             </button>
             <button class:on={c.mark === 'want'} aria-pressed={c.mark === 'want'} disabled={!d} onclick={() => mark('want')}>
-              <Icon name="plus" size={30} /><span>Хочу</span>
+              <Icon name={c.mark === 'want' ? 'bookmark' : 'plus'} size={30} /><span>{c.mark === 'want' ? 'В планах' : 'Хочу'}</span>
             </button>
           </div>
           <div class="rw-rate"><small>Оценка</small><StarInput value={mine?.stars ?? null} onchange={setStars} size={28} label="Ваша оценка" /></div>
@@ -1699,4 +1739,20 @@
     .gallery-feature { padding-top:34px; }
   }
   @media (max-width:980px) { .hero-heading { display:contents; } }
-</style>
+  .glass {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff1f;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .glass:hover {
+    background: #ffffff33;
+  }</style>
