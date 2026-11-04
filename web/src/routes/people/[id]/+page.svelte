@@ -1,54 +1,29 @@
 <script lang="ts">
   import { fadeIn } from '$lib/ui/fade';
   import { page } from '$app/state';
-  import { api, errorText } from '$lib/api';
-  import { ago, count, plural } from '$lib/fmt';
+  import { replaceState } from '$app/navigation';
+  import { api, errorText, patch } from '$lib/api';
+  import { ago } from '$lib/fmt';
   import Poster from '$lib/discover/Poster.svelte';
   import PosterRow from '$lib/discover/PosterRow.svelte';
   import DirectorCard from '$lib/profile/DirectorCard.svelte';
-  import FriendButton from '$lib/social/FriendButton.svelte';
-  import PosterWall from '$lib/social/PosterWall.svelte';
-  import ProfileStats from '$lib/social/ProfileStats.svelte';
+  import FavActors from '$lib/profile/FavActors.svelte';
+  import FilmStrip from '$lib/profile/FilmStrip.svelte';
+  import LockBox from '$lib/profile/LockBox.svelte';
+  import ProfileCard from '$lib/profile/ProfileCard.svelte';
+  import StatWidgets from '$lib/profile/StatWidgets.svelte';
+  import { TABS, type ProfilePage, type ProfileTab } from '$lib/profile/types';
+  import VisPick from '$lib/profile/VisPick.svelte';
   import StarsShow from '$lib/social/StarsShow.svelte';
-  import type { Card, MiniTitle, NowItem, Person, ProfileDecor, ProfileStats as Stats, Relation } from '$lib/types';
+  import type { VisLevel } from '$lib/types';
   import { placeholder } from '$lib/ui/art';
-  import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
-  import type { IconName } from '$lib/ui/icons';
-  import { goto } from '$app/navigation';
-  import { post } from '$lib/api';
-  import { session } from '$lib/session.svelte';
-  import { badges as unseen } from '$lib/social/badges.svelte';
+  import { toast } from '$lib/ui/toast.svelte';
 
-  async function logout() {
-    await post('/api/auth/logout').catch(() => {});
-    session.me = null;
-    goto('/login');
-  }
-
-  // Страница человека - как страница фильма: на фоне обложка (своя картинка или постеры
-  // просмотренного плывут вверх), крупный портрет вместо постера, имя и «о себе», цифры и любимые
-  // жанры; справа - панель с друзьями и кнопками. Ниже лист: сейчас смотрит, любимые, режиссёры,
-  // статистика, просмотренное, отзывы.
-  interface Profile {
-    person: Person;
-    me: boolean;
-    relation: Relation | null;
-    stats: Stats;
-    decor: ProfileDecor;
-    reviews: {
-      id: number;
-      stars: number | null;
-      body: string;
-      createdAt: number;
-      title?: MiniTitle;
-      ext?: { id: string; kind: string; title: string; year: number | null; poster: string | null };
-    }[];
-    watched: Card[];
-    watching: NowItem[];
-  }
-
-  let p = $state<Profile | null>(null);
+  // Страница человека: слева липкая карточка (портрет, цифры, значки, кнопки), справа вкладки «Обзор», «Статистика»,
+  // «Просмотрено», «Отзывы» и внизу лента просмотренного. Что человек закрыл (Статистика, Просмотрено, Отзывы),
+  // сервер не отдаёт: вместо раздела замок «Скрыто владельцем». Своя страница - с переключателями «кто видит».
+  let p = $state<ProfilePage | null>(null);
   let error = $state('');
   const id = $derived(Number(page.params.id));
 
@@ -56,451 +31,394 @@
     const want = id;
     p = null;
     error = '';
-    api<Profile>(`/api/members/${want}`).then((r) => want === id && (p = r), (e) => (error = errorText(e)));
+    const tz = -new Date().getTimezoneOffset();
+    api<ProfilePage>(`/api/members/${want}?tz=${tz}`).then((r) => want === id && (p = r), (e) => (error = errorText(e)));
   });
 
-  const hours = $derived(p ? (p.stats.hours >= 10 ? Math.round(p.stats.hours) : p.stats.hours) : 0);
-  // Цифры - капсулами с иконками; значки - за что-то (часы, сериалы, отзывы, друзья).
-  const facts = $derived<{ icon: IconName; text: string }[]>(
-    p
-      ? [
-          { icon: 'clock', text: `${hours} ${plural(Math.floor(p.stats.hours), 'час', 'часа', 'часов')}` },
-          { icon: 'film', text: count(p.stats.movies, 'фильм', 'фильма', 'фильмов') },
-          { icon: 'tv', text: count(p.stats.episodes, 'серия', 'серии', 'серий') },
-        ]
-      : [],
-  );
-  const badges = $derived.by(() => {
-    if (!p) return [];
-    const s = p.stats;
-    const out: { icon: IconName; label: string; hint: string }[] = [];
-    if (s.hours >= 50) out.push({ icon: 'sparkle', label: 'Киноман', hint: 'больше 50 часов просмотра' });
-    if (s.series >= 3) out.push({ icon: 'tv', label: 'Марафонец', hint: 'смотрел 3 сериала и больше' });
-    if (s.reviews >= 5) out.push({ icon: 'edit', label: 'Критик', hint: '5 отзывов и больше' });
-    if (s.friends >= 5) out.push({ icon: 'users', label: 'Душа компании', hint: '5 друзей и больше' });
-    if (s.outside >= 10) out.push({ icon: 'globe', label: 'Исследователь', hint: '10 отметок в Обзоре' });
-    if (!out.length) out.push({ icon: 'play', label: 'Новичок', hint: 'всё только начинается' });
-    return out;
+  // ---------- вкладки ----------
+  const fromUrl = (): ProfileTab => {
+    const q = page.url.searchParams.get('tab');
+    return (TABS as string[]).includes(q ?? '') ? (q as ProfileTab) : 'home';
+  };
+  let tab = $state<ProfileTab>(fromUrl()); // выбранная
+  let shown = $state<ProfileTab>(fromUrl()); // показанная: сменяется после того, как прежняя уехала
+  let dir = $state<'r' | 'l' | 'n'>('n');
+  let leaving = $state<'r' | 'l' | null>(null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function choose(t: ProfileTab) {
+    if (t === tab) return;
+    const d = TABS.indexOf(t) > TABS.indexOf(tab) ? 'r' : 'l';
+    tab = t;
+    try {
+      replaceState(t === 'home' ? page.url.pathname : `?tab=${t}`, {});
+    } catch {
+      /* адрес не обновился - вкладка всё равно переключена */
+    }
+    clearTimeout(timer);
+    leaving = d;
+    timer = setTimeout(() => {
+      dir = d;
+      shown = t;
+      leaving = null;
+    }, 200);
+  }
+
+  const hidden = $derived(p?.hidden ?? { stats: false, watched: false, reviews: false });
+  const isHidden = (t: ProfileTab) => t !== 'home' && (t === 'stats' ? hidden.stats : t === 'watched' ? hidden.watched : hidden.reviews);
+  const defs = $derived<{ id: ProfileTab; label: string; n: number | null }[]>([
+    { id: 'home', label: 'Обзор', n: null },
+    { id: 'stats', label: 'Статистика', n: null },
+    { id: 'watched', label: 'Просмотрено', n: hidden.watched ? null : (p?.stats?.watched ?? p?.watched.length ?? null) },
+    { id: 'reviews', label: 'Отзывы', n: hidden.reviews ? null : (p?.stats?.reviews ?? p?.reviews.length ?? null) },
+  ]);
+
+  // Чёрта под выбранной вкладкой плавно переезжает.
+  let btns = $state<Record<string, HTMLButtonElement | undefined>>({});
+  let ink = $state({ x: 0, w: 0 });
+  function measure() {
+    const b = btns[tab];
+    if (b) ink = { x: b.offsetLeft, w: b.offsetWidth };
+  }
+  $effect(() => {
+    void tab;
+    void p;
+    void defs;
+    requestAnimationFrame(measure);
   });
-  const link = (r: Profile['reviews'][number]) => (r.ext ? `/ext/${r.ext.id}` : `/title/${r.title?.id}`);
-  const what = (r: Profile['reviews'][number]) => r.ext ?? r.title!;
+  $effect(() => {
+    const on = () => measure();
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  });
+
+  // ---------- приватность (только у себя) ----------
+  const KEY = { stats: 'visStats', watched: 'visWatched', reviews: 'visReviews' } as const;
+  const level = $derived<VisLevel>(p?.decor.visibility?.[tab as 'stats' | 'watched' | 'reviews'] ?? 'all');
+  async function setVis(v: VisLevel) {
+    if (!p || tab === 'home') return;
+    const key = tab;
+    const before = p.decor.visibility;
+    if (before) p.decor.visibility = { ...before, [key]: v };
+    try {
+      await patch('/api/me/profile', { [KEY[key]]: v });
+    } catch (x) {
+      if (p) p.decor.visibility = before;
+      toast(errorText(x));
+    }
+  }
+
+  const link = (r: ProfilePage['reviews'][number]) => (r.ext ? `/ext/${r.ext.id}` : `/title/${r.title?.id}`);
+  const what = (r: ProfilePage['reviews'][number]) => r.ext ?? r.title!;
+  const favs = (kind: string) => (p?.decor.favorites ?? []).filter((f) => (f.card ?? f.ext)?.kind === kind);
+  const seenOf = (name: string) => p?.decor.directorsInfo?.find((d) => d.name === name)?.seen ?? null;
+  const empty = $derived(!!p && !p.watching.length && !p.decor.favorites.length && !p.decor.directors.length && !(p.decor.actors?.length) && !(p.decor.likedPeople?.length));
 </script>
 
 {#if error}
   <div class="page empty"><Icon name="info" size={36} /> {error}</div>
 {:else if p}
-  <section class="hero" style:--acc={p.decor.accent ?? '#3a3a3c'}>
-    {#if p.decor.coverKind === 'image' && p.decor.cover}
-      <div class="bg" aria-hidden="true"><img use:fadeIn src={p.decor.cover} alt="" decoding="async" /></div>
-    {:else}
-      <PosterWall posters={p.decor.ribbon} accent={p.decor.accent} />
-    {/if}
-    <div class="wrap">
-      <div class="portrait">
-        <span class="halo" aria-hidden="true"></span>
-        <span class="face">
-          {#if p.person.photo}
-            <img use:fadeIn src={p.person.photo} alt={p.person.name} width="256" height="256" decoding="async" />
-          {:else}
-            <Avatar avatar={p.person.avatar} size={132} />
-          {/if}
-        </span>
-        {#if p.watching.length}<span class="live" title="Сейчас смотрит"></span>{/if}
+  <div class="pf">
+    <ProfileCard bind:p />
+
+    <main class="main">
+      <div class="tabs" role="tablist" aria-label="Разделы профиля">
+        {#each defs as t (t.id)}
+          <button
+            type="button"
+            role="tab"
+            id="tab-{t.id}"
+            bind:this={btns[t.id]}
+            aria-selected={tab === t.id}
+            aria-controls="pane"
+            onclick={() => choose(t.id)}
+          >{t.label}{#if t.n != null}<sup>{t.n}</sup>{/if}{#if isHidden(t.id)}<Icon name="lock" size={13} />{/if}</button>
+        {/each}
+        <i class="ink" aria-hidden="true" style:transform="translate3d({ink.x}px, 0, 0)" style:width="{ink.w}px"></i>
       </div>
 
-      <div class="info">
-        <h1>{p.person.name}</h1>
-        <ul class="facts">{#each facts as f, i (f.text)}<li style:--i={i}><Icon name={f.icon} size={15} /> {f.text}</li>{/each}</ul>
-        <ul class="badges" aria-label="Значки">
-          {#each badges as b, i (b.label)}<li style:--i={i} title={b.hint}><Icon name={b.icon} size={14} /> {b.label}</li>{/each}
-        </ul>
-        {#if p.decor.bio}<p class="bio">{p.decor.bio}</p>{/if}
-        {#if p.stats.genres.length}
-          <div class="genres">
-            {#each p.stats.genres.slice(0, 4) as g (g.genre)}<a class="pill" href="/search?q={encodeURIComponent(g.genre)}">{g.genre}</a>{/each}
-          </div>
-        {/if}
-      </div>
+      {#if p.me && tab !== 'home'}<VisPick level={level} pick={setVis} />{/if}
 
-      <aside class="panel" aria-label="Действия">
-        <div class="box">
-          <div class="nums">
-            <div><b>{p.stats.watched ?? p.watched.length}</b><small>{plural(p.stats.watched ?? 0, 'просмотр', 'просмотра', 'просмотров')}</small></div>
-            <div><b>{p.stats.reviews}</b><small>{plural(p.stats.reviews, 'отзыв', 'отзыва', 'отзывов')}</small></div>
-            <div><b>{p.stats.friends}</b><small>{plural(p.stats.friends, 'друг', 'друга', 'друзей')}</small></div>
-          </div>
-        </div>
-        {#if p.me}
-          <a class="btn block" href="/profile"><Icon name="edit" size={14} /> Оформить профиль</a>
-          <a class="btn block" href="/people"><Icon name="users" size={14} /> Найти друзей</a>
-          <!-- Чаты, подборки и остальное, что раньше было в меню аватара (панель разделов внизу его не содержит). -->
-          <nav class="quick" aria-label="Быстрые разделы">
-            <a class="btn block" href="/chats"><Icon name="mail" size={14} /> Чаты{#if unseen.unread} · {unseen.unread}{/if}</a>
-            <a class="btn block" href="/lists"><Icon name="list" size={14} /> Подборки</a>
-            {#if session.me?.manage}<a class="btn block" href="/admin"><Icon name="sliders" size={14} /> Управление</a>{/if}
-            <button class="btn block" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={14} /> Комната по ссылке</button>
-            <button class="btn block" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><Icon name="sparkle" size={14} /> Экскурсия по Nova</button>
-            {#if !session.me?.window}<button class="btn block" onclick={logout}><Icon name="logout" size={14} /> Выйти</button>{/if}
-          </nav>
-        {:else if p.relation}
-          <FriendButton id={p.person.id} bind:relation={p.relation} />
-          {#if p.relation === 'friend'}
-            <a class="btn block" href="/chats/{p.person.id}"><Icon name="party" size={14} /> Позвать смотреть вместе</a>
-          {/if}
-        {/if}
-      </aside>
-    </div>
-  </section>
+      <div id="pane" class="pf-pane" class:out-r={leaving === 'r'} class:out-l={leaving === 'l'} role="tabpanel" aria-labelledby="tab-{shown}">
+        {#key shown}
+          <div class="in in-{dir}">
+            {#if shown === 'home'}
+              {#if p.watching.length}
+                <section class="sec now">
+                  <PosterRow title="Сейчас смотрит" items={p.watching.map((n) => ({ card: n.card, ext: n.ext, label: n.label }))} />
+                </section>
+              {/if}
 
-  <main class="sheet rw-plate">
-    <section class="rw-block" aria-labelledby="st">
-      <h2 class="rw-h2" id="st">Статистика просмотра</h2>
-      <ProfileStats stats={p.stats} accent={p.decor.accent} />
-      <p class="seen-links">
-        <a class="btn sm" href="/people/{p.person.id}/watched?kind=movie"><Icon name="film" size={14} /> Какие фильмы смотрел</a>
-        <a class="btn sm" href="/people/{p.person.id}/watched?kind=series"><Icon name="tv" size={14} /> Какие сериалы смотрел</a>
-      </p>
-    </section>
-    {#if p.watching.length}
-      <div class="rw-block now">
-        <PosterRow title="Сейчас смотрит" items={p.watching.map((n) => ({ card: n.card, ext: n.ext, label: n.label }))} />
-      </div>
-    {/if}
+              {#each [{ kind: 'movie', label: 'Любимые фильмы' }, { kind: 'series', label: 'Любимые сериалы' }] as g (g.kind)}
+                {@const list = favs(g.kind)}
+                {#if list.length}
+                  <section class="sec" aria-labelledby="f-{g.kind}">
+                    <div class="sh"><h2 id="f-{g.kind}">{g.label}</h2>{#if p.me}<a class="edit" href="/profile">Изменить</a>{/if}</div>
+                    <ol class="favs">
+                      {#each list as f, i (f.key)}
+                        <li class="rise" style:--i={i}><span class="num">{i + 1}</span><Poster card={f.ext} local={f.card ?? null} /></li>
+                      {/each}
+                    </ol>
+                  </section>
+                {/if}
+              {/each}
 
-    {#each [{ kind: 'movie', label: 'Любимые фильмы' }, { kind: 'series', label: 'Любимые сериалы' }] as g (g.kind)}
-      {@const favs = p.decor.favorites.filter((f) => (f.card ?? f.ext)?.kind === g.kind)}
-      {#if favs.length}
-        <section class="rw-block" aria-labelledby="f-{g.kind}">
-          <h2 class="rw-h2" id="f-{g.kind}">{g.label}</h2>
-          <ol class="favs">
-            {#each favs as f, i (f.key)}
-              <li class="rise" style:--i={i}><span class="num">{i + 1}</span><Poster card={f.ext} local={f.card ?? null} /></li>
-            {/each}
-          </ol>
-        </section>
-      {/if}
-    {/each}
+              {#if p.decor.directors.length}
+                <section class="sec" aria-labelledby="d">
+                  <div class="sh"><h2 id="d">Любимый режиссёр</h2>{#if p.me}<a class="edit" href="/profile">Изменить</a>{/if}</div>
+                  {#each p.decor.directors as d (d)}<DirectorCard name={d} seen={seenOf(d)} />{/each}
+                </section>
+              {/if}
 
-    {#if p.decor.directors.length}
-      <section class="rw-block" aria-labelledby="d">
-        <h2 class="rw-h2" id="d">Любимый режиссёр</h2>
-        {#each p.decor.directors as d (d)}<DirectorCard name={d} />{/each}
-      </section>
-    {/if}
-
-
-    {#if p.decor.likedPeople?.length}
-      <section class="rw-block" aria-labelledby="lp">
-        <h2 class="rw-h2" id="lp">Нравятся актёры и режиссёры</h2>
-        <ul class="dirs">
-          {#each p.decor.likedPeople as lp, i (lp.name + lp.role)}
-            <li class="rise" style:--i={i}>
-              <a class="dir" href="/person?name={encodeURIComponent(lp.name)}&role={lp.role}">
-                <span class="dph" style:background={lp.photo ? undefined : placeholder(lp.name)}>
-                  {#if lp.photo}<img use:fadeIn src={lp.photo} alt="" loading="lazy" decoding="async" width="96" height="96" />{:else}{lp.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}{/if}
-                </span>
-                <span class="dn">{lp.name}<small class="faint">{lp.role === 'actor' ? 'Актёр' : 'Режиссёр'}</small></span>
-              </a>
-            </li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
-
-    {#if p.watched.length}
-      <section class="rw-block" aria-labelledby="w">
-        <h2 class="rw-h2" id="w">Просмотрено</h2>
-        <ul class="posters">
-          {#each p.watched as c, i (c.id)}
-            <li class="rise" style:--i={i}>
-              <a href="/title/{c.id}" title={c.title} style:background={c.poster ? undefined : placeholder(c.title)}>
-                {#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" decoding="async" width="342" height="513" />{:else}<span>{c.title}</span>{/if}
-              </a>
-            </li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
-
-    <section class="rw-block" aria-labelledby="r">
-      <h2 class="rw-h2" id="r">Отзывы</h2>
-      {#if p.reviews.length}
-        <ul class="reviews">
-          {#each p.reviews as r (r.id)}
-            {@const t = what(r)}
-            <li class="rv">
-              <a class="mini" href={link(r)} style:background={t.poster ? undefined : placeholder(t.title)}>
-                {#if t.poster}<img use:fadeIn src={t.poster} alt="" loading="lazy" decoding="async" width="56" height="84" />{/if}
-              </a>
-              <div class="body">
-                <a href={link(r)}><b>{t.title}</b>{#if t.year} <span class="faint">{t.year}</span>{/if}</a>
-                <div class="line">
-                  {#if r.stars}<StarsShow value={r.stars} />{/if}
-                  <small class="faint">{ago(r.createdAt)}</small>
+              {#if p.me || p.decor.actors?.length}
+                <div class="sec">
+                  <FavActors bind:actors={p.decor.actors} suggest={(p.stats?.actors ?? []).map((a) => a.name)} editable={p.me} />
                 </div>
-                {#if r.body}<p>{r.body}</p>{/if}
-              </div>
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <p class="muted">Отзывов пока нет.</p>
-      {/if}
-    </section>
-  </main>
+              {/if}
+
+              {#if p.decor.likedPeople?.length}
+                <section class="sec" aria-labelledby="lp">
+                  <div class="sh"><h2 id="lp">Нравятся актёры и режиссёры</h2></div>
+                  <ul class="dirs">
+                    {#each p.decor.likedPeople as lp, i (lp.name + lp.role)}
+                      <li class="rise" style:--i={i}>
+                        <a class="dir" href="/person?name={encodeURIComponent(lp.name)}&role={lp.role}">
+                          <span class="dph" style:background={lp.photo ? undefined : placeholder(lp.name)}>
+                            {#if lp.photo}<img use:fadeIn src={lp.photo} alt="" loading="lazy" decoding="async" width="96" height="96" />{:else}{lp.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}{/if}
+                          </span>
+                          <span class="dn">{lp.name}<small class="faint">{lp.role === 'actor' ? 'Актёр' : 'Режиссёр'}</small></span>
+                        </a>
+                      </li>
+                    {/each}
+                  </ul>
+                </section>
+              {/if}
+
+              {#if empty && !p.me}<p class="muted none">Пока здесь пусто: человек ещё ничего не выбрал.</p>{/if}
+              {#if empty && p.me}<p class="muted none">Здесь появятся ваши любимые фильмы, сериалы, режиссёр и актёры. Выберите их кнопкой «Оформить профиль».</p>{/if}
+            {:else if shown === 'stats'}
+              {#if hidden.stats || !p.stats}
+                <LockBox />
+              {:else}
+                <StatWidgets stats={p.stats} />
+                {#if !hidden.watched}
+                  <p class="seen-links">
+                    <a class="btn sm" href="/people/{p.person.id}/watched?kind=movie"><Icon name="film" size={14} /> Какие фильмы смотрел</a>
+                    <a class="btn sm" href="/people/{p.person.id}/watched?kind=series"><Icon name="tv" size={14} /> Какие сериалы смотрел</a>
+                  </p>
+                {/if}
+              {/if}
+            {:else if shown === 'watched'}
+              {#if hidden.watched}
+                <LockBox />
+              {:else if p.watched.length}
+                <ul class="posters">
+                  {#each p.watched as c, i (c.id)}
+                    <li class="rise" style:--i={i}>
+                      <a href="/title/{c.id}" title={c.title} style:background={c.poster ? undefined : placeholder(c.title)}>
+                        {#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" decoding="async" width="342" height="513" />{:else}<span>{c.title}</span>{/if}
+                      </a>
+                    </li>
+                  {/each}
+                </ul>
+                <p class="seen-links">
+                  <a class="btn sm" href="/people/{p.person.id}/watched?kind=movie"><Icon name="film" size={14} /> Все фильмы</a>
+                  <a class="btn sm" href="/people/{p.person.id}/watched?kind=series"><Icon name="tv" size={14} /> Все сериалы</a>
+                </p>
+              {:else}
+                <p class="muted none">Просмотренного пока нет.</p>
+              {/if}
+            {:else if hidden.reviews}
+              <LockBox />
+            {:else if p.reviews.length}
+              <ul class="reviews">
+                {#each p.reviews as r, i (r.id)}
+                  {@const t = what(r)}
+                  <li class="rv rise" style:--i={i}>
+                    <a class="mini" href={link(r)} style:background={t.poster ? undefined : placeholder(t.title)}>
+                      {#if t.poster}<img use:fadeIn src={t.poster} alt="" loading="lazy" decoding="async" width="56" height="84" />{/if}
+                    </a>
+                    <div class="body">
+                      <a href={link(r)}><b>{t.title}</b>{#if t.year} <span class="faint">{t.year}</span>{/if}</a>
+                      <div class="line">
+                        {#if r.stars}<StarsShow value={r.stars} />{/if}
+                        <small class="faint">{ago(r.createdAt)}</small>
+                      </div>
+                      {#if r.body}<p>{r.body}</p>{/if}
+                    </div>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="muted none">Отзывов пока нет.</p>
+            {/if}
+          </div>
+        {/key}
+      </div>
+
+      <FilmStrip items={p.watched} personId={p.person.id} total={p.stats?.watched ?? p.watched.length} hidden={hidden.watched} />
+    </main>
+  </div>
 {:else}
   <div class="sk-hero skeleton" aria-busy="true"></div>
 {/if}
 
 <style>
-  /* Та же раскладка, что у страницы фильма: большой фон, «постер» - портрет, панель справа. */
-  .hero {
-    position: relative;
-    padding: calc(var(--header) + clamp(110px, 18vw, 220px)) var(--gutter) 34px;
-    overflow: hidden;
-    isolation: isolate;
-  }
-  .hero > :global(.wall) {
-    z-index: -1;
-  }
-  .bg {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-  }
-  .bg img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    animation: kenburns 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-  .bg::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(0deg, var(--bg) 0%, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.2) 100%);
-  }
-  @keyframes kenburns {
-    from {
-      opacity: 0;
-      transform: scale(1.06);
-    }
-  }
-  .wrap {
+  .pf {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, 300px);
-    gap: 28px 36px;
-    align-items: end;
+    grid-template-columns: 304px minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
     max-width: 1440px;
     margin: 0 auto;
+    padding: calc(var(--header) + 18px) var(--gutter) 64px;
   }
-  /* Портрет - круг в кольце цвета профиля; кольцо медленно вращается (только transform). */
-  .portrait {
+  .main {
+    min-width: 0;
+  }
+
+  /* ---------- вкладки ---------- */
+  .tabs {
     position: relative;
-    justify-self: center;
-    width: clamp(120px, 12vw, 160px);
-    aspect-ratio: 1;
-    display: grid;
-    place-items: center;
-    animation: rise 0.6s 0.05s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-  .halo {
-    position: absolute;
-    inset: -6px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, var(--acc), color-mix(in srgb, var(--acc) 20%, #fff), var(--acc), #111, var(--acc));
-    animation: spin 12s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(1turn);
-    }
-  }
-  .face {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    overflow: hidden;
-    background: #0c0c0e;
-    box-shadow:
-      0 0 0 4px #0c0c0e,
-      0 24px 50px -16px rgba(0, 0, 0, 0.9);
-  }
-  .face img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .face :global(*) {
-    max-width: 100%;
-    max-height: 100%;
-  }
-  .live {
-    position: absolute;
-    right: 8%;
-    bottom: 8%;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 0 4px #0c0c0e;
-    animation: beat 1.8s ease-in-out infinite;
-  }
-  @keyframes beat {
-    50% {
-      transform: scale(0.82);
-    }
-  }
-  .facts,
-  .badges {
-    list-style: none;
-    margin: 0;
-    padding: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    gap: 26px;
+    border-bottom: 1px solid var(--line);
   }
-  .facts li {
-    display: inline-flex;
+  .tabs button {
+    display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.45);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-    font-size: 13px;
+    padding: 12px 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 14.5px;
     font-weight: 600;
-    animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    animation-delay: calc(var(--i) * 60ms + 200ms);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.25s;
   }
-  .badges li {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 11px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 55%, #2a2a2e), #1c1c1f);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    animation: badge 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.5) both;
-    animation-delay: calc(var(--i) * 80ms + 350ms);
+  .tabs button:hover {
+    color: #dcdcdf;
   }
-  @keyframes badge {
+  .tabs button[aria-selected='true'] {
+    color: var(--text);
+  }
+  .tabs button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+  .tabs sup {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .ink {
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    height: 3px;
+    border-radius: 3px;
+    background: #fff;
+    transition:
+      transform 0.6s cubic-bezier(0.34, 1.4, 0.64, 1),
+      width 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+
+  /* Раздел уезжает и въезжает с той стороны, куда переключили. */
+  /* Въезжающий раздел не выступает за край: обрезка только по ширине, чтобы страница не росла на время анимации. */
+  .pf-pane {
+    padding-top: 18px;
+    overflow-x: clip;
+  }
+  .pf-pane.out-r {
+    animation: out-r 0.2s ease-in both;
+  }
+  .pf-pane.out-l {
+    animation: out-l 0.2s ease-in both;
+  }
+  .now {
+    --pw: clamp(116px, 11vw, 158px);
+  }
+  .in-r {
+    animation: in-r 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .in-l {
+    animation: in-l 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  @keyframes in-r {
     from {
       opacity: 0;
-      transform: scale(0.6) rotate(-6deg);
+      transform: translate3d(70px, 0, 0);
     }
   }
-  .info {
-    display: grid;
-    gap: 12px;
-    align-content: end;
-    min-width: 0;
-    animation: rise 0.6s 0.12s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  @keyframes in-l {
+    from {
+      opacity: 0;
+      transform: translate3d(-70px, 0, 0);
+    }
   }
-  h1 {
-    font-size: clamp(32px, 4.4vw, 58px);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.05;
-    overflow-wrap: anywhere;
+  @keyframes out-r {
+    to {
+      opacity: 0;
+      transform: translate3d(-45px, 0, 0);
+    }
   }
-  .bio {
-    margin: 0;
-    max-width: 62ch;
-    color: #e4e4e7;
-    font-size: 16px;
-    white-space: pre-line;
-    overflow-wrap: anywhere;
+  @keyframes out-l {
+    to {
+      opacity: 0;
+      transform: translate3d(45px, 0, 0);
+    }
   }
-  .genres {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .rise {
+    animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation-delay: calc(var(--i) * 90ms);
   }
-  .pill {
-    padding: 6px 14px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
-    font-size: 13px;
-    font-weight: 600;
-    transition: background 0.2s;
-  }
-  .pill:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-  .panel {
-    display: grid;
-    gap: 10px;
-    animation: rise 0.6s 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-  .box {
-    padding: 16px;
-    border-radius: 18px;
-    background: rgba(28, 28, 30, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  .nums {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    text-align: center;
-  }
-  .nums div {
-    display: grid;
-    gap: 2px;
-  }
-  .nums div + div {
-    border-left: 1px solid var(--line);
-  }
-  .nums b {
-    font-size: 24px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-  }
-  .nums small {
-    font-size: 11.5px;
-    color: var(--muted);
-  }
-  .panel .btn {
-    height: 38px;
-    border-radius: 999px;
-    background: rgba(40, 40, 42, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    font-size: 13px;
-  }
-  .panel :global(.fb) {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-  .panel :global(.fb .btn) {
-    width: 100%;
-    border-radius: 999px;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 26px, 0);
+    }
   }
 
-  .quick {
-    display: grid;
-    gap: 8px;
+  /* ---------- разделы ---------- */
+  .sec {
+    margin-top: 26px;
   }
-
-  /* ---------- лист с разделами ---------- */
-  /* Лист - от края до края окна (как у всех экранов): по бокам под обложкой нет чёрных полос. */
-  .sheet {
-    width: 100%;
-    margin: 0;
-    padding-bottom: 64px;
+  .sec:first-child {
+    margin-top: 0;
   }
-  .sheet :global(.rw-h2) {
+  .sh {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
+    margin-bottom: 12px;
   }
-  .now :global(.row) {
-    margin-bottom: 0;
+  .sh h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .edit {
+    flex: none;
+    padding: 4px 13px;
+    border: 1px solid var(--line-strong, #ffffff40);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12.5px;
+    transition:
+      background 0.2s,
+      color 0.2s;
+  }
+  .edit:hover {
+    background: #ffffff14;
+    color: var(--text);
+  }
+  .none {
+    margin: 0;
   }
   .favs {
     list-style: none;
@@ -535,7 +453,6 @@
     flex-wrap: wrap;
     gap: 18px;
   }
-  /* Режиссёр - круглое фото и имя под ним; нажать - его работы. */
   .dir {
     display: grid;
     justify-items: center;
@@ -552,9 +469,7 @@
     overflow: hidden;
     font-weight: 800;
     font-size: 22px;
-    box-shadow:
-      0 0 0 3px var(--sheet),
-      0 0 0 5px rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 0 0 1.5px #ffffff33;
     transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.4);
   }
   .dph img {
@@ -600,6 +515,12 @@
     font-size: 12px;
     font-weight: 700;
   }
+  .seen-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 18px 0 0;
+  }
   .reviews {
     list-style: none;
     margin: 0;
@@ -614,7 +535,8 @@
     gap: 14px;
     padding: 14px;
     border-radius: 14px;
-    background: #232325;
+    background: var(--surface);
+    border: 1px solid var(--line);
   }
   .mini {
     display: block;
@@ -648,62 +570,46 @@
   .sk-hero {
     height: 70vh;
   }
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(14px);
-    }
-  }
 
-  @media (max-width: 980px) {
-    .wrap {
-      grid-template-columns: auto minmax(0, 1fr);
+  @media (max-width: 900px) {
+    .pf {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
     }
-    .panel {
-      grid-column: 1 / -1;
+    .favs {
+      gap: 8px;
+    }
+    .num {
+      font-size: 26px;
+      bottom: 46px;
+    }
+    .tabs {
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .tabs button {
+      font-size: 13px;
+      gap: 3px;
     }
   }
-  /* Телефон: колонкой по центру - круг сверху, под ним имя, капсулы и значки. */
-  @media (max-width: 640px) {
-    .hero {
-      padding-top: calc(var(--header) + 40px);
+  /* Самое узкое окно или сильное увеличение: вкладки в две колонки, чёрту заменяет подчёркивание самой кнопки. */
+  @media (max-width: 360px) {
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 10px;
     }
-    .wrap {
-      grid-template-columns: minmax(0, 1fr);
-      justify-items: center;
-      gap: 18px;
-      text-align: center;
-    }
-    .portrait {
-      width: 112px;
-    }
-    .info {
-      justify-items: center;
-    }
-    .facts,
-    .badges,
-    .genres {
+    .tabs button {
       justify-content: center;
     }
-    h1 {
-      font-size: 30px;
+    .tabs button[aria-selected='true'] {
+      box-shadow: inset 0 -3px 0 #fff;
     }
-    .panel {
-      width: 100%;
+    .ink {
+      display: none;
     }
     .favs {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
     }
-    .sheet {
-      width: 100%;
-    }
-  }
-
-  .seen-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: 18px 0 0;
   }
 </style>

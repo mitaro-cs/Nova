@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img alt="Alpha 0.7" src="https://img.shields.io/badge/версия-Alpha%200.7-white?style=for-the-badge&labelColor=111">
+  <img alt="Beta 0.1" src="https://img.shields.io/badge/версия-Beta%200.1-white?style=for-the-badge&labelColor=111">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-x64-white?style=for-the-badge&labelColor=111">
   <img alt="Rust" src="https://img.shields.io/badge/Rust-axum-white?style=for-the-badge&labelColor=111">
   <img alt="Svelte" src="https://img.shields.io/badge/Svelte-5-white?style=for-the-badge&labelColor=111">
@@ -118,7 +118,9 @@
 - Регистрация сама, без приглашений. Аватарки - свои нарисованные персонажи.
 - Статусы «Хочу», «Смотрю», «Просмотрено», «Больше не смотрю», звёзды, отзывы и лайки.
 - Друзья, переписка, общие подборки, «Друзья смотрят» и «Сейчас смотрит».
-- Профиль со статистикой: часы, жанры, любимые фильмы и режиссёры.
+- Личный профиль: карточка с портретом и значками, вкладки «Обзор», «Статистика», «Просмотрено» и «Отзывы», любимые
+  фильмы, сериалы, режиссёр и актёры, бегущая лента просмотренного. Статистика - часы, когда и в какие дни смотрит,
+  серия дней подряд, оценки, эпохи. Каждый раздел можно закрыть: от всех, от чужих или совсем.
 
 ### Для хоста
 - **Добавить фильм** - положить в папку, перетащить в окно приложения или загрузить с

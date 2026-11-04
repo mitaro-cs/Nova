@@ -57,7 +57,7 @@ test('биография, дата рождения и резервная фил
 });
 
 test('информативный график профиля: значения и выбор месяца', async ({ page }, info) => {
-  await page.goto(url(`/people/${env().people.me}`));
+  await page.goto(url(`/people/${env().people.me}?tab=stats`));
   const chart = page.getByRole('region', { name: 'По месяцам' });
   await chart.scrollIntoViewIfNeeded();
   await expect(chart.getByRole('button')).toHaveCount(12);

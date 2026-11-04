@@ -444,6 +444,25 @@ export interface ProfileStats {
   monthLabels?: string[];
   /** Режиссёры того, что смотрел, - чаще всего первыми. */
   directors: { name: string; count: number }[];
+  /** Актёры того, что смотрел, - чаще всего первыми (подсказки для «любимых»). */
+  actors?: { name: string; count: number }[];
+  /** Когда смотрит: утро, день, вечер, ночь (досмотренное за год, в часовом поясе зрителя). */
+  dayparts?: number[];
+  /** Дни недели, понедельник первым. */
+  weekdays?: number[];
+  /** Дней подряд: рекорд и сейчас. */
+  streak?: { best: number; current: number };
+  /** Звёзды отзывов 1..10: средняя, по каждой оценке и всего. */
+  ratings?: { avg: number | null; hist: number[]; count: number };
+  /** Эпохи: сколько просмотренного по десятилетиям. */
+  decades?: { decade: number; count: number }[];
+}
+
+export type VisLevel = 'all' | 'friends' | 'me';
+export interface Visibility {
+  stats: VisLevel;
+  watched: VisLevel;
+  reviews: VisLevel;
 }
 
 export interface ProfileDecor {
@@ -460,8 +479,12 @@ export interface ProfileDecor {
   favorites: { key: string; card?: Card; ext?: ExtCard }[];
   /** Показывать друзьям, что смотрю. */
   showActivity: boolean;
-  /** Фото любимых режиссёров (что уже известно). */
-  directorsInfo?: { name: string; photo: string | null }[];
+  /** Фото любимых режиссёров (что уже известно) и сколько его фильмов человек смотрел (если «Просмотрено» открыто). */
+  directorsInfo?: { name: string; photo: string | null; seen?: { total: number; seen: number; avg: number | null } | null }[];
+  /** Любимые актёры и актрисы (до пяти). */
+  actors: { name: string; photo: string | null }[];
+  /** Кто видит разделы - только у самого человека. */
+  visibility?: Visibility | null;
 }
 
 /** Совместный просмотр: место в видео у всех в комнате. */

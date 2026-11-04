@@ -173,7 +173,8 @@ test('обзор и профиль: поиск IMDb открывается, оф
   await expect(page.getByText('Сохранено')).toBeVisible();
   await page.getByRole('link', { name: 'Моя страница' }).click();
   await expect(page.getByText('Люблю фантастику')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Статистика' })).toBeVisible();
+  await page.getByRole('tab', { name: /Статистика/ }).click();
+  await expect(page.getByRole('region', { name: 'Время просмотра' })).toBeVisible();
   await page.goto(url('/profile'));
   await page.getByRole('radiogroup', { name: 'Цвет профиля' }).getByRole('radio', { name: 'Без цвета' }).click();
 });

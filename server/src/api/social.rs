@@ -162,11 +162,17 @@ fn rating_of(app: &App, t: &Target) -> rusqlite::Result<(Option<f64>, i64)> {
 }
 
 fn reviews_of(app: &App, v: &Viewer, t: &Target) -> ApiResult<Value> {
-    let items: Vec<Review> = app.db.with(|c| {
+    let mut items: Vec<Review> = app.db.with(|c| {
         let mut st = c.prepare(&review_sql(&format!("{ABOUT} AND {SOCIAL}")))?;
         let r = st.query_map(params![v.profile.id, t.title, t.ext], |r| review(r, v.profile.id))?;
         r.collect()
     })?;
+    // Человек закрыл «Отзывы» в профиле - его отзывы не видны и под фильмом (у себя - всегда).
+    items.retain(|r| {
+        r.mine
+            || super::profile::visibility(app, r.author.id)
+                .is_ok_and(|vis| super::profile::allowed(app, v.profile.id, r.author.id, &vis.reviews))
+    });
     let (avg, votes) = rating_of(app, t)?;
     let total: i64 = app.db.with(|c| {
         c.query_row(
@@ -373,7 +379,8 @@ pub struct Member {
 }
 
 fn members_of(app: &App, me: i64, filter: &str, p: &[&dyn rusqlite::ToSql]) -> ApiResult<Vec<Member>> {
-    let rows: Vec<(Person, i64, i64)> = app.db.with(|c| {
+    type Row = (Person, i64, i64, String, String);
+    let rows: Vec<Row> = app.db.with(|c| {
         let mut st = c.prepare(&format!(
             "SELECT {PERSON_COLS},
                     (SELECT COUNT(*) FROM (
@@ -383,14 +390,18 @@ fn members_of(app: &App, me: i64, filter: &str, p: &[&dyn rusqlite::ToSql]) -> A
                        SELECT m.ext_id FROM ext_marks m JOIN ext_titles e ON e.id=m.ext_id
                        WHERE m.profile_id=p.id AND m.status='watched' AND e.kind='movie'
                     )),
-                    (SELECT COUNT(*) FROM reviews r WHERE r.profile_id = p.id)
+                    (SELECT COUNT(*) FROM reviews r WHERE r.profile_id = p.id),
+                    p.vis_watched, p.vis_reviews
              FROM profiles p WHERE {SOCIAL} AND p.id != {me} AND ({filter}) ORDER BY p.name COLLATE NOCASE LIMIT 500"
         ))?;
-        let r = st.query_map(p, |r| Ok((person(r, 0)?, r.get(4)?, r.get(5)?)))?;
+        let r = st.query_map(p, |r| Ok((person(r, 0)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)))?;
         r.collect()
     })?;
     rows.into_iter()
-        .map(|(person, watched, reviews)| {
+        .map(|(person, watched, reviews, vis_watched, vis_reviews): Row| {
+            // Закрытое владельцем - в списке людей нулём, как будто его нет.
+            let watched = if super::profile::allowed(app, me, person.id, &vis_watched) { watched } else { 0 };
+            let reviews = if super::profile::allowed(app, me, person.id, &vis_reviews) { reviews } else { 0 };
             Ok(Member { relation: relation(app, me, person.id)?, person, watched, reviews })
         })
         .collect()
@@ -421,9 +432,24 @@ pub async fn members(
     Ok(Json(list))
 }
 
-pub async fn member(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+#[derive(Deserialize)]
+pub struct MemberQuery {
+    /// Смещение часового пояса зрителя, минут (восток - плюс): по нему считается «когда смотрит».
+    tz: Option<i64>,
+}
+
+pub async fn member(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path(id): Path<i64>,
+    Query(q): Query<MemberQuery>,
+) -> ApiResult<Json<Value>> {
     adult(&v)?;
     let me = v.profile.id;
+    // Приватность: что человек закрыл от этого зрителя, сервер не отдаёт вовсе.
+    let vis = super::profile::visibility(&app, id).map_err(|_| ApiError::not_found())?;
+    let hide = |level: &str| !super::profile::allowed(&app, me, id, level);
+    let (hide_stats, hide_watched, hide_reviews) = (hide(&vis.stats), hide(&vis.watched), hide(&vis.reviews));
     let m = if id == me {
         None
     } else {
@@ -469,8 +495,8 @@ pub async fn member(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>)
     reviews.extend(ext);
     reviews.sort_by_key(|r| std::cmp::Reverse(r.0));
     reviews.truncate(20);
-    let reviews: Vec<Value> = reviews.into_iter().map(|r| r.1).collect();
-    let watching = if super::activity::visible_to(&app, me, id)? {
+    let reviews: Vec<Value> = if hide_reviews { Vec::new() } else { reviews.into_iter().map(|r| r.1).collect() };
+    let watching = if !hide_watched && super::activity::visible_to(&app, me, id)? {
         let now = super::activity::watching_now(&app, id)?;
         super::activity::render(&app, &v, &now)?
     } else {
@@ -485,14 +511,26 @@ pub async fn member(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>)
         let r = st.query_map([id], card)?;
         r.collect()
     })?;
-    let mut stats = super::profile::stats(&app, id, crate::util::now_ms())?;
-    stats["watched"] = json!(stats["movies"].as_i64().unwrap_or(0) + stats["episodes"].as_i64().unwrap_or(0));
+    let watched = if hide_watched { Vec::new() } else { watched };
+    let stats = if hide_stats {
+        Value::Null
+    } else {
+        let mut stats = super::profile::stats(&app, id, crate::util::now_ms(), q.tz.unwrap_or(0).clamp(-840, 840))?;
+        stats["watched"] = json!(stats["movies"].as_i64().unwrap_or(0) + stats["episodes"].as_i64().unwrap_or(0));
+        stats
+    };
     let decor = super::profile::decor(&app, &v, id)?;
     crate::directors::warm(&app, super::json_list(Some(decor["directors"].to_string())));
+    crate::directors::warm_role(
+        &app,
+        decor["actors"].as_array().into_iter().flatten().filter_map(|a| a["name"].as_str().map(String::from)).collect(),
+        "actor",
+    );
     Ok(Json(json!({
         "person": person, "me": id == me, "relation": m.as_ref().map(|m| m.relation),
         "stats": stats, "decor": decor,
         "reviews": reviews, "watched": watched, "watching": watching,
+        "hidden": {"stats": hide_stats, "watched": hide_watched, "reviews": hide_reviews},
     })))
 }
 

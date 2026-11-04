@@ -11,13 +11,41 @@ use axum::Json;
 use rusqlite::{params, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 const MONTH: i64 = 30 * 86_400_000;
 
-/// Статистика человека. `now` - для подсчёта по месяцам (последние 12).
-pub fn stats(app: &App, id: i64, now: i64) -> ApiResult<Value> {
+const DAY: i64 = 86_400_000;
+
+/// Кто видит раздел профиля: все, друзья или только сам человек.
+pub const LEVELS: [&str; 3] = ["all", "friends", "me"];
+
+/// Приватность разделов «Статистика», «Просмотрено» и «Отзывы».
+pub struct Visibility {
+    pub stats: String,
+    pub watched: String,
+    pub reviews: String,
+}
+
+pub fn visibility(app: &App, id: i64) -> rusqlite::Result<Visibility> {
+    app.db.with(|c| {
+        c.query_row("SELECT vis_stats, vis_watched, vis_reviews FROM profiles WHERE id = ?", [id], |r| {
+            Ok(Visibility { stats: r.get(0)?, watched: r.get(1)?, reviews: r.get(2)? })
+        })
+    })
+}
+
+/// Может ли `viewer` видеть раздел `owner` при таком уровне. Хост и администраторы - как все: приватность одна для всех.
+pub fn allowed(app: &App, viewer: i64, owner: i64, level: &str) -> bool {
+    viewer == owner
+        || level == "all"
+        || (level == "friends" && super::social::relation(app, viewer, owner).is_ok_and(|r| r == "friend"))
+}
+
+/// Статистика человека. `now` - для подсчёта по месяцам (последние 12); `tz_min` - смещение часового пояса зрителя
+/// в минутах (восток - плюс), по нему считаются «когда смотрит», дни недели и серия дней подряд.
+pub fn stats(app: &App, id: i64, now: i64, tz_min: i64) -> ApiResult<Value> {
     let (minutes, movies, episodes, series, reviews, friends, outside): (f64, i64, i64, i64, i64, i64, i64) =
         app.db.with(|c| {
             c.query_row(
@@ -79,11 +107,15 @@ pub fn stats(app: &App, id: i64, now: i64) -> ApiResult<Value> {
         r.collect()
     })?;
     let mut dirs: HashMap<String, i64> = HashMap::new();
+    let mut cast: HashMap<String, i64> = HashMap::new();
     for p in &peoples {
         if let Ok(Value::Array(list)) = serde_json::from_str::<Value>(p) {
-            for x in list.iter().filter(|x| x["job"] == "director") {
-                if let Some(n) = x["name"].as_str() {
-                    *dirs.entry(n.to_string()).or_default() += 1;
+            for x in &list {
+                let Some(n) = x["name"].as_str() else { continue };
+                match x["job"].as_str() {
+                    Some("director") => *dirs.entry(n.to_string()).or_default() += 1,
+                    Some("actor") => *cast.entry(n.to_string()).or_default() += 1,
+                    _ => {}
                 }
             }
         }
@@ -91,6 +123,9 @@ pub fn stats(app: &App, id: i64, now: i64) -> ApiResult<Value> {
     let mut dirs: Vec<(String, i64)> = dirs.into_iter().collect();
     dirs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     dirs.truncate(10);
+    let mut cast: Vec<(String, i64)> = cast.into_iter().collect();
+    cast.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    cast.truncate(12);
     let mut genres: HashMap<String, i64> = HashMap::new();
     for g in genre_lists.iter().flat_map(|s| super::json_list(Some(s.clone()))) {
         *genres.entry(g).or_default() += 1;
@@ -116,7 +151,7 @@ pub fn stats(app: &App, id: i64, now: i64) -> ApiResult<Value> {
         "SELECT CAST(strftime('%Y',?1/1000,'unixepoch') AS INTEGER)*12 + CAST(strftime('%m',?1/1000,'unixepoch') AS INTEGER)-1", [at], |r| r.get(0)))
     };
     let current = month_index(now)?;
-    for at in done {
+    for &at in &done {
         let ago = current - month_index(at)?;
         if (0..12).contains(&ago) {
             months[11 - ago as usize] += 1;
@@ -140,8 +175,75 @@ pub fn stats(app: &App, id: i64, now: i64) -> ApiResult<Value> {
         )
     })?;
     let better = (minutes > 0.0 && others >= 3).then(|| (fewer as f64 / others as f64 * 100.0).round() as i64);
+    // Когда смотрит: по времени последнего просмотра каждой досмотренной вещи за год, в часовом поясе зрителя.
+    let mut dayparts = [0i64; 4];
+    let mut weekdays = [0i64; 7];
+    let mut days: BTreeSet<i64> = BTreeSet::new();
+    for &at in &done {
+        let local = at + tz_min * 60_000;
+        let hour = local.rem_euclid(DAY) / 3_600_000;
+        // Утро 5-11, день 11-17, вечер 17-23, ночь - остальное.
+        dayparts[match hour {
+            5..=10 => 0,
+            11..=16 => 1,
+            17..=22 => 2,
+            _ => 3,
+        }] += 1;
+        let day = local.div_euclid(DAY);
+        // 1 января 1970 - четверг: при понедельнике = 0 день 0 - это 3.
+        weekdays[(day + 3).rem_euclid(7) as usize] += 1;
+        days.insert(day);
+    }
+    let (mut best, mut run, mut prev) = (0i64, 0i64, i64::MIN);
+    for &d in &days {
+        run = if prev != i64::MIN && d == prev + 1 { run + 1 } else { 1 };
+        best = best.max(run);
+        prev = d;
+    }
+    let today = (now + tz_min * 60_000).div_euclid(DAY);
+    let (mut streak, mut d) = (0i64, if days.contains(&today) { today } else { today - 1 });
+    while days.contains(&d) {
+        streak += 1;
+        d -= 1;
+    }
+    // Оценки: звёзды в отзывах, 1..10 (половинки).
+    let stars: Vec<i64> = app.db.with(|c| {
+        let mut st = c.prepare("SELECT stars FROM reviews WHERE profile_id = ? AND stars IS NOT NULL")?;
+        let r = st.query_map([id], |r| r.get(0))?;
+        r.collect()
+    })?;
+    let mut hist = [0i64; 10];
+    for s in &stars {
+        if (1..=10).contains(s) {
+            hist[(*s - 1) as usize] += 1;
+        }
+    }
+    let avg =
+        (!stars.is_empty()).then(|| (stars.iter().sum::<i64>() as f64 / stars.len() as f64 * 10.0).round() / 10.0);
+    // Эпохи: десятилетия просмотренных фильмов и сериалов.
+    let years: Vec<i64> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT year FROM (
+               SELECT t.year FROM titles t WHERE t.year IS NOT NULL AND t.id IN (
+                 SELECT title_id FROM watched WHERE profile_id = ?1
+                 UNION SELECT f.title_id FROM progress p JOIN files f ON f.id = p.file_id WHERE p.profile_id = ?1 AND p.done = 1)
+               UNION ALL
+               SELECT e.year FROM ext_titles e JOIN ext_marks m ON m.ext_id = e.id AND m.profile_id = ?1 AND m.status = 'watched'
+                 WHERE e.year IS NOT NULL AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.imdb_id = e.id))",
+        )?;
+        let r = st.query_map([id], |r| r.get(0))?;
+        r.collect()
+    })?;
+    let mut decades: BTreeMap<i64, i64> = BTreeMap::new();
+    for y in years {
+        *decades.entry(y.div_euclid(10) * 10).or_default() += 1;
+    }
     Ok(json!({
         "better": better,
+        "dayparts": dayparts, "weekdays": weekdays, "streak": {"best": best, "current": streak},
+        "ratings": {"avg": avg, "hist": hist, "count": stars.len()},
+        "decades": decades.into_iter().map(|(d, n)| json!({"decade": d, "count": n})).collect::<Vec<_>>(),
+        "actors": cast.into_iter().map(|(n, c)| json!({"name": n, "count": c})).collect::<Vec<_>>(),
         "hours": ((minutes + external_minutes) / 60.0 * 10.0).round() / 10.0,
         "movies": movies + external_movies, "episodes": episodes + external_episodes, "series": series + external_series, "reviews": reviews, "friends": friends,
         "outside": outside,
@@ -162,21 +264,29 @@ pub fn decor(app: &App, v: &Viewer, id: i64) -> ApiResult<Value> {
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
         )
     })?;
+    let vis = visibility(app, id)?;
+    let actors_raw: String =
+        app.db.with(|c| c.query_row("SELECT actors FROM profiles WHERE id = ?", [id], |r| r.get(0)))?;
+    let see_watched = allowed(app, v.profile.id, id, &vis.watched);
     // Лента обложки - постеры просмотренного (с сервиса и из Обзора), свежие первыми.
-    let ribbon: Vec<String> = app.db.with(|c| {
-        let mut st = c.prepare(&format!(
-            "SELECT p FROM (
+    let ribbon: Vec<String> = if !see_watched {
+        Vec::new()
+    } else {
+        app.db.with(|c| {
+            let mut st = c.prepare(&format!(
+                "SELECT p FROM (
                SELECT COALESCE(t.poster_sm, t.poster) p, w.at FROM watched w JOIN titles t ON t.id = w.title_id
                  WHERE w.profile_id = ?1 AND {}
                UNION ALL
                SELECT e.poster, m.at FROM ext_marks m JOIN ext_titles e ON e.id = m.ext_id
                  WHERE m.profile_id = ?1 AND m.status = 'watched')
              WHERE p IS NOT NULL AND p != '' ORDER BY at DESC LIMIT 72",
-            super::visible(v.profile.kids)
-        ))?;
-        let r = st.query_map([id], |r| r.get::<_, String>(0))?;
-        r.collect()
-    })?;
+                super::visible(v.profile.kids)
+            ))?;
+            let r = st.query_map([id], |r| r.get::<_, String>(0))?;
+            r.collect()
+        })?
+    };
     let mut favorites = Vec::new();
     for f in super::json_list(Some(favs)) {
         if let Some(t) = f.strip_prefix("t:").and_then(|t| t.parse::<i64>().ok()) {
@@ -193,11 +303,20 @@ pub fn decor(app: &App, v: &Viewer, id: i64) -> ApiResult<Value> {
         "cover": super::img(cover), "coverKind": kind, "accent": accent, "bio": bio, "favorites": favorites,
         "directors": super::json_list(Some(directors.clone())), "showActivity": show,
         "likedPeople": liked_people(app, id)?,
-        // Фото режиссёров - что уже известно (без запросов к IMDb; недостающее ищет `directors::warm`).
+        // Фото режиссёров - что уже известно (без запросов к IMDb; недостающее ищет `directors::warm`); сколько его
+        // фильмов человек смотрел - только если «Просмотрено» открыто зрителю.
         "directorsInfo": super::json_list(Some(directors)).into_iter().map(|n| {
+            let photo = crate::directors::cached(app, &n).and_then(|c| c.1);
+            let seen = if see_watched { crate::directors::seen_stats(app, &n, id) } else { None };
+            json!({"name": n, "photo": super::img(photo), "seen": seen})
+        }).collect::<Vec<_>>(),
+        // Любимые актёры и актрисы: имя и фото, что уже известно.
+        "actors": super::json_list(Some(actors_raw)).into_iter().map(|n| {
             let photo = crate::directors::cached(app, &n).and_then(|c| c.1);
             json!({"name": n, "photo": super::img(photo)})
         }).collect::<Vec<_>>(),
+        // Настройки приватности видит только сам человек.
+        "visibility": (v.profile.id == id).then(|| json!({"stats": vis.stats, "watched": vis.watched, "reviews": vis.reviews})),
         "ribbon": ribbon.into_iter().filter_map(|n| super::img(Some(n))).collect::<Vec<_>>(),
     }))
 }
@@ -213,7 +332,19 @@ pub struct DecorBody {
     /// Показывать друзьям, что смотрю.
     #[serde(rename = "showActivity")]
     show_activity: Option<bool>,
+    /// Любимые актёры и актрисы (до `MAX_ACTORS`).
+    actors: Option<Vec<String>>,
+    /// Кто видит разделы: all | friends | me.
+    #[serde(rename = "visStats")]
+    vis_stats: Option<String>,
+    #[serde(rename = "visWatched")]
+    vis_watched: Option<String>,
+    #[serde(rename = "visReviews")]
+    vis_reviews: Option<String>,
 }
+
+/// Любимых актёров и актрис в личном профиле - до пяти.
+pub const MAX_ACTORS: usize = 5;
 
 /// Любимых в личном профиле: любых пять фильмов и любых пять сериалов (отдельно друг от друга).
 pub const MAX_FAVORITES: usize = 5;
@@ -355,6 +486,9 @@ pub async fn watched(
     if id != v.profile.id && !show {
         return Err(ApiError::new(StatusCode::FORBIDDEN, "hidden", "Человек скрыл, что смотрит"));
     }
+    if !allowed(&app, v.profile.id, id, &visibility(&app, id)?.watched) {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "hidden", "Скрыто владельцем"));
+    }
     let local: Vec<i64> = app.db.with(|c| {
         let mut st = c.prepare(
             "SELECT t.id FROM titles t WHERE t.kind = ?2 AND (
@@ -422,6 +556,35 @@ pub async fn set_decor(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<Dec
         }
         let s = serde_json::to_string(&keep).unwrap_or_else(|_| "[]".into());
         app.db.with(|c| c.execute("UPDATE profiles SET directors = ? WHERE id = ?", params![s, me]))?;
+    }
+    if let Some(a) = &b.actors {
+        let mut keep: Vec<String> = Vec::new();
+        for n in a.iter().map(|n| n.trim()).filter(|n| !n.is_empty()) {
+            if n.chars().count() > 80 {
+                return Err(ApiError::bad("too_long", "Имя - не длиннее 80 символов"));
+            }
+            if !keep.iter().any(|k| k.to_lowercase() == n.to_lowercase()) {
+                keep.push(n.to_string());
+            }
+        }
+        if keep.len() > MAX_ACTORS {
+            return Err(ApiError::bad(
+                "too_many",
+                format!("Любимых актёров и актрис - не больше {MAX_ACTORS}: сначала уберите кого-то"),
+            ));
+        }
+        let s = serde_json::to_string(&keep).unwrap_or_else(|_| "[]".into());
+        app.db.with(|c| c.execute("UPDATE profiles SET actors = ? WHERE id = ?", params![s, me]))?;
+        crate::directors::warm_role(&app, keep, "actor");
+    }
+    for (col, value) in [("vis_stats", &b.vis_stats), ("vis_watched", &b.vis_watched), ("vis_reviews", &b.vis_reviews)]
+    {
+        if let Some(level) = value {
+            if !LEVELS.contains(&level.as_str()) {
+                return Err(ApiError::bad("bad_value", "Видят: все, друзья или только я"));
+            }
+            app.db.with(|c| c.execute(&format!("UPDATE profiles SET {col} = ? WHERE id = ?"), params![level, me]))?;
+        }
     }
     if let Some(k) = &b.cover_kind {
         if k != "ribbon" && k != "image" {

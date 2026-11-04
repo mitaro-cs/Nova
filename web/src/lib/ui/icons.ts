@@ -61,6 +61,8 @@ export const ICONS = {
   send: 'M22 2 11 13M22 2l-7 20-4-9-9-4z',
   smile: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  lock: 'M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z',
+  pencil: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
 } as const;
 
 export type IconName = keyof typeof ICONS;

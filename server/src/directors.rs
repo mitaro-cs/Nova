@@ -377,6 +377,11 @@ pub fn cached(app: &App, name: &str) -> Option<(String, Option<String>)> {
 
 /// Режиссёры профиля без фото - найти в фоне (страница профиля покажет их в следующий раз).
 pub fn warm(app: &Arc<App>, names: Vec<String>) {
+    warm_role(app, names, "director");
+}
+
+/// То же для людей в любой роли (любимые актёры и актрисы - `actor`).
+pub fn warm_role(app: &Arc<App>, names: Vec<String>, role: &'static str) {
     let missing: Vec<String> = names.into_iter().filter(|n| cached(app, n).is_none_or(|c| c.1.is_none())).collect();
     if missing.is_empty() {
         return;
@@ -385,8 +390,58 @@ pub fn warm(app: &Arc<App>, names: Vec<String>) {
     tokio::spawn(async move {
         for n in missing.into_iter().take(5) {
             if let Ok(Some(id)) = resolve(&app, &n).await {
-                let _ = fetch(&app, &id, "director").await;
+                let _ = fetch(&app, &id, role).await;
             }
         }
     });
+}
+
+/// Сколько фильмов режиссёра смотрел человек и какую среднюю оценку им поставил: `{total, seen, avg}`. Фильмография -
+/// из уже известного (`ext_people`, без запросов к IMDb); нет её - нет и сведений. Оценка - звёзды отзывов, 1..10.
+pub fn seen_stats(app: &App, name: &str, profile: i64) -> Option<Value> {
+    let id = known_id(app, name)?;
+    let works: Vec<String> = app
+        .db
+        .with(|c| {
+            c.query_row("SELECT works FROM ext_people WHERE id = ? AND role = 'director'", [&id], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()
+        })
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str(&raw).ok())?;
+    if works.is_empty() {
+        return None;
+    }
+    let seen: std::collections::HashSet<String> = app
+        .db
+        .with(|c| {
+            let mut st = c.prepare(
+                "SELECT t.imdb_id FROM titles t WHERE t.imdb_id IS NOT NULL AND t.id IN (
+                   SELECT title_id FROM watched WHERE profile_id = ?1
+                   UNION SELECT f.title_id FROM progress p JOIN files f ON f.id = p.file_id WHERE p.profile_id = ?1 AND p.done = 1)
+                 UNION SELECT ext_id FROM ext_marks WHERE profile_id = ?1 AND status = 'watched'",
+            )?;
+            let r = st.query_map([profile], |r| r.get::<_, String>(0))?;
+            r.collect()
+        })
+        .ok()?;
+    let stars: Vec<(String, i64)> = app
+        .db
+        .with(|c| {
+            let mut st = c.prepare(
+                "SELECT COALESCE(r.ext_id, t.imdb_id), r.stars FROM reviews r LEFT JOIN titles t ON t.id = r.title_id
+                 WHERE r.profile_id = ? AND r.stars IS NOT NULL",
+            )?;
+            let r = st.query_map([profile], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, i64>(1)?)))?;
+            Ok::<_, rusqlite::Error>(r.filter_map(|x| x.ok()).filter_map(|(i, s)| Some((i?, s))).collect())
+        })
+        .ok()?;
+    let total = works.len() as i64;
+    let seen_n = works.iter().filter(|w| seen.contains(*w)).count() as i64;
+    let rated: Vec<i64> = stars.into_iter().filter(|(i, _)| works.contains(i)).map(|(_, s)| s).collect();
+    let avg =
+        (!rated.is_empty()).then(|| (rated.iter().sum::<i64>() as f64 / rated.len() as f64 * 10.0).round() / 10.0);
+    Some(json!({"total": total, "seen": seen_n, "avg": avg}))
 }

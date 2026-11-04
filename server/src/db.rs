@@ -665,6 +665,14 @@ ALTER TABLE ext_titles ADD COLUMN soon INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE wishes ADD COLUMN done_at INTEGER;
 ALTER TABLE wishes ADD COLUMN seen_at INTEGER;
 "#,
+    // 30 (beta 0.1): личный профиль - любимые актёры и актрисы (до пяти, JSON-список имён) и приватность разделов
+    // «Статистика», «Просмотрено», «Отзывы»: all | friends | me. У всех прежних профилей - как было (all).
+    r#"
+ALTER TABLE profiles ADD COLUMN actors TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE profiles ADD COLUMN vis_stats TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE profiles ADD COLUMN vis_watched TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE profiles ADD COLUMN vis_reviews TEXT NOT NULL DEFAULT 'all';
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции
