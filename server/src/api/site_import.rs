@@ -1,19 +1,19 @@
 //! Фоновый импорт запрошенных сайтов с устойчивой очередью и без удаления старых записей.
 use crate::{
+    App,
     auth::Manager,
     error::{ApiError, ApiResult},
     own_sites,
     site_sources::{self, Entry, Source, Variant},
     util::now_ms,
-    App,
 };
 use axum::{
-    extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
 fn host(m: &Manager) -> ApiResult<()> {
@@ -143,11 +143,7 @@ pub async fn start(State(app): State<Arc<App>>, m: Manager, Path(id): Path<Strin
 }
 
 fn initial_url(s: &Source) -> &str {
-    if s.id == "yummy" {
-        "https://old.yummyani.me/api/anime?limit=50&offset=0"
-    } else {
-        s.url
-    }
+    if s.id == "yummy" { "https://old.yummyani.me/api/anime?limit=50&offset=0" } else { s.url }
 }
 
 #[derive(Deserialize)]

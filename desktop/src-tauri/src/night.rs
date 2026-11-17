@@ -1,5 +1,5 @@
 //! Explicit local-only night action; never changes the Windows power plan.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 

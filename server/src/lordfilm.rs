@@ -1,6 +1,6 @@
 //! Automatic movie discovery on the built-in LordFilm source.
 use reqwest::Url;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const HOST: &str = "sd.lordfilm5.pro";
 const BASE: &str = "https://sd.lordfilm5.pro/";

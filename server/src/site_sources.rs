@@ -1,5 +1,5 @@
 //! Именованные источники и публичные структурированные плейлисты. Сетевые отказы не маскируются.
-use crate::{api::stream_link, outbound, util, App};
+use crate::{App, api::stream_link, outbound, util};
 use parking_lot::Mutex;
 
 pub const USER_AGENT: &str =
@@ -159,10 +159,10 @@ pub fn hls_manifest(text: &str, media: &Media, id: i64) -> String {
     let mut audio_counts: HashMap<String, usize> = HashMap::new();
     let mut subtitle_groups = HashSet::new();
     for line in text.lines() {
-        if line.starts_with("#EXT-X-MEDIA:TYPE=SUBTITLES") {
-            if let Some(c) = group.captures(line) {
-                subtitle_groups.insert(c[1].to_string());
-            }
+        if line.starts_with("#EXT-X-MEDIA:TYPE=SUBTITLES")
+            && let Some(c) = group.captures(line)
+        {
+            subtitle_groups.insert(c[1].to_string());
         }
         if let Some(c) = stream_group.captures(line) {
             subtitle_groups.insert(c[1].to_string());
@@ -292,10 +292,10 @@ fn movie_objects(html: &str) -> Vec<Value> {
         let mut value = serde_json::Map::new();
         for key in ["hls", "audio", "cc", "duration"] {
             let field = regex::Regex::new(&format!(r#"(?:\b{}|"{}")\s*:\s*"#, key, key)).unwrap();
-            if let Some(m) = field.find(body) {
-                if let Some(Ok(v)) = serde_json::Deserializer::from_str(&body[m.end()..]).into_iter::<Value>().next() {
-                    value.insert(key.into(), v);
-                }
+            if let Some(m) = field.find(body)
+                && let Some(Ok(v)) = serde_json::Deserializer::from_str(&body[m.end()..]).into_iter::<Value>().next()
+            {
+                value.insert(key.into(), v);
             }
         }
         values.push(Value::Object(value));
@@ -315,10 +315,10 @@ fn media_value(v: &Value) -> Option<Media> {
             let max = o.iter().filter_map(number).filter(|n| *n >= 0 && *n < 256).max().unwrap_or(0) as usize;
             let mut labels = vec![String::new(); max + 1];
             for (i, n) in o.iter().enumerate() {
-                if let Some(n) = number(n).filter(|n| *n >= 0 && *n < 256) {
-                    if let Some(name) = names.get(i) {
-                        labels[n as usize] = name.clone();
-                    }
+                if let Some(n) = number(n).filter(|n| *n >= 0 && *n < 256)
+                    && let Some(name) = names.get(i)
+                {
+                    labels[n as usize] = name.clone();
                 }
             }
             labels
@@ -529,15 +529,15 @@ pub fn next_page(html: &str, base: &Url) -> Option<String> {
     let page_re = regex::Regex::new(r"/page/(\d+)/").unwrap();
     let n = page_re.captures(base.path()).and_then(|c| c[1].parse::<u32>().ok()).unwrap_or(1) + 1;
     let anchors = regex::Regex::new(r#"(?i)href=["']([^"']+)["']"#).unwrap();
-    let result = anchors
+
+    anchors
         .captures_iter(html)
         .filter_map(|c| base.join(&decode(&c[1])).ok())
         .find(|u| {
             u.host_str() == base.host_str()
                 && page_re.captures(u.path()).is_some_and(|c| c[1].parse::<u32>().ok() == Some(n))
         })
-        .map(String::from);
-    result
+        .map(String::from)
 }
 
 pub async fn branches(source: &Source, cursor: &str, app: Option<&App>) -> anyhow::Result<Vec<String>> {
@@ -553,13 +553,12 @@ pub async fn branches(source: &Source, cursor: &str, app: Option<&App>) -> anyho
     let re = regex::Regex::new(r#"href=["']([^"']+)["']"#).unwrap();
     let mut result = Vec::new();
     for c in re.captures_iter(&html) {
-        if let Ok(u) = base.join(&decode(&c[1])) {
-            if u.host_str() == base.host_str()
-                && matches!(u.path(), "/zarubezhnye-serialy/" | "/multserialy/" | "/anime/" | "/doramy/" | "/dorama/")
-                && !result.contains(&u.to_string())
-            {
-                result.push(u.to_string());
-            }
+        if let Ok(u) = base.join(&decode(&c[1]))
+            && u.host_str() == base.host_str()
+            && matches!(u.path(), "/zarubezhnye-serialy/" | "/multserialy/" | "/anime/" | "/doramy/" | "/dorama/")
+            && !result.contains(&u.to_string())
+        {
+            result.push(u.to_string());
         }
     }
     Ok(result)

@@ -123,11 +123,7 @@ impl Images {
             // Адрес картинки бывает от зрителя (кадр ссылки): перенаправления — только на https
             // и не в локальную сеть, иначе это был бы запрос от имени хоста куда угодно.
             .redirect(reqwest::redirect::Policy::custom(|a| {
-                if a.previous().len() >= 5 || !public_https(a.url()) {
-                    a.stop()
-                } else {
-                    a.follow()
-                }
+                if a.previous().len() >= 5 || !public_https(a.url()) { a.stop() } else { a.follow() }
             }))
             .user_agent(concat!("fsfy/", env!("CARGO_PKG_VERSION")))
             .build()?;
@@ -314,11 +310,7 @@ mod tests {
     fn contrast_with_white(hex: &str) -> f64 {
         let ch = |i: usize| {
             let c = u8::from_str_radix(&hex[i..i + 2], 16).unwrap() as f64 / 255.0;
-            if c <= 0.03928 {
-                c / 12.92
-            } else {
-                ((c + 0.055) / 1.055).powf(2.4)
-            }
+            if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
         };
         let l = 0.2126 * ch(1) + 0.7152 * ch(3) + 0.0722 * ch(5);
         1.05 / (l + 0.05)

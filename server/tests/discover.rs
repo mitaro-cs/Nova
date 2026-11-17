@@ -4,7 +4,7 @@
 mod common;
 
 use common::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn russian_episodes_include_old_fresh_seasons_without_replacing_source() {
@@ -218,11 +218,12 @@ async fn episode_links_resume_and_dropped_feed() {
     let again: Value = host.send("POST", "/api/links", body).await.json().await.unwrap();
     assert_eq!(first["id"], again["id"], "повторное открытие не теряет прогресс");
     let id = first["id"].as_i64().unwrap();
-    assert!(host
-        .send("PUT", &format!("/api/links/{id}/progress"), json!({"position":120,"duration":1200}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PUT", &format!("/api/links/{id}/progress"), json!({"position":120,"duration":1200}))
+            .await
+            .status()
+            .is_success()
+    );
     let link = host.json(&format!("/api/links/{id}")).await;
     assert_eq!(link["season"], 2);
     assert_eq!(link["episode"], 3);
@@ -232,11 +233,12 @@ async fn episode_links_resume_and_dropped_feed() {
     assert_eq!(resume[0]["duration"], 1200.0);
     assert_eq!(resume[0]["label"], "2 сезон, 3 серия");
     assert_eq!(resume[0]["href"], format!("/watch/link/{id}"));
-    assert!(host
-        .send("PUT", &format!("/api/links/{id}/progress"), json!({"position":1190,"duration":1200}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PUT", &format!("/api/links/{id}/progress"), json!({"position":1190,"duration":1200}))
+            .await
+            .status()
+            .is_success()
+    );
     let marks = host.json("/api/me/marks").await;
     assert_eq!(host.json("/api/continue").await, json!([]), "досмотренная серия не предлагается как продолжение");
     assert_eq!(marks["watching"].as_array().unwrap().len(), 1, "одна серия не завершает сериал");
@@ -252,20 +254,19 @@ async fn episode_links_resume_and_dropped_feed() {
     assert_eq!(stats["series"], 1);
     assert!(stats["hours"].as_f64().unwrap() > 0.0, "часы внешнего просмотра учитываются");
     assert_eq!(stats["months"][11], 1, "текущий календарный месяц включает внешнюю серию");
-    assert!(host
-        .send("PUT", "/api/discover/title/tt0903747/mark", json!({"status":"dropped"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PUT", "/api/discover/title/tt0903747/mark", json!({"status":"dropped"})).await.status().is_success()
+    );
     let feed = host.json("/api/discover").await;
     assert!(!feed.to_string().contains("tt0903747"));
     assert_eq!(host.json("/api/me/marks").await["watching"], json!([]));
     assert_eq!(host.json("/api/continue").await, json!([]));
-    assert!(host
-        .send("PUT", &format!("/api/links/{id}/progress"), json!({"position":125,"duration":1200}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PUT", &format!("/api/links/{id}/progress"), json!({"position":125,"duration":1200}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(host.json("/api/me/marks").await["watching"].as_array().unwrap().len(), 1);
     running.shutdown().await;
 }
@@ -381,11 +382,12 @@ async fn feed_marks_wishes_groups_links() {
     // Свой список с группами и фильмом из ленты.
     let l: Value = anna.send("POST", "/api/lists", json!({"name": "Хоррор на Хэллоуин"})).await.json().await.unwrap();
     let lid = l["id"].as_i64().unwrap();
-    assert!(anna
-        .send("PUT", &format!("/api/lists/{lid}/ext/tt0111161"), json!({"value": true}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        anna.send("PUT", &format!("/api/lists/{lid}/ext/tt0111161"), json!({"value": true}))
+            .await
+            .status()
+            .is_success()
+    );
     let g: Value =
         anna.send("POST", &format!("/api/lists/{lid}/groups"), json!({"name": "Сначала"})).await.json().await.unwrap();
     let gid = g["id"].as_i64().unwrap();
@@ -616,15 +618,17 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
     fsfy::discover::upsert(&running.app, &[ext("tt1234567", "Тестовый фильм", false)]).unwrap();
     let public = format!("http://127.0.0.1:{}", running.app.ports.0);
     let mut viewer = Client::new(public);
-    assert!(viewer
-        .send(
-            "POST",
-            "/api/auth/register",
-            json!({"name":"Зритель", "login":"prioritytest", "password":"пароль-12345"})
-        )
-        .await
-        .status()
-        .is_success());
+    assert!(
+        viewer
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"name":"Зритель", "login":"prioritytest", "password":"пароль-12345"})
+            )
+            .await
+            .status()
+            .is_success()
+    );
     let payload = json!({"extId":"tt1234567", "url":"https://example.com/video.mp4"});
     assert_eq!(viewer.send("POST", "/api/admin/video-source", payload.clone()).await.status(), 403);
     let r = host.send("POST", "/api/admin/video-source", payload).await;
@@ -905,10 +909,12 @@ async fn admin_imports_real_series_playlist() {
     assert!(response.status().is_success(), "{}", response.status());
     assert!(response.json::<Value>().await.unwrap()["count"].as_u64().unwrap() > 1);
     let links = host.json("/api/links?extId=tt1234567").await;
-    assert!(links
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|link| link["season"] == 1 && link["episode"] == 2 && link["preferred"] == true));
+    assert!(
+        links
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|link| link["season"] == 1 && link["episode"] == 2 && link["preferred"] == true)
+    );
     running.shutdown().await;
 }

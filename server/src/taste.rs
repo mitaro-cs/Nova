@@ -1,8 +1,8 @@
 //! Вкус профиля (как у Netflix): что смотрел и как оценил → веса жанров → «совпадение» в
 //! процентах, подборки, без «не для меня» в рядах.
 
-use crate::api::Card;
 use crate::App;
+use crate::api::Card;
 use rusqlite::params;
 use std::collections::{HashMap, HashSet};
 

@@ -6,8 +6,8 @@
 //! Задача ffmpeg живёт, пока зритель смотрит: убегает больше чем на 4 минуты вперёд или
 //! зрителя нет минуту - останавливается; старые кусочки удаляются.
 
-use crate::error::{ApiError, ApiResult};
 use crate::App;
+use crate::error::{ApiError, ApiResult};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -222,8 +222,8 @@ impl Job {
                 });
                 if !usable {
                     jobs.remove(self); // старая задача (не там или завершилась) останавливается
-                                       // Check and register under the same lock: concurrent viewers must
-                                       // share one encoder, not race to replace each other's process.
+                    // Check and register under the same lock: concurrent viewers must
+                    // share one encoder, not race to replace each other's process.
                     let permit = app.transcode.clone().try_acquire_owned().map_err(|_| crate::api::busy())?;
                     std::fs::create_dir_all(&dir)?;
                     let child = crate::library::probe::command(ffmpeg)
@@ -300,9 +300,11 @@ mod tests {
             vf.starts_with("scale=-2:1080,zscale=t=linear") && vf.ends_with("format=yuv420p"),
             "HDR - в обычный цвет: {vf}"
         );
-        assert!(args(Path::new("a.mkv"), Path::new("d"), 2160, 2160, 0, 0, false)
-            .windows(2)
-            .any(|w| w == ["-level", "5.1"]));
+        assert!(
+            args(Path::new("a.mkv"), Path::new("d"), 2160, 2160, 0, 0, false)
+                .windows(2)
+                .any(|w| w == ["-level", "5.1"])
+        );
         assert_eq!(levels(720), vec![720, 480, 360]);
         assert_eq!(levels(240), vec![240]);
         let v = variant(13.5, 1);

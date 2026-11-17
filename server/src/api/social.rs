@@ -2,17 +2,17 @@
 //! между друзьями (можно приложить фильм - «обсудить»). Действуют профили: у каждого человека в
 //! семейном аккаунте свои друзья и отзывы. Детские профили в общении не участвуют.
 
-use super::{card, img, visible, CARD_COLS};
+use super::{CARD_COLS, card, img, visible};
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::Json;
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 const MAX_REVIEW: usize = 4000;
@@ -117,11 +117,7 @@ pub(super) fn title_visible(app: &App, v: &Viewer, id: i64) -> ApiResult<()> {
             |r| r.get(0),
         )
     })?;
-    if ok {
-        Ok(())
-    } else {
-        Err(ApiError::not_found())
-    }
+    if ok { Ok(()) } else { Err(ApiError::not_found()) }
 }
 
 /// Чьи отзывы: фильм с сервиса и тот же фильм из ленты IMDb - отзывы у них общие.
@@ -209,10 +205,10 @@ pub struct ReviewBody {
 
 fn check_review(b: &ReviewBody) -> ApiResult<String> {
     let body = text(&b.body, MAX_REVIEW, "Отзыв")?;
-    if let Some(s) = b.stars {
-        if !(1..=10).contains(&s) {
-            return Err(ApiError::bad("bad_stars", "Оценка - от половины до пяти звёзд"));
-        }
+    if let Some(s) = b.stars
+        && !(1..=10).contains(&s)
+    {
+        return Err(ApiError::bad("bad_stars", "Оценка - от половины до пяти звёзд"));
     }
     if body.is_empty() && b.stars.is_none() {
         return Err(ApiError::bad("empty", "Напишите пару слов или поставьте оценку"));

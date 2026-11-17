@@ -5,9 +5,9 @@ use std::sync::OnceLock;
 
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::{video_search::any_name_matches, App};
+use crate::{App, video_search::any_name_matches};
 
 const KEY: &str = "video.catalogs";
 pub const MAX: usize = 20;
@@ -154,11 +154,7 @@ pub fn extract(html: &str, base: &Url, domain: &str, names: &[&str], year: Optio
         // Год может присутствовать только в URL карточки. Сохраняем его в подписи,
         // чтобы последующая проверка результата не отбросила уже подтверждённое совпадение.
         let label = if let Some(year) = year.filter(|year| path.split_whitespace().any(|p| p == year.to_string())) {
-            if !label.contains(&year.to_string()) {
-                format!("{label} ({year})")
-            } else {
-                label
-            }
+            if !label.contains(&year.to_string()) { format!("{label} ({year})") } else { label }
         } else {
             label
         };

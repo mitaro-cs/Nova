@@ -3,13 +3,13 @@
 //! положить в свой список и попросить хоста добавить. Картинки сервер скачивает к себе: браузер
 //! ходит только к нам. Подборки обновляются раз в 12 часов, постеры докачиваются в фоне.
 
-use crate::meta::imdb::{sized, Imdb};
-use crate::util::now_ms;
 use crate::App;
+use crate::meta::imdb::{Imdb, sized};
+use crate::util::now_ms;
 use futures_util::StreamExt;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -436,10 +436,10 @@ pub async fn worker(app: Arc<App>) {
         let at: i64 = app.db.setting_or("discover.at", "0").parse().unwrap_or(0);
         // Новых подборок ещё нет (обновили программу) - сразу, не дожидаясь 12 часов.
         let fresh_set = app.db.setting_or("discover.feeds", "0") == FEEDS.len().to_string();
-        if now_ms() - at > EVERY.as_millis() as i64 || !fresh_set {
-            if let Err(e) = refresh(&app).await {
-                tracing::warn!(error = %e, "лента IMDb");
-            }
+        if (now_ms() - at > EVERY.as_millis() as i64 || !fresh_set)
+            && let Err(e) = refresh(&app).await
+        {
+            tracing::warn!(error = %e, "лента IMDb");
         }
         let _ = tokio::time::timeout(Duration::from_secs(3600), app.discover_kick.notified()).await;
     }
@@ -642,16 +642,16 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
     };
     upsert(app, &[e])?;
     // Есть ключ TMDB - русский постер вместо промо-плаката IMDb (upsert его потом не затирает).
-    if let Some(tmdb) = crate::meta::tmdb_posters(app) {
-        if let Ok(Ok(Some(url))) = tokio::time::timeout(Duration::from_secs(4), tmdb.poster_ru(id)).await {
-            app.db.with(|c| {
-                c.execute(
-                    "UPDATE ext_titles SET poster_url = ?1, poster = NULL WHERE id = ?2 AND poster_url IS NOT ?1",
-                    params![url, id],
-                )
-            })?;
-            app.kick_ext();
-        }
+    if let Some(tmdb) = crate::meta::tmdb_posters(app)
+        && let Ok(Ok(Some(url))) = tokio::time::timeout(Duration::from_secs(4), tmdb.poster_ru(id)).await
+    {
+        app.db.with(|c| {
+            c.execute(
+                "UPDATE ext_titles SET poster_url = ?1, poster = NULL WHERE id = ?2 AND poster_url IS NOT ?1",
+                params![url, id],
+            )
+        })?;
+        app.kick_ext();
     }
     let mut extra = json!({"tagline":d.tagline,"age":d.age,"countries":d.countries,"languages":d.languages,"releaseDate":d.release_date,"aka":d.aka,
       "poster":d.poster.as_deref().map(crate::media_meta::art),"imdbBackdrop":d.backdrop.as_deref().map(crate::media_meta::art),"people":d.people.iter().take(16).map(|p|json!({"name":p.name,"job":p.job,"role":p.role,"photo":p.photo.as_deref().map(crate::media_meta::art),"id":p.id})).collect::<Vec<_>>(),
@@ -831,13 +831,9 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
         original: r.get(3)?,
         year: r.get(4)?,
         rating: r.get(5)?,
-        poster: r.get::<_, Option<String>>(6)?.and_then(|s| {
-            if s.starts_with('/') {
-                Some(s)
-            } else {
-                crate::api::img(Some(s))
-            }
-        }),
+        poster: r
+            .get::<_, Option<String>>(6)?
+            .and_then(|s| if s.starts_with('/') { Some(s) } else { crate::api::img(Some(s)) }),
         genres: crate::meta::genres_ru(crate::api::json_list(r.get(7)?)),
         local: r.get(8)?,
         mark: r.get(9)?,

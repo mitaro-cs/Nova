@@ -5,9 +5,9 @@ pub mod imdb;
 pub mod kp;
 pub mod tmdb;
 
-use crate::util::now_ms;
 use crate::App;
-use futures_util::{stream, StreamExt};
+use crate::util::now_ms;
+use futures_util::{StreamExt, stream};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -353,10 +353,10 @@ pub async fn apply(
     // выходил бессмыслицей («Классно...» у «Тёмного рыцаря»), на страницах его больше нет.
     let mut d = d;
     let imdb = d.imdb_id.clone().or_else(|| (provider == "imdb").then(|| provider_id.to_string()));
-    if let Some(imdb) = imdb.filter(|_| d.overview.as_deref().is_none_or(|o| !crate::ruwiki::has_cyrillic(o))) {
-        if let Some(ru) = crate::ruwiki::overview(&app.http, &imdb).await {
-            d.overview = Some(ru);
-        }
+    if let Some(imdb) = imdb.filter(|_| d.overview.as_deref().is_none_or(|o| !crate::ruwiki::has_cyrillic(o)))
+        && let Some(ru) = crate::ruwiki::overview(&app.http, &imdb).await
+    {
+        d.overview = Some(ru);
     }
     let im = &app.images;
     let get = |u: Option<String>| async move {
@@ -450,12 +450,12 @@ pub async fn fetch_one(app: &App, p: &Provider, id: i64) -> anyhow::Result<bool>
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })
     })?;
-    if let (Some(prov), Some(pid)) = (provider, provider_id) {
-        if prov == p.name() {
-            let d = p.details(&pid, &seasons_of(app, id)).await?;
-            apply(app, id, p.name(), &pid, d, "matched").await?;
-            return Ok(true);
-        }
+    if let (Some(prov), Some(pid)) = (provider, provider_id)
+        && prov == p.name()
+    {
+        let d = p.details(&pid, &seasons_of(app, id)).await?;
+        apply(app, id, p.name(), &pid, d, "matched").await?;
+        return Ok(true);
     }
     let series = kind == "series";
     let cands = p.search(&title, year, series).await?;

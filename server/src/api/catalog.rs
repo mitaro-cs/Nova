@@ -1,20 +1,20 @@
 //! Каталог: главная (большой кадр с превью, «Продолжить», Топ-10, подборки), списки, поиск,
 //! страница фильма или сериала, «Мой список» и оценки.
 
-use super::{card, cards, cards_by_ids, img, json_list, visible, Card, CARD_COLS};
+use super::{CARD_COLS, Card, card, cards, cards_by_ids, img, json_list, visible};
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use crate::library::probe::Probe;
 use crate::taste::Taste;
 use crate::util::{norm, now_ms};
-use crate::App;
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 const DAY: i64 = 86_400_000;
@@ -275,12 +275,12 @@ pub async fn home(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
     )?);
     row(&mut rows, "new-episodes", "Новые серии", new_eps, "poster");
 
-    if let Some(last) = taste.recent.first() {
-        if let Some(c) = cards(&app, kids, "t.id = ?", "t.id", 1, &[last])?.pop() {
-            let mut sim = fresh(similar(&app, kids, &c)?);
-            sim.retain(|s| !taste.watched.contains_key(&s.id));
-            row(&mut rows, "because", &format!("Потому что вы смотрели «{}»", c.title), sim, "poster");
-        }
+    if let Some(last) = taste.recent.first()
+        && let Some(c) = cards(&app, kids, "t.id = ?", "t.id", 1, &[last])?.pop()
+    {
+        let mut sim = fresh(similar(&app, kids, &c)?);
+        sim.retain(|s| !taste.watched.contains_key(&s.id));
+        row(&mut rows, "because", &format!("Потому что вы смотрели «{}»", c.title), sim, "poster");
     }
     if taste.known() {
         let mut picks = fresh(cards(&app, kids, "1", "t.rating DESC", 400, &[])?);
@@ -385,22 +385,22 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<ListQu
             words.iter().all(|w| hay.contains(w))
         });
         // «Фантастика», «сериалы ужасы» - это жанр: своё в этом жанре, если названий таких нет.
-        if items.is_empty() {
-            if let Some((_, ru, types)) = crate::discover::genre_query(&query) {
-                let kind = kind.or_else(|| match types.len() {
-                    1 => Some("movie".to_string()),
-                    2 => Some("series".to_string()),
-                    _ => None,
-                });
-                items = cards(
-                    &app,
-                    v.profile.kids,
-                    "(?1 IS NULL OR t.kind = ?1) AND EXISTS (SELECT 1 FROM json_each(t.genres) WHERE value = ?2)",
-                    order,
-                    5000,
-                    &[&kind, &ru],
-                )?;
-            }
+        if items.is_empty()
+            && let Some((_, ru, types)) = crate::discover::genre_query(&query)
+        {
+            let kind = kind.or_else(|| match types.len() {
+                1 => Some("movie".to_string()),
+                2 => Some("series".to_string()),
+                _ => None,
+            });
+            items = cards(
+                &app,
+                v.profile.kids,
+                "(?1 IS NULL OR t.kind = ?1) AND EXISTS (SELECT 1 FROM json_each(t.genres) WHERE value = ?2)",
+                order,
+                5000,
+                &[&kind, &ru],
+            )?;
         }
     }
     let taste = Taste::load(&app, v.profile.id)?;

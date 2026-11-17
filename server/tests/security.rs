@@ -4,7 +4,7 @@
 mod common;
 
 use common::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 async fn signup(public: &str, login: &str) -> Client {
     let mut c = Client::new(public.to_string());
@@ -67,11 +67,9 @@ async fn two_step_login_journal_and_local_management() {
 
     // ---------- «Управление» - только в окне хоста ----------
     let ida = anna.json("/api/me").await["user"]["id"].as_i64().unwrap();
-    assert!(host
-        .send("PATCH", &format!("/api/admin/users/{ida}"), json!({"role": "admin"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PATCH", &format!("/api/admin/users/{ida}"), json!({"role": "admin"})).await.status().is_success()
+    );
     assert_eq!(anna.json("/api/me").await["manage"], false, "из интернета меню управления нет");
     let r = anna.get("/api/admin/settings").await;
     assert_eq!(r.status(), 403);

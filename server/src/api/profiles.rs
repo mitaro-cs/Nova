@@ -1,9 +1,9 @@
 //! Профиль аккаунта: у каждого человека один (с 0.5 выбора «Кто смотрит?» нет). В нём -
 //! прогресс, список, оценки, фото и общение; имя совпадает с именем аккаунта.
 
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
-use crate::App;
 use rusqlite::params;
 
 pub const AVATARS: i64 = 12;
@@ -15,9 +15,5 @@ pub fn own(app: &App, v: &Viewer, id: i64) -> ApiResult<()> {
             r.get(0)
         })
     })?;
-    if mine {
-        Ok(())
-    } else {
-        Err(ApiError::not_found())
-    }
+    if mine { Ok(()) } else { Err(ApiError::not_found()) }
 }

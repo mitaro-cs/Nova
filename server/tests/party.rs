@@ -1,5 +1,5 @@
 mod common;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 struct Events {
     response: reqwest::Response,
@@ -67,12 +67,15 @@ async fn exercise_viewers(count: usize) {
         .unwrap()["id"]
         .as_i64()
         .unwrap();
-    let room =
-        host.send("POST", "/api/rooms", json!({"linkId":link,"position":120})).await.json::<Value>().await.unwrap()
-            ["id"]
-            .as_str()
-            .unwrap()
-            .to_owned();
+    let room = host
+        .send("POST", "/api/rooms", json!({"linkId":link,"position":120}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let mut clients = Vec::new();
     let mut streams = Vec::new();
     for n in 0..count {
@@ -91,21 +94,23 @@ async fn exercise_viewers(count: usize) {
                 .unwrap();
         }
         let login = format!("party{n}");
-        assert!(host
-            .send(
+        assert!(
+            host.send(
                 "POST",
                 "/api/admin/users",
                 json!({"login":login,"name":format!("Зритель {n}"),"password":"PartyPass123","role":"viewer"})
             )
             .await
             .status()
-            .is_success());
+            .is_success()
+        );
         let mut user = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-        assert!(user
-            .send("POST", "/api/auth/login", json!({"login":login,"password":"PartyPass123"}))
-            .await
-            .status()
-            .is_success());
+        assert!(
+            user.send("POST", "/api/auth/login", json!({"login":login,"password":"PartyPass123"}))
+                .await
+                .status()
+                .is_success()
+        );
         let response = user.get(&format!("/api/rooms/{room}/events")).await;
         let mut stream = Events { response, buffer: String::new() };
         stream.event("snapshot").await;
@@ -275,21 +280,24 @@ async fn room_place_is_remembered_for_everyone_in_the_room() {
             Ok(())
         })
         .unwrap();
-    assert!(host
-        .send(
+    assert!(
+        host.send(
             "POST",
             "/api/admin/users",
             json!({"login":"guest","name":"Гость","password":"PartyPass123","role":"viewer"})
         )
         .await
         .status()
-        .is_success());
+        .is_success()
+    );
     let mut guest = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-    assert!(guest
-        .send("POST", "/api/auth/login", json!({"login":"guest","password":"PartyPass123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        guest
+            .send("POST", "/api/auth/login", json!({"login":"guest","password":"PartyPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
     let room = host.send("POST", "/api/rooms", json!({"fileId":9910})).await.json::<Value>().await.unwrap()["id"]
         .as_str()
         .unwrap()
@@ -304,32 +312,36 @@ async fn room_place_is_remembered_for_everyone_in_the_room() {
         app.db
             .with(|c| {
                 let mut s = c.prepare("SELECT position FROM progress WHERE file_id = 9910 ORDER BY profile_id")?;
-                let rows = s.query_map([], |r| r.get::<_, f64>(0))?.collect::<Result<Vec<_>, _>>();
-                rows
+
+                s.query_map([], |r| r.get::<_, f64>(0))?.collect::<Result<Vec<_>, _>>()
             })
             .unwrap()
     };
     assert!(count(&running.app).is_empty());
     // Хост ставит паузу на 20-й минуте: место появляется у обоих (гость ничего не слал сам).
-    assert!(host
-        .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":1200}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":1200}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(count(&running.app), vec![1200.0, 1200.0]);
     // Начало (первые секунды) - не «смотреть дальше».
-    assert!(guest
-        .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":2}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        guest
+            .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":2}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(count(&running.app), vec![1200.0, 1200.0]);
     // Гость закрыл вкладку: его место - там, где комната была в ту минуту (на паузе - то же).
-    assert!(host
-        .send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":1500}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("POST", &format!("/api/rooms/{room}/state"), json!({"playing":false,"position":1500}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(count(&running.app), vec![1500.0, 1500.0]);
     drop(guest_events);
     drop(host_events);

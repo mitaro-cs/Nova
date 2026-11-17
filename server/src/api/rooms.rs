@@ -1,20 +1,20 @@
 //! Совместный просмотр (`crate::rooms`): создать комнату на файл, войти (поток событий),
 //! управлять местом в видео, чат, реакции и позвать друга сообщением.
 
-use super::social::{person, PERSON_COLS, SOCIAL};
+use super::social::{PERSON_COLS, SOCIAL, person};
 use super::visible;
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
-use axum::extract::{Path, State};
-use axum::http::{header, StatusCode};
-use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::response::IntoResponse;
 use axum::Json;
-use rusqlite::{params, OptionalExtension};
+use axum::extract::{Path, State};
+use axum::http::{StatusCode, header};
+use axum::response::IntoResponse;
+use axum::response::sse::{Event, KeepAlive, Sse};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;

@@ -6,9 +6,9 @@
 //!   HTTPS на 443, поэтому работает и с VPN, и без; адрес постоянный, выдаёт сервис;
 //! - `custom` - свой адрес (проброс порта на роутере, свой домен).
 
+use crate::App;
 use crate::host::HostEvent;
 use crate::util::now_ms;
-use crate::App;
 use parking_lot::Mutex;
 use regex::Regex;
 use serde::Serialize;
@@ -71,7 +71,7 @@ struct Inner {
     state: String,
     message: Option<String>,
     url: Option<String>,
-    gen: u64,
+    r#gen: u64,
     login: Option<LoginView>,
 }
 
@@ -157,10 +157,10 @@ impl Access {
         v.public_url.or(v.lan_url)
     }
 
-    fn set(&self, app: &App, gen: u64, state: &str, message: Option<String>, url: Option<Option<String>>) {
+    fn set(&self, app: &App, r#gen: u64, state: &str, message: Option<String>, url: Option<Option<String>>) {
         {
             let mut i = self.inner.lock();
-            if i.gen != gen {
+            if i.r#gen != r#gen {
                 return;
             }
             i.state = state.into();
@@ -175,13 +175,13 @@ impl Access {
 
     /// Применить режим из настроек: остановить старое, запустить новое.
     pub fn restart(app: &Arc<App>) {
-        let gen = {
+        let r#gen = {
             let mut i = app.access.inner.lock();
-            i.gen += 1;
+            i.r#gen += 1;
             i.state.clear();
             i.message = None;
             i.url = None;
-            i.gen
+            i.r#gen
         };
         app.access.stop.notify_waiters();
         let a = app.clone();
@@ -189,45 +189,51 @@ impl Access {
         app.host.event(HostEvent::Access { url: v.public_url, lan: v.lan_url });
         match Self::mode(app).as_str() {
             "fxtunnel" => {
-                tokio::spawn(async move { Self::run(a, gen).await });
+                tokio::spawn(async move { Self::run(a, r#gen).await });
             }
             "cloudpub" => {
-                tokio::spawn(async move { Self::run_cp(a, gen).await });
+                tokio::spawn(async move { Self::run_cp(a, r#gen).await });
             }
             _ => {}
         }
     }
 
-    fn current(&self, gen: u64) -> bool {
-        self.inner.lock().gen == gen
+    fn current(&self, r#gen: u64) -> bool {
+        self.inner.lock().r#gen == r#gen
     }
 
-    async fn run(app: Arc<App>, gen: u64) {
+    async fn run(app: Arc<App>, r#gen: u64) {
         let mut failures = 0usize;
         loop {
             let token = app.db.setting_or("access.fx.token", "");
             let sub = app.db.setting_or("access.fx.sub", "");
             if token.is_empty() {
-                app.access.set(&app, gen, "needs_login", Some("Войдите в fxTunnel - это бесплатно".into()), Some(None));
+                app.access.set(
+                    &app,
+                    r#gen,
+                    "needs_login",
+                    Some("Войдите в fxTunnel - это бесплатно".into()),
+                    Some(None),
+                );
                 return;
             }
             if sub.is_empty() {
-                app.access.set(&app, gen, "error", Some("Выберите адрес сайта".into()), Some(None));
+                app.access.set(&app, r#gen, "error", Some("Выберите адрес сайта".into()), Some(None));
                 return;
             }
-            app.access.set(&app, gen, "starting", Some("Подключаемся к fxTunnel…".into()), None);
-            let err = match Self::run_once(&app, gen, &token, &sub).await {
+            app.access.set(&app, r#gen, "starting", Some("Подключаемся к fxTunnel…".into()), None);
+            let err = match Self::run_once(&app, r#gen, &token, &sub).await {
                 Ok(e) => e,
                 Err(e) => e.to_string(),
             };
-            if !app.access.current(gen) {
+            if !app.access.current(r#gen) {
                 return;
             }
             if AUTH_ERROR.is_match(&err) {
                 let _ = app.db.set_setting("access.fx.token", "");
                 app.access.set(
                     &app,
-                    gen,
+                    r#gen,
                     "needs_login",
                     Some("Вход в fxTunnel устарел - войдите заново".into()),
                     Some(None),
@@ -244,23 +250,23 @@ impl Access {
             } else {
                 format!("fxTunnel: {err} - переподключаемся")
             };
-            app.access.set(&app, gen, "retrying", Some(msg), Some(None));
+            app.access.set(&app, r#gen, "retrying", Some(msg), Some(None));
             let delay = BACKOFF[failures.min(BACKOFF.len() - 1)];
             failures += 1;
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(delay)) => {}
                 _ = app.access.stop.notified() => {}
             }
-            if !app.access.current(gen) {
+            if !app.access.current(r#gen) {
                 return;
             }
         }
     }
 
     /// Один запуск клиента; возвращает последнюю ошибку, когда клиент завершился.
-    async fn run_once(app: &Arc<App>, gen: u64, token: &str, sub: &str) -> anyhow::Result<String> {
-        let bin = Self::ensure_client(app, gen).await?;
-        if !app.access.current(gen) {
+    async fn run_once(app: &Arc<App>, r#gen: u64, token: &str, sub: &str) -> anyhow::Result<String> {
+        let bin = Self::ensure_client(app, r#gen).await?;
+        if !app.access.current(r#gen) {
             return Ok(String::new());
         }
         let pid_file = app.data.join("tools/fxtunnel/run.pid");
@@ -302,7 +308,7 @@ impl Access {
                     Some(l) => {
                         if let Some(c) = HTTPS_URL.captures(&l) {
                             online = true;
-                            app.access.set(app, gen, "online", None, Some(Some(c[1].trim_end_matches('/').to_string())));
+                            app.access.set(app, r#gen, "online", None, Some(Some(c[1].trim_end_matches('/').to_string())));
                         } else if let Some(c) = FAILED.captures(&l) {
                             last_err = c[1].to_string();
                         } else if l.to_lowercase().contains("error") {
@@ -315,10 +321,10 @@ impl Access {
                 _ = tick.tick() => {}
                 _ = tokio::time::sleep_until(slow), if !online && !warned => {
                     warned = true;
-                    app.access.set(app, gen, "starting", Some("fxTunnel отвечает медленно - ждём".into()), None);
+                    app.access.set(app, r#gen, "starting", Some("fxTunnel отвечает медленно - ждём".into()), None);
                 }
             }
-            if !app.access.current(gen) {
+            if !app.access.current(r#gen) {
                 let _ = child.kill().await;
                 let _ = std::fs::remove_file(&pid_file);
                 return Ok(String::new());
@@ -329,7 +335,7 @@ impl Access {
         Ok(last_err)
     }
 
-    async fn ensure_client(app: &Arc<App>, gen: u64) -> anyhow::Result<PathBuf> {
+    async fn ensure_client(app: &Arc<App>, r#gen: u64) -> anyhow::Result<PathBuf> {
         let key = platform().ok_or_else(|| anyhow::anyhow!("для этой системы нет клиента fxTunnel"))?;
         let sha = FX_SHA256
             .iter()
@@ -341,7 +347,7 @@ impl Access {
         if target.is_file() {
             return Ok(target);
         }
-        app.access.set(app, gen, "starting", Some("Скачиваем клиент fxTunnel…".into()), None);
+        app.access.set(app, r#gen, "starting", Some("Скачиваем клиент fxTunnel…".into()), None);
         std::fs::create_dir_all(&dir)?;
         let asset = format!("fxtunnel-{key}{}", if cfg!(windows) { ".exe" } else { "" });
         let url = format!("https://github.com/mephistofox/fxtun.dev/releases/download/{FX_VERSION}/{asset}");
@@ -363,27 +369,33 @@ impl Access {
 
     // ---------- CloudPub ----------
 
-    async fn run_cp(app: Arc<App>, gen: u64) {
+    async fn run_cp(app: Arc<App>, r#gen: u64) {
         let cp = crate::cloudpub::CloudPub::new(&app.data);
         let mut failures = 0usize;
         loop {
             if !cp.logged_in() {
-                app.access.set(&app, gen, "needs_login", Some("Войдите в CloudPub - это бесплатно".into()), Some(None));
+                app.access.set(
+                    &app,
+                    r#gen,
+                    "needs_login",
+                    Some("Войдите в CloudPub - это бесплатно".into()),
+                    Some(None),
+                );
                 return;
             }
             let started = tokio::time::Instant::now();
-            let err = match Self::run_cp_once(&app, gen, &cp).await {
+            let err = match Self::run_cp_once(&app, r#gen, &cp).await {
                 Ok(e) => e,
                 Err(e) => e.to_string(),
             };
-            if !app.access.current(gen) {
+            if !app.access.current(r#gen) {
                 return;
             }
             if started.elapsed() >= Duration::from_secs(60) {
                 failures = 0;
             }
             if crate::cloudpub::AUTH_ERROR.is_match(&err) {
-                app.access.set(&app, gen, "needs_login", Some("CloudPub просит войти заново".into()), Some(None));
+                app.access.set(&app, r#gen, "needs_login", Some("CloudPub просит войти заново".into()), Some(None));
                 return;
             }
             let msg = if err.is_empty() {
@@ -391,24 +403,24 @@ impl Access {
             } else {
                 format!("CloudPub: {err} - переподключаемся")
             };
-            app.access.set(&app, gen, "retrying", Some(msg), Some(None));
+            app.access.set(&app, r#gen, "retrying", Some(msg), Some(None));
             let delays = [2, 5, 10, 20, 30];
             let delay = delays[failures.min(delays.len() - 1)];
             failures += 1;
             tokio::select! {_=tokio::time::sleep(Duration::from_secs(delay))=>{},_=app.access.stop.notified()=>{}}
-            if !app.access.current(gen) {
+            if !app.access.current(r#gen) {
                 return;
             }
         }
     }
 
     /// Адрес - постоянный: регистрируем сервис один раз, потом только запускаем.
-    async fn run_cp_once(app: &Arc<App>, gen: u64, cp: &crate::cloudpub::CloudPub) -> anyhow::Result<String> {
+    async fn run_cp_once(app: &Arc<App>, r#gen: u64, cp: &crate::cloudpub::CloudPub) -> anyhow::Result<String> {
         if !cp.installed() {
-            app.access.set(app, gen, "starting", Some("Скачиваем клиент CloudPub…".into()), None);
+            app.access.set(app, r#gen, "starting", Some("Скачиваем клиент CloudPub…".into()), None);
         }
         cp.ensure(&app.http).await?;
-        if !app.access.current(gen) {
+        if !app.access.current(r#gen) {
             return Ok(String::new());
         }
         let port = app.ports.0;
@@ -420,7 +432,7 @@ impl Access {
             Ok(Some(u)) => u,
             _ if !saved.is_empty() => saved.clone(),
             Ok(None) => {
-                app.access.set(app, gen, "starting", Some("Получаем постоянный адрес в CloudPub…".into()), None);
+                app.access.set(app, r#gen, "starting", Some("Получаем постоянный адрес в CloudPub…".into()), None);
                 cp.register(port).await?
             }
             Err(e) => return Err(e),
@@ -428,7 +440,7 @@ impl Access {
         if url != saved {
             let _ = app.db.set_setting("access.cp.url", &url);
         }
-        app.access.set(app, gen, "starting", Some("Подключаемся к CloudPub…".into()), None);
+        app.access.set(app, r#gen, "starting", Some("Подключаемся к CloudPub…".into()), None);
         kill_stale(&cp.pid_file(), "clo");
         let mut child = cp.run_command().stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::null()).spawn()?;
         if let Some(pid) = child.id() {
@@ -463,12 +475,11 @@ impl Access {
                         if crate::cloudpub::AUTH_ERROR.is_match(&l) {last_err = l; break;}
                         if l.to_lowercase().contains("error") || l.contains("Ошибка") {last_err = l.chars().take(200).collect();}
                         // Клиент сам пишет, по какому адресу опубликован наш порт.
-                        if let Some(u) = crate::cloudpub::find_registered(&l, port) {
-                            if u != url {
-                                url = Self::cp_changed(app, gen, u);
+                        if let Some(u) = crate::cloudpub::find_registered(&l, port)
+                            && u != url {
+                                url = Self::cp_changed(app, r#gen, u);
                                 misses = 0;
                             }
-                        }
                     }
                     None => logs_open = false,
                 },
@@ -477,20 +488,18 @@ impl Access {
                 _ = check.tick() => {
                     let alive = app.http.get(format!("{url}/api/site")).timeout(Duration::from_secs(4)).send().await
                         .is_ok_and(|r|r.status().is_success() && r.headers().get("x-fsfy").is_some_and(|v|v=="1"));
-                    if alive {misses=0;online=true;app.access.set(app,gen,"online",None,Some(Some(url.clone())));}
+                    if alive {misses=0;online=true;app.access.set(app,r#gen,"online",None,Some(Some(url.clone())));}
                     else {misses+=1;
                         // Не сменили ли адрес в кабинете, пока клиент работал: тогда сверяемся с новым, а не рвём связь.
-                        if misses>=2 {
-                            if let Ok(Some(u)) = Self::cp_listed(cp, port).await {
-                                if u != url {url = Self::cp_changed(app, gen, u); misses = 0;}
-                            }
-                        }
-                        if misses>0 && ((online && misses>=2)||misses>=3) {app.access.set(app,gen,"retrying",Some("Восстанавливаем соединение; постоянный адрес сохранён".into()),Some(Some(url.clone())));}
+                        if misses>=2
+                            && let Ok(Some(u)) = Self::cp_listed(cp, port).await
+                                && u != url {url = Self::cp_changed(app, r#gen, u); misses = 0;}
+                        if misses>0 && ((online && misses>=2)||misses>=3) {app.access.set(app,r#gen,"retrying",Some("Восстанавливаем соединение; постоянный адрес сохранён".into()),Some(Some(url.clone())));}
                         if misses>=6 {last_err="Проверка соединения не прошла; перезапускаем клиент с прежним адресом".into();break;}
                     }
                 }
             }
-            if !app.access.current(gen) {
+            if !app.access.current(r#gen) {
                 let _ = child.kill().await;
                 let _ = std::fs::remove_file(cp.pid_file());
                 return Ok(String::new());
@@ -510,11 +519,11 @@ impl Access {
     }
 
     /// Адрес сменился (в кабинете CloudPub): запомнить и показать новый в Nova.
-    fn cp_changed(app: &Arc<App>, gen: u64, url: String) -> String {
+    fn cp_changed(app: &Arc<App>, r#gen: u64, url: String) -> String {
         let _ = app.db.set_setting("access.cp.url", &url);
         app.access.set(
             app,
-            gen,
+            r#gen,
             "starting",
             Some("Адрес в CloudPub изменился - проверяем новый".into()),
             Some(Some(url.clone())),
@@ -655,7 +664,7 @@ fn kill_stale(pid_file: &std::path::Path, name: &str) {
 impl Access {
     /// Остановить туннель при выходе из программы.
     pub fn shutdown(&self) {
-        self.inner.lock().gen += 1;
+        self.inner.lock().r#gen += 1;
         self.stop.notify_waiters();
     }
 }

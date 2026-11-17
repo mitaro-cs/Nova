@@ -3,10 +3,10 @@
 //! «Есть у нас». Хост выбирает тему в «Управлении» или свою (название + жанр или режиссёр); без
 //! выбора тема меняется сама каждую неделю, а к Хэллоуину и Новому году - своя.
 
-use crate::discover::{self, Src, MOVIE};
-use crate::util::now_ms;
 use crate::App;
-use rusqlite::{params, OptionalExtension};
+use crate::discover::{self, MOVIE, Src};
+use crate::util::now_ms;
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;

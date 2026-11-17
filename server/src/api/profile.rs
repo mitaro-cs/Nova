@@ -1,16 +1,16 @@
 //! Личная страница: статистика (часы, фильмы, серии, любимые жанры, по месяцам) и оформление -
 //! обложка, свой цвет, «о себе», любимые фильмы (с сервиса и из ленты IMDb).
 
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::Json;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -324,10 +324,10 @@ pub fn decor(app: &App, v: &Viewer, id: i64) -> ApiResult<Value> {
             if let Some(c) = super::cards_by_ids(app, v.profile.kids, &[t])?.pop() {
                 favorites.push(json!({"key": f, "card": c}));
             }
-        } else if let Some(e) = f.strip_prefix("x:") {
-            if let Ok(c) = super::discover::ext_card(app, v, e) {
-                favorites.push(json!({"key": f, "ext": c}));
-            }
+        } else if let Some(e) = f.strip_prefix("x:")
+            && let Ok(c) = super::discover::ext_card(app, v, e)
+        {
+            favorites.push(json!({"key": f, "ext": c}));
         }
     }
     Ok(json!({

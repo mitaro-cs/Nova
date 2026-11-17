@@ -1,19 +1,19 @@
 //! Лента IMDb для интерфейса: подборки, поиск по всему IMDb, карточка фильма не с сервиса,
 //! «Буду смотреть»/«Просмотрел», «Хочу на сервисе» (просьба хосту) и список просьб у хоста.
 
-use super::{cards_by_ids, Card};
+use super::{Card, cards_by_ids};
+use crate::App;
 use crate::auth::{Manager, Viewer};
-use crate::discover::{self, card, card_sql, ExtCard, FEEDS};
+use crate::discover::{self, ExtCard, FEEDS, card, card_sql};
 use crate::error::{ApiError, ApiResult};
 use crate::meta::imdb::Imdb;
 use crate::util::now_ms;
-use crate::App;
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use futures_util::StreamExt;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -48,9 +48,13 @@ pub async fn feed(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
         ("movie", "catalog_movies", "Фильмы из подключённых источников"),
         ("series", "catalog_series", "Сериалы и аниме из подключённых источников"),
     ] {
-        let mut items = ext_cards(&app, &v,
+        let mut items = ext_cards(
+            &app,
+            &v,
             "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
-            "e.title LIMIT 20", &[&kind, &domains])?;
+            "e.title LIMIT 20",
+            &[&kind, &domains],
+        )?;
         items.truncate(ROW as usize);
         if !items.is_empty() {
             rows.push(json!({"key":key,"title":label,"items":items}));
@@ -121,9 +125,13 @@ pub async fn chart(State(app): State<Arc<App>>, v: Viewer, Path(key): Path<Strin
             ("series", "Сериалы и аниме из подключённых источников")
         };
         let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
-        let items = ext_cards(&app, &v,
+        let items = ext_cards(
+            &app,
+            &v,
             "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
-            "e.title", &[&kind, &domains])?;
+            "e.title",
+            &[&kind, &domains],
+        )?;
         return Ok(Json(json!({"key":key,"title":title,"items":items})));
     }
     let title = FEEDS.iter().find(|c| c.0 == key).map(|c| c.1).ok_or_else(ApiError::not_found)?;

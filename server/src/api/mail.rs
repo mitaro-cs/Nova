@@ -1,17 +1,17 @@
 use super::account::Ip;
 use crate::{
+    App,
     auth::{self, Manager, Viewer},
     error::{ApiError, ApiResult},
     util::{now_ms, sha256_hex, token},
-    App,
 };
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use lettre::{
-    transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, transport::smtp::authentication::Credentials,
 };
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
 fn address(raw: &str) -> ApiResult<String> {
@@ -188,7 +188,10 @@ async fn issue(app: &App, user: i64, email: &str, purpose: &str) -> ApiResult<()
     } else {
         "Восстановление пароля"
     };
-    let body=format!("{action} Nova\n\nОткройте ссылку:\n{}/{path}#token={raw}\n\nСсылка действует 15 минут и используется один раз. Если вы не запрашивали это письмо, ничего делать не нужно.",base(app));
+    let body = format!(
+        "{action} Nova\n\nОткройте ссылку:\n{}/{path}#token={raw}\n\nСсылка действует 15 минут и используется один раз. Если вы не запрашивали это письмо, ничего делать не нужно.",
+        base(app)
+    );
     send(app, email, &format!("Nova · {action}"), body).await?;
     app.db.tx(|c| {
         c.execute(
@@ -239,15 +242,16 @@ pub async fn forgot(State(app): State<Arc<App>>, Ip(ip): Ip, Json(b): Json<Email
     })?;
     let key = format!("forgot.email.{}", sha256_hex(email.as_bytes()));
     let last = app.db.setting_or(&key, "0").parse::<i64>().unwrap_or(0);
-    if ready(&app) && now_ms() - last > 60_000 {
-        if let Some(user) = user {
-            let _ = app.db.set_setting(&key, &now_ms().to_string());
-            tokio::spawn(async move {
-                if issue(&app, user, &email, "reset").await.is_err() {
-                    tracing::warn!("Не удалось отправить письмо восстановления");
-                }
-            });
-        }
+    if ready(&app)
+        && now_ms() - last > 60_000
+        && let Some(user) = user
+    {
+        let _ = app.db.set_setting(&key, &now_ms().to_string());
+        tokio::spawn(async move {
+            if issue(&app, user, &email, "reset").await.is_err() {
+                tracing::warn!("Не удалось отправить письмо восстановления");
+            }
+        });
     }
     Ok(Json(
         json!({"ok":true,"message":"Если эта почта подтверждена в Nova, на неё отправлена ссылка. Проверьте входящие и спам."}),

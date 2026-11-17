@@ -1,7 +1,7 @@
 //! Public Internet only: prevent external metadata/players reaching the host's LAN.
 use reqwest::{
-    dns::{Addrs, Name, Resolve, Resolving},
     Url,
+    dns::{Addrs, Name, Resolve, Resolving},
 };
 use std::{net::IpAddr, sync::Arc};
 

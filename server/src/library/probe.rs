@@ -63,11 +63,7 @@ pub struct Video {
 impl Video {
     /// Высота для ступеней качества: у «скоупа» 3840×1600 кадр низкий, но это 4K - по ширине (3600+) считаем 2160.
     pub fn quality_height(&self) -> i64 {
-        if self.width >= 3600 {
-            self.height.max(2160)
-        } else {
-            self.height
-        }
+        if self.width >= 3600 { self.height.max(2160) } else { self.height }
     }
 
     /// HDR: при перекодировании в обычный H.264 нужен перевод цвета, иначе картинка блёклая.
@@ -98,11 +94,7 @@ pub struct Tools {
 }
 
 fn exe(name: &str) -> String {
-    if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_string()
-    }
+    if cfg!(windows) { format!("{name}.exe") } else { name.to_string() }
 }
 
 /// Где искать ffmpeg: своя настройка, рядом с программой, PATH и обычные места установки
@@ -118,12 +110,12 @@ pub fn locate(name: &str, configured: Option<&str>) -> Option<PathBuf> {
         }
         dirs.push(p);
     }
-    if let Ok(me) = std::env::current_exe() {
-        if let Some(d) = me.parent() {
-            dirs.push(d.to_path_buf());
-            dirs.push(d.join("resources"));
-            dirs.push(d.join("../Resources/resources"));
-        }
+    if let Ok(me) = std::env::current_exe()
+        && let Some(d) = me.parent()
+    {
+        dirs.push(d.to_path_buf());
+        dirs.push(d.join("resources"));
+        dirs.push(d.join("../Resources/resources"));
     }
     if let Some(path) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&path));
@@ -236,11 +228,7 @@ pub fn from_json(v: &serde_json::Value) -> Probe {
                     forced: disp["forced"].as_i64() == Some(1),
                 };
                 *n += 1;
-                if kind == "audio" {
-                    p.audio.push(t)
-                } else {
-                    p.subs.push(t)
-                }
+                if kind == "audio" { p.audio.push(t) } else { p.subs.push(t) }
             }
             _ => {}
         }

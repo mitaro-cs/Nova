@@ -1,17 +1,18 @@
 mod common;
 use rusqlite::params;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn host_reset_without_email_revokes_sessions_and_old_tokens() {
     let dir = tempfile::tempdir().unwrap();
     let (running, mut host) = common::start(dir.path()).await;
     let mut user = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-    assert!(user
-        .send("POST", "/api/auth/register", json!({"login":"noemail","name":"Без почты","password":"OldPass123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        user.send("POST", "/api/auth/register", json!({"login":"noemail","name":"Без почты","password":"OldPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
     let id = user.json("/api/me").await["user"]["id"].as_i64().unwrap();
     assert_eq!(
         user.send("PATCH", &format!("/api/admin/users/{id}"), json!({"password":"IllegalPass123"})).await.status(),
@@ -34,11 +35,12 @@ async fn host_reset_without_email_revokes_sessions_and_old_tokens() {
             )
         })
         .unwrap();
-    assert!(host
-        .send("PATCH", &format!("/api/admin/users/{id}"), json!({"password":"HostReset123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PATCH", &format!("/api/admin/users/{id}"), json!({"password":"HostReset123"}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(user.get("/api/me").await.status(), 401);
     let count: i64 = running
         .app
@@ -46,16 +48,19 @@ async fn host_reset_without_email_revokes_sessions_and_old_tokens() {
         .with(|c| c.query_row("SELECT count(*) FROM account_tokens WHERE user_id=?", [id], |r| r.get(0)))
         .unwrap();
     assert_eq!(count, 0);
-    assert!(!user
-        .send("POST", "/api/auth/login", json!({"login":"noemail","password":"OldPass123"}))
-        .await
-        .status()
-        .is_success());
-    assert!(user
-        .send("POST", "/api/auth/login", json!({"login":"noemail","password":"HostReset123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        !user
+            .send("POST", "/api/auth/login", json!({"login":"noemail","password":"OldPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
+    assert!(
+        user.send("POST", "/api/auth/login", json!({"login":"noemail","password":"HostReset123"}))
+            .await
+            .status()
+            .is_success()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -64,11 +69,12 @@ async fn verified_email_reset_single_use_expiry_and_session_revocation() {
     let (running, mut host) = common::start(dir.path()).await;
     let app = &running.app;
     let mut user = common::Client::new(format!("http://127.0.0.1:{}", app.ports.0));
-    assert!(user
-        .send("POST", "/api/auth/register", json!({"login":"mailviewer","name":"Почта","password":"OldPass123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        user.send("POST", "/api/auth/register", json!({"login":"mailviewer","name":"Почта","password":"OldPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
     let id = user.json("/api/me").await["user"]["id"].as_i64().unwrap();
     let issue = |purpose: &str, email: &str, expired: bool| {
         let raw = fsfy::util::token(32);
@@ -133,11 +139,12 @@ async fn verified_email_reset_single_use_expiry_and_session_revocation() {
         })
         .unwrap();
     assert_ne!(stored, valid);
-    assert!(user
-        .send("POST", "/api/auth/reset-password", json!({"token":valid,"newPassword":"NewPass123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        user.send("POST", "/api/auth/reset-password", json!({"token":valid,"newPassword":"NewPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(user.get("/api/me").await.status(), 401, "старый сеанс закрыт");
     assert_eq!(
         user.send("POST", "/api/auth/reset-password", json!({"token":valid,"newPassword":"AnotherPass123"}))
@@ -150,22 +157,25 @@ async fn verified_email_reset_single_use_expiry_and_session_revocation() {
         user.send("POST", "/api/auth/login", json!({"login":"mailviewer","password":"OldPass123"})).await.status(),
         401
     );
-    assert!(user
-        .send("POST", "/api/auth/login", json!({"login":"mailviewer","password":"NewPass123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        user.send("POST", "/api/auth/login", json!({"login":"mailviewer","password":"NewPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
     assert!(!user.get("/api/admin/mail").await.status().is_success());
     assert!(host.send("PUT","/api/admin/mail",json!({"enabled":false,"host":"smtp.gmail.com","port":465,"tls":"tls","user":"owner@gmail.com","from":"","base":"","password":"test mail secret"})).await.status().is_success());
     let settings = host.json("/api/admin/mail").await;
     assert_eq!(settings["passwordSet"], true);
     assert!(settings.get("password").is_none());
     assert!(!settings.to_string().contains("testmailsecret"));
-    assert!(!user
-        .send("POST", "/api/me/email", json!({"email":"new@example.com","password":"NewPass123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        !user
+            .send("POST", "/api/me/email", json!({"email":"new@example.com","password":"NewPass123"}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(
         user.json("/api/me/email").await["email"],
         "viewer@example.com",

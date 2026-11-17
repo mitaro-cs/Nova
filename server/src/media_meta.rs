@@ -1,14 +1,14 @@
 //! Независимые метаданные и ленивые иллюстрации: сеть не задерживает сохранение карточки.
+use crate::{App, discover, meta::imdb::Imdb};
 use crate::{
     auth::Viewer,
     error::{ApiError, ApiResult},
 };
-use crate::{discover, meta::imdb::Imdb, App};
 use axum::extract::{Query, State};
 use reqwest::Url;
 use rusqlite::params;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
 pub fn art(url: &str) -> String {
@@ -81,13 +81,12 @@ pub async fn image(
     };
     // Уменьшить не вышло (нет ffmpeg) - отдаём как есть: картинка важнее веса.
     let ffmpeg = app.tools.read().ffmpeg.clone();
-    if let (Some(w), Some(ffmpeg), Some(src)) = (width, ffmpeg, app.images.path(&name)) {
-        if let Ok(small) = crate::library::probe::scale_image(&ffmpeg, &src, w).await {
-            if let Ok(small) = app.images.save(&small) {
-                let _ = app.db.set_setting(&format!("{key}.{w}"), &small);
-                return Ok(axum::response::Redirect::temporary(&format!("/img/{small}")));
-            }
-        }
+    if let (Some(w), Some(ffmpeg), Some(src)) = (width, ffmpeg, app.images.path(&name))
+        && let Ok(small) = crate::library::probe::scale_image(&ffmpeg, &src, w).await
+        && let Ok(small) = app.images.save(&small)
+    {
+        let _ = app.db.set_setting(&format!("{key}.{w}"), &small);
+        return Ok(axum::response::Redirect::temporary(&format!("/img/{small}")));
     }
     Ok(axum::response::Redirect::temporary(&format!("/img/{name}")))
 }
@@ -102,17 +101,17 @@ pub async fn series(app: &App, id: &str) -> anyhow::Result<()> {
     let show = tv_show(app, id).await?;
     let image = show["image"]["original"].as_str().map(art);
     let mut background = image.clone();
-    if let Some(n) = show["id"].as_i64() {
-        if let Ok(images) = get(app, Url::parse(&format!("https://api.tvmaze.com/shows/{n}/images"))?).await {
-            background = images
-                .as_array()
-                .into_iter()
-                .flatten()
-                .find(|i| i["type"] == "background")
-                .and_then(|i| i["resolutions"]["original"]["url"].as_str())
-                .map(art)
-                .or(background);
-        }
+    if let Some(n) = show["id"].as_i64()
+        && let Ok(images) = get(app, Url::parse(&format!("https://api.tvmaze.com/shows/{n}/images"))?).await
+    {
+        background = images
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|i| i["type"] == "background")
+            .and_then(|i| i["resolutions"]["original"]["url"].as_str())
+            .map(art)
+            .or(background);
     }
     let seasons = if let Some(n) = show["id"].as_i64() {
         get(app, Url::parse(&format!("https://api.tvmaze.com/shows/{n}/seasons"))?)
@@ -157,21 +156,19 @@ pub async fn poster_candidate(app: &App, id: &str) -> anyhow::Result<Option<Stri
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })
     })?;
-    if kind == "series" {
-        if let Ok(show) = tv_show(app, id).await {
-            if let Some(url) = show["image"]["original"].as_str() {
-                return Ok(Some(url.into()));
-            }
-        }
+    if kind == "series"
+        && let Ok(show) = tv_show(app, id).await
+        && let Some(url) = show["image"]["original"].as_str()
+    {
+        return Ok(Some(url.into()));
     }
     let imdb = Imdb::new(app.http.clone());
     for q in [Some(title.as_str()), original.as_deref()].into_iter().flatten() {
         if let Ok(Ok(found)) =
             tokio::time::timeout(Duration::from_secs(3), imdb.search(q, None, kind == "series")).await
+            && let Some(image) = found.into_iter().find(|c| c.id == id).and_then(|c| c.poster)
         {
-            if let Some(image) = found.into_iter().find(|c| c.id == id).and_then(|c| c.poster) {
-                return Ok(Some(image));
-            }
+            return Ok(Some(image));
         }
     }
     Ok(None)

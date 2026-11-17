@@ -1,5 +1,5 @@
 mod common;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "настоящие PeerTube и Wikimedia Commons"]
@@ -93,10 +93,9 @@ async fn native_rutube_manifest_segment_and_series_metadata() {
     path = format!("{path}?height={height}");
     let selected = host.get(&path).await.text().await.unwrap();
     assert!(selected.contains(&format!("x{height}")));
-    assert!(selected
-        .lines()
-        .filter(|l| l.starts_with("#EXT-X-STREAM-INF:"))
-        .all(|l| l.contains(&format!("x{height}"))));
+    assert!(
+        selected.lines().filter(|l| l.starts_with("#EXT-X-STREAM-INF:")).all(|l| l.contains(&format!("x{height}")))
+    );
     println!("Native HLS: выбран поток {height}p с сохранением групп озвучки");
     let mut got_segment = false;
     for _ in 0..3 {

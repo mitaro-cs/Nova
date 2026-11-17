@@ -3,7 +3,7 @@
 
 use anyhow::Context;
 use parking_lot::Mutex;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -828,10 +828,10 @@ impl Db {
                 None => {
                     // Чего-то из нашего нет — добавляем (только добавляем: таблицы, столбцы,
                     // индексы), чужое не трогаем.
-                    if missing_schema(&conn)?.is_some() {
-                        if let Err(e) = add_missing(&mut conn) {
-                            tracing::warn!(error = %e, "не удалось дополнить базу");
-                        }
+                    if missing_schema(&conn)?.is_some()
+                        && let Err(e) = add_missing(&mut conn)
+                    {
+                        tracing::warn!(error = %e, "не удалось дополнить базу");
                     }
                     missing_schema(&conn)?.is_none()
                 }
@@ -1100,9 +1100,9 @@ mod tests {
         c.execute("DELETE FROM reviews WHERE id = 7", []).unwrap();
         let likes: i64 = c.query_row("SELECT COUNT(*) FROM review_likes", [], |r| r.get(0)).unwrap();
         assert_eq!(likes, 0);
-        assert!(c
-            .execute("INSERT INTO reviews (profile_id, body, created_at) VALUES (1, 'ни к чему', 1)", [])
-            .is_err());
+        assert!(
+            c.execute("INSERT INTO reviews (profile_id, body, created_at) VALUES (1, 'ни к чему', 1)", []).is_err()
+        );
     }
 
     #[test]

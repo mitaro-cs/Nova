@@ -6,8 +6,8 @@
 //! - **загрузить** из браузера с другого устройства (хост или администратор);
 //! - **слежение**: изменения в папках подхватываются сами за несколько секунд.
 
-use crate::util::now_ms;
 use crate::App;
+use crate::util::now_ms;
 use notify::{RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use rusqlite::params;
@@ -81,10 +81,10 @@ pub fn folder(app: &App) -> anyhow::Result<PathBuf> {
 
 /// При запуске в приложении хоста: своя папка есть всегда (в `fsfy serve` - только по запросу).
 pub fn ensure_on_start(app: &App) {
-    if app.host.media_dir().is_some() || app.db.setting("media.inbox").is_some() {
-        if let Err(e) = folder(app) {
-            tracing::warn!(error = %e, "своя папка для фильмов");
-        }
+    if (app.host.media_dir().is_some() || app.db.setting("media.inbox").is_some())
+        && let Err(e) = folder(app)
+    {
+        tracing::warn!(error = %e, "своя папка для фильмов");
     }
 }
 
@@ -176,21 +176,17 @@ fn copy_queue(app: &Arc<App>) {
     loop {
         let next = {
             let mut q = app.inbox.queue.lock();
-            if q.is_empty() {
-                None
-            } else {
-                Some(q.remove(0))
-            }
+            if q.is_empty() { None } else { Some(q.remove(0)) }
         };
         let Some(src) = next else { break };
         let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         app.inbox.state.lock().current = Some(name.clone());
         let dst = dir.join(&name);
-        if !dst.exists() {
-            if let Err(e) = copy_one(app, &src, &dst) {
-                tracing::warn!(error = %e, "копирование");
-                app.inbox.state.lock().error = Some(format!("{name}: {e}"));
-            }
+        if !dst.exists()
+            && let Err(e) = copy_one(app, &src, &dst)
+        {
+            tracing::warn!(error = %e, "копирование");
+            app.inbox.state.lock().error = Some(format!("{name}: {e}"));
         }
         let mut st = app.inbox.state.lock();
         st.files_done += 1;
@@ -265,8 +261,8 @@ pub fn upload_target(app: &App, name: &str, subfolder: Option<&str>) -> Result<(
 /// Появилось, пропало, переименовано или изменилось содержимое - повод сканировать.
 /// Непонятное (`Any`, `Other` - так FSEvents и сетевые диски сообщают о части изменений) - тоже.
 fn changes_files(kind: &notify::EventKind) -> bool {
-    use notify::event::{AccessKind, AccessMode, ModifyKind};
     use notify::EventKind;
+    use notify::event::{AccessKind, AccessMode, ModifyKind};
     match kind {
         EventKind::Create(_) | EventKind::Remove(_) => true,
         EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
@@ -337,8 +333,8 @@ mod tests {
 
     #[test]
     fn only_real_changes_trigger_scan() {
-        use notify::event::{AccessKind, CreateKind, DataChange, MetadataKind, ModifyKind, RenameMode};
         use notify::EventKind;
+        use notify::event::{AccessKind, CreateKind, DataChange, MetadataKind, ModifyKind, RenameMode};
         assert!(changes_files(&EventKind::Create(CreateKind::File)));
         assert!(changes_files(&EventKind::Modify(ModifyKind::Data(DataChange::Any))));
         assert!(changes_files(&EventKind::Modify(ModifyKind::Name(RenameMode::Both))));

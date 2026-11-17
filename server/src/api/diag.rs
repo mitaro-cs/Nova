@@ -1,11 +1,11 @@
 //! Ошибки интерфейса и плеера у зрителей: пишем в журнал приложения (без адресов и секретов).
 
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
-use crate::App;
+use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 

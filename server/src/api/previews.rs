@@ -1,16 +1,16 @@
 use crate::{
+    App,
     auth::Viewer,
     discover,
     error::{ApiError, ApiResult},
     util::now_ms,
-    App,
 };
 use axum::{
-    extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub async fn trailer(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<String>) -> ApiResult<Json<Value>> {
@@ -18,12 +18,12 @@ pub async fn trailer(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<Str
         return Err(ApiError::not_found());
     }
     let key = format!("trailer.ru.v4.{id}");
-    if let Some(raw) = app.db.setting(&key) {
-        if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-            let ttl = if v["linkId"].is_null() { 600_000 } else { 86_400_000 };
-            if now_ms() - v["at"].as_i64().unwrap_or(0) < ttl {
-                return Ok(Json(v));
-            }
+    if let Some(raw) = app.db.setting(&key)
+        && let Ok(v) = serde_json::from_str::<Value>(&raw)
+    {
+        let ttl = if v["linkId"].is_null() { 600_000 } else { 86_400_000 };
+        if now_ms() - v["at"].as_i64().unwrap_or(0) < ttl {
+            return Ok(Json(v));
         }
     }
     type Work = (String, Option<i64>);
@@ -122,10 +122,10 @@ const HD: &str =
 /// сутки - держим 6 часов; нет HD - None (баннер возьмёт русский трейлер или останется на кадре).
 pub async fn hd_url(app: &App, id: &str) -> Option<String> {
     let key = format!("trailer.hd.{id}");
-    if let Some(v) = app.db.setting(&key).and_then(|raw| serde_json::from_str::<Value>(&raw).ok()) {
-        if now_ms() - v["at"].as_i64().unwrap_or(0) < 6 * 3_600_000 {
-            return v["url"].as_str().map(String::from);
-        }
+    if let Some(v) = app.db.setting(&key).and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        && now_ms() - v["at"].as_i64().unwrap_or(0) < 6 * 3_600_000
+    {
+        return v["url"].as_str().map(String::from);
     }
     let v = crate::meta::imdb::Imdb::new(app.http.clone()).data(HD, json!({ "id": id }), "title").await.ok()?;
     let urls = v["latestTrailer"]["playbackURLs"].as_array()?.clone();
@@ -147,7 +147,7 @@ pub async fn trailer_hd(
     Path(id): Path<String>,
     headers: axum::http::HeaderMap,
 ) -> ApiResult<axum::response::Response> {
-    use axum::http::{header, StatusCode};
+    use axum::http::{StatusCode, header};
     if !discover::valid_id(&id) {
         return Err(ApiError::not_found());
     }

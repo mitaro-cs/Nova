@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! Общее для сквозных тестов: тестовые видео через ffmpeg и HTTP-клиент с cookie.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;

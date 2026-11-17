@@ -1,12 +1,13 @@
 //! Совпадение произведения и серии важнее качества и позиции в выдаче провайдера.
 use crate::{
-    api::links::{parse_rutube, parse_vk, SearchQuery},
-    util, App,
+    App,
+    api::links::{SearchQuery, parse_rutube, parse_vk},
+    util,
 };
 use parking_lot::Mutex;
 use reqwest::Url;
 use rusqlite::OptionalExtension;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, Weak},
@@ -34,10 +35,11 @@ fn remember(key: String, result: SearchResult) {
     let mut c = cache().lock();
     let now = util::now_ms();
     c.retain(|_, (at, result)| now - *at < ttl(result));
-    if c.len() >= 128 && !c.contains_key(&key) {
-        if let Some(oldest) = c.iter().min_by_key(|(_, (at, _))| *at).map(|(key, _)| key.clone()) {
-            c.remove(&oldest);
-        }
+    if c.len() >= 128
+        && !c.contains_key(&key)
+        && let Some(oldest) = c.iter().min_by_key(|(_, (at, _))| *at).map(|(key, _)| key.clone())
+    {
+        c.remove(&oldest);
     }
     c.insert(key, (now, result));
 }

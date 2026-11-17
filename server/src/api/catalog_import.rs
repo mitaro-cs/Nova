@@ -1,12 +1,12 @@
 //! Явный обмен каталогами: без исполнения HTML или кода стороннего сайта.
 use crate::auth::Manager;
 use crate::error::{ApiError, ApiResult};
-use crate::{outbound, own_sites, util::now_ms, App};
-use axum::{extract::State, Json};
+use crate::{App, outbound, own_sites, util::now_ms};
+use axum::{Json, extract::State};
 use reqwest::Url;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 pub const MAX_BYTES: usize = 8 * 1024 * 1024;
@@ -134,7 +134,9 @@ impl Manifest {
                         && stream.season.is_none())
                     || (item.kind == "movie" && stream.season.is_some())
                 {
-                    return Err(bad("Проверьте варианты: уникальный id, подпись, публичный MP4/WebM/HLS, сезон и серия. Максимум 50000 вариантов"));
+                    return Err(bad(
+                        "Проверьте варианты: уникальный id, подпись, публичный MP4/WebM/HLS, сезон и серия. Максимум 50000 вариантов",
+                    ));
                 }
             }
         }

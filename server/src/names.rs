@@ -3,7 +3,7 @@
 
 use crate::db::Db;
 use crate::util::now_ms;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;
 
 /// Транслитерация - временная: через сутки её заменяет перевод из Викиданных, если он появился.
@@ -119,10 +119,11 @@ pub fn sparql(ids: &[String]) -> String {
 pub fn parse_wikidata(v: &serde_json::Value) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for b in v["results"]["bindings"].as_array().into_iter().flatten() {
-        if let (Some(id), Some(ru)) = (b["imdb"]["value"].as_str(), b["ru"]["value"].as_str()) {
-            if valid_id(id) && crate::ruwiki::has_cyrillic(ru) {
-                out.insert(id.to_string(), ru.to_string());
-            }
+        if let (Some(id), Some(ru)) = (b["imdb"]["value"].as_str(), b["ru"]["value"].as_str())
+            && valid_id(id)
+            && crate::ruwiki::has_cyrillic(ru)
+        {
+            out.insert(id.to_string(), ru.to_string());
         }
     }
     out

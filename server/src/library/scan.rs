@@ -5,7 +5,7 @@ use super::parse::{is_video, parse};
 use crate::db::Db;
 use crate::images::Images;
 use crate::util::{norm, now_ms};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;

@@ -4,7 +4,7 @@
 mod common;
 
 use common::{ffmpeg, make_video, until};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::process::Command;
 
 fn titles(v: &Value) -> Vec<String> {
@@ -21,12 +21,14 @@ async fn library_statuses_resume_and_accent() {
     let media = dir.path().join("media");
     make_video(&media.join("Красный (2020)/red.mp4"), "aac");
     // Красный постер - карточка должна стать красноватой.
-    assert!(Command::new("ffmpeg")
-        .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0xC82818:s=300x450", "-frames:v", "1"])
-        .arg(media.join("Красный (2020)/poster.jpg"))
-        .status()
-        .unwrap()
-        .success());
+    assert!(
+        Command::new("ffmpeg")
+            .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0xC82818:s=300x450", "-frames:v", "1"])
+            .arg(media.join("Красный (2020)/poster.jpg"))
+            .status()
+            .unwrap()
+            .success()
+    );
     make_video(&media.join("Второй (2021)/second.mp4"), "aac");
     make_video(&media.join("Шоу/Season 1/Шоу.s01e01.mp4"), "aac");
     make_video(&media.join("Шоу/Season 1/Шоу.s01e02.mp4"), "aac");

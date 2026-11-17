@@ -1,8 +1,8 @@
 //! Переписывание MPD с сохранением DASH-шаблонов $Number$, $Time$, $RepresentationID$.
 use base64::Engine;
 use quick_xml::{
-    events::{BytesEnd, BytesStart, BytesText, Event},
     Reader, Writer,
+    events::{BytesEnd, BytesStart, BytesText, Event},
 };
 use reqwest::Url;
 

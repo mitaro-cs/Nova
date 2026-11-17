@@ -2,7 +2,7 @@
 
 use axum::body::{Body, Bytes};
 use axum::extract::Request;
-use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -158,8 +158,7 @@ pub async fn spa(uri: Uri, headers: HeaderMap) -> Response {
 
 /// Внешнее - только для видео по ссылкам: плееры Rutube, VK и YouTube во фрейме, прямые
 /// mp4/m3u8 с других сайтов. Всё остальное интерфейс берёт только у нас.
-const CSP: &str =
-    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; \
+const CSP: &str = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; \
 script-src 'self' 'unsafe-inline'; connect-src 'self' https:; font-src 'self'; \
 frame-src https://rutube.ru https://vkvideo.ru https://vk.com https://www.youtube-nocookie.com https://hd1.garri-potter-lordfilms.com; \
 frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
@@ -220,7 +219,9 @@ mod tv_tests {
 
     #[test]
     fn televisions_get_the_tv_interface() {
-        let samsung = ua("Mozilla/5.0 (SMART-TV; LINUX; Tizen 5.5) AppleWebKit/537.36 (KHTML, like Gecko) 69.0.3497.106.1/5.5 TV Safari/537.36");
+        let samsung = ua(
+            "Mozilla/5.0 (SMART-TV; LINUX; Tizen 5.5) AppleWebKit/537.36 (KHTML, like Gecko) 69.0.3497.106.1/5.5 TV Safari/537.36",
+        );
         assert!(is_tv(&samsung, None));
         assert!(is_tv(
             &ua("Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/79.0.3945.79 Safari/537.36"),

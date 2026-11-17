@@ -2,16 +2,16 @@
 //! внутри нашего, прямые mp4/webm/m3u8 - нашим плеером) или найти на Rutube (VK - если хост
 //! указал ключ VK). Ссылка привязывается к фильму с сервиса, к фильму из ленты или живёт сама.
 
+use crate::App;
 use crate::auth::{Manager, Viewer};
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use reqwest::Url;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -389,10 +389,11 @@ pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration:
         if let Some(e) = &ext {
             c.execute("DELETE FROM ext_dropped WHERE profile_id = ? AND ext_id = ?", params![me, e])?;
             let series: bool = c.query_row("SELECT kind = 'series' FROM ext_titles WHERE id = ?", [e], |r| r.get(0))?;
-            if done {
-                if let (Some(s), Some(ep)) = (season, episode) {
-                    c.execute("INSERT OR IGNORE INTO ext_seen (profile_id, ext_id, season, episode, at) VALUES (?, ?, ?, ?, ?)", params![me, e, s, ep, now])?;
-                }
+            if done && let (Some(s), Some(ep)) = (season, episode) {
+                c.execute(
+                    "INSERT OR IGNORE INTO ext_seen (profile_id, ext_id, season, episode, at) VALUES (?, ?, ?, ?, ?)",
+                    params![me, e, s, ep, now],
+                )?;
             }
             let status = if done && !series { "watched" } else { "watching" };
             c.execute(
@@ -453,8 +454,7 @@ fn unknown_site_or_bad(raw: &str) -> ApiError {
     }
 }
 
-const BAD_LINK: &str =
-    "Такую ссылку не открыть: нужна ссылка на Rutube, VK Видео, YouTube, прямая на .mp4, .webm, .m3u8 \
+const BAD_LINK: &str = "Такую ссылку не открыть: нужна ссылка на Rutube, VK Видео, YouTube, прямая на .mp4, .webm, .m3u8 \
      или на сайт, который хост добавил в «Управление → Настройки → Свои сайты»";
 
 /// Описание видео на Rutube (название, картинка, длительность) - если сайт ответит за 5 с.
@@ -545,10 +545,10 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
     } else {
         None
     };
-    if let Some((season, episode)) = Url::parse(&p.url).ok().as_ref().and_then(crate::lordfilm::episode_target) {
-        if b.season != Some(season) || b.episode != Some(episode) {
-            return Err(ApiError::bad("bad_episode", "Серия в ссылке не совпадает с выбранной серией"));
-        }
+    if let Some((season, episode)) = Url::parse(&p.url).ok().as_ref().and_then(crate::lordfilm::episode_target)
+        && (b.season != Some(season) || b.episode != Some(episode))
+    {
+        return Err(ApiError::bad("bad_episode", "Серия в ссылке не совпадает с выбранной серией"));
     }
     if b.title_id.is_some() && b.ext_id.is_some() {
         return Err(ApiError::bad("bad_link", "Ссылка - либо к фильму с сервиса, либо к фильму из ленты"));

@@ -8,11 +8,13 @@ async fn names_and_logins_report_conflicts_and_do_not_replace_accounts() {
     let (running, mut host) = common::start(dir.path()).await;
     let public = format!("http://127.0.0.1:{}", running.app.ports.0);
     let mut first = Client::new(public.clone());
-    assert!(first
-        .send("POST", "/api/auth/register", json!({"name":"Омар","login":"omar-ui","password":"пароль123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        first
+            .send("POST", "/api/auth/register", json!({"name":"Омар","login":"omar-ui","password":"пароль123"}))
+            .await
+            .status()
+            .is_success()
+    );
     let mut second = Client::new(public.clone());
     let r = second
         .send("POST", "/api/auth/register", json!({"name":"  ОМАР  ","login":"another-ui","password":"пароль123"}))
@@ -26,11 +28,13 @@ async fn names_and_logins_report_conflicts_and_do_not_replace_accounts() {
     assert_eq!(r.json::<serde_json::Value>().await.unwrap()["error"], "login_taken");
     let available = second.json("/api/auth/availability?login=omar-ui&name=%D0%9E%D0%BC%D0%B0%D1%80").await;
     assert_eq!(available, json!({"loginTaken":true,"nameTaken":true}));
-    assert!(second
-        .send("POST", "/api/auth/register", json!({"name":"Анна UI","login":"anna-ui","password":"пароль123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        second
+            .send("POST", "/api/auth/register", json!({"name":"Анна UI","login":"anna-ui","password":"пароль123"}))
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(second.send("PATCH", "/api/me", json!({"name":"омар"})).await.status(), 409);
     assert_eq!(second.json("/api/me").await["user"]["name"], "Анна UI");
     assert_eq!(
@@ -111,11 +115,13 @@ async fn custom_images_are_stored_as_persistent_choices_and_require_manager() {
         .unwrap();
     assert_eq!(r.status(), 400);
     let mut viewer = Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-    assert!(viewer
-        .send("POST", "/api/auth/register", json!({"name":"Зритель UI","login":"viewer-ui","password":"пароль123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        viewer
+            .send("POST", "/api/auth/register", json!({"name":"Зритель UI","login":"viewer-ui","password":"пароль123"}))
+            .await
+            .status()
+            .is_success()
+    );
     let r = viewer
         .http
         .put(format!("{}/api/admin/ext/tt9458304/image/poster", viewer.base))

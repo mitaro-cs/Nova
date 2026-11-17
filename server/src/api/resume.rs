@@ -1,6 +1,6 @@
-use crate::{auth::Viewer, error::ApiResult, App};
-use axum::{extract::State, Json};
-use serde_json::{json, Value};
+use crate::{App, auth::Viewer, error::ApiResult};
+use axum::{Json, extract::State};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {

@@ -3,14 +3,14 @@
 //! выхода. Порядок - по номеру, без номера - по дате. Ответ - на 30 дней в `franchises`; фильмов,
 //! которых ещё нет в ленте, - одним запросом к IMDb (названия, постеры).
 
+use crate::App;
 use crate::discover::{parse_chart, posters_of, upsert, valid_id};
 use crate::meta::imdb::Imdb;
 use crate::util::now_ms;
-use crate::App;
 use reqwest::Url;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -159,10 +159,10 @@ pub async fn of(app: &Arc<App>, imdb: &str) -> Vec<Group> {
         })
         .ok()
         .flatten();
-    if let Some((data, at)) = &cached {
-        if now_ms() - at < MONTH {
-            return serde_json::from_str(data).unwrap_or_default();
-        }
+    if let Some((data, at)) = &cached
+        && now_ms() - at < MONTH
+    {
+        return serde_json::from_str(data).unwrap_or_default();
     }
     let groups = match lookup(&app.http, imdb).await {
         Ok(g) => g,

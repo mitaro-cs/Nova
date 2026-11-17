@@ -1,6 +1,6 @@
-use crate::{outbound, App};
+use crate::{App, outbound};
 use reqwest::Url;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 async fn get(_app: &App, url: Url) -> Option<Value> {

@@ -10,8 +10,8 @@
 //! Копии живут в `cache/copy`, пока к ним обращаются: брошенная за 10 минут задача
 //! останавливается, копия без зрителей 3 часа удаляется; не больше `KEEP` копий сразу.
 
-use crate::error::{ApiError, ApiResult};
 use crate::App;
+use crate::error::{ApiError, ApiResult};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -191,11 +191,7 @@ impl Copies {
         }
         self.touch(&k);
         let p = dir_of(app, &k).join(name);
-        if p.is_file() {
-            Ok(p)
-        } else {
-            Err(ApiError::not_found())
-        }
+        if p.is_file() { Ok(p) } else { Err(ApiError::not_found()) }
     }
 
     /// Не больше `KEEP` копий: перед новой удаляем самую давнюю без зрителей.
@@ -221,11 +217,12 @@ pub async fn janitor(app: Arc<App>) {
             let mut jobs = app.copies.jobs.lock();
             jobs.retain(|k, e| {
                 let idle = e.seen.elapsed();
-                if let Some(c) = e.child.as_mut() {
-                    if c.try_wait().ok().flatten().is_none() && idle > IDLE_JOB {
-                        gone.push(*k);
-                        return false;
-                    }
+                if let Some(c) = e.child.as_mut()
+                    && c.try_wait().ok().flatten().is_none()
+                    && idle > IDLE_JOB
+                {
+                    gone.push(*k);
+                    return false;
                 }
                 if idle > IDLE_COPY {
                     gone.push(*k);

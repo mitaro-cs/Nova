@@ -345,10 +345,10 @@ fn main() {
 
     app.run(|app, event| match event {
         RunEvent::Exit => {
-            if let Some(state) = app.try_state::<State>() {
-                if let Some(r) = state.running.lock().take() {
-                    tauri::async_runtime::block_on(r.shutdown());
-                }
+            if let Some(state) = app.try_state::<State>()
+                && let Some(r) = state.running.lock().take()
+            {
+                tauri::async_runtime::block_on(r.shutdown());
             }
         }
         #[cfg(target_os = "macos")]

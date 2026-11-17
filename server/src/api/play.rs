@@ -2,19 +2,19 @@
 //! заставка и титры, кадры для полосы перемотки, прогресс профиля.
 
 use super::visible;
+use crate::App;
 use crate::auth::{Manager, Viewer};
 use crate::error::{ApiError, ApiResult};
-use crate::library::probe::{chapter_markers, Probe};
+use crate::library::probe::{Probe, chapter_markers};
 use crate::stream::{self, RemuxOpts};
 use crate::util::tick_ms;
-use crate::App;
-use axum::extract::{Path, Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
 use axum::Json;
-use rusqlite::{params, OptionalExtension};
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -699,10 +699,10 @@ pub async fn set_markers(
     if !(ok(b.intro_start) && ok(b.intro_end) && ok(b.credits)) {
         return Err(ApiError::bad("bad_value", "Неверное время"));
     }
-    if let (Some(s), Some(e)) = (b.intro_start, b.intro_end) {
-        if e <= s || e - s > 600.0 {
-            return Err(ApiError::bad("bad_value", "Конец заставки должен быть позже начала (до 10 минут)"));
-        }
+    if let (Some(s), Some(e)) = (b.intro_start, b.intro_end)
+        && (e <= s || e - s > 600.0)
+    {
+        return Err(ApiError::bad("bad_value", "Конец заставки должен быть позже начала (до 10 минут)"));
     }
     app.db.with(|c| {
         if b.intro_start.is_none() && b.intro_end.is_none() && b.credits.is_none() {

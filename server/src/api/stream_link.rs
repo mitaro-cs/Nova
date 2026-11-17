@@ -3,21 +3,21 @@
 //! адресу компьютера хоста). Плейлисты переписываются на `p?u=…`, кусочки идут потоком.
 //! Ходим только на известные адреса сайтов - посредником «куда угодно» сервер не станет.
 
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
+use axum::Json;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use base64::Engine;
 use parking_lot::Mutex;
 use reqwest::Url;
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -77,13 +77,13 @@ pub async fn page_with_url(url: &str) -> anyhow::Result<(Url, String)> {
 pub async fn page_for(app: Option<&App>, url: &str) -> anyhow::Result<(Url, String)> {
     let parsed = Url::parse(url)?;
     let mut cookies = HashMap::new();
-    if let (Some(app), Some(source)) = (app, parsed.host_str().and_then(crate::site_sources::by_domain)) {
-        if parsed.origin() == Url::parse(source.url)?.origin() {
-            let values = app.source_sessions.lock().get(source.id).cloned().unwrap_or_default();
-            for (k, v) in values {
-                if !k.contains([';', '\r', '\n']) && !v.contains([';', '\r', '\n']) {
-                    cookies.insert(k, v);
-                }
+    if let (Some(app), Some(source)) = (app, parsed.host_str().and_then(crate::site_sources::by_domain))
+        && parsed.origin() == Url::parse(source.url)?.origin()
+    {
+        let values = app.source_sessions.lock().get(source.id).cloned().unwrap_or_default();
+        for (k, v) in values {
+            if !k.contains([';', '\r', '\n']) && !v.contains([';', '\r', '\n']) {
+                cookies.insert(k, v);
             }
         }
     }
@@ -537,11 +537,7 @@ fn select_quality(text: &str, height: Option<u32>, level: Option<usize>) -> Stri
             n += 1;
         }
     }
-    if found {
-        output.join("\n")
-    } else {
-        text.to_owned()
-    }
+    if found { output.join("\n") } else { text.to_owned() }
 }
 
 pub async fn index(
@@ -601,7 +597,11 @@ pub async fn subtitle_playlist(
             return Err(failed("Не удалось определить длительность видео для субтитров"));
         }
     }
-    Ok(playlist(format!("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:{}\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:{duration:.3},\n/api/links/{id}/stream/p?u={}\n#EXT-X-ENDLIST\n",duration.ceil() as u64,b64(subtitle))))
+    Ok(playlist(format!(
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:{}\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:{duration:.3},\n/api/links/{id}/stream/p?u={}\n#EXT-X-ENDLIST\n",
+        duration.ceil() as u64,
+        b64(subtitle)
+    )))
 }
 
 #[derive(Deserialize)]

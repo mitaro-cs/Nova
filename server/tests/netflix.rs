@@ -5,7 +5,7 @@
 mod common;
 
 use common::{ffmpeg, make_video, make_video_with, until};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::process::Command;
 
 fn find<'a>(list: &'a Value, title: &str) -> &'a Value {
@@ -45,12 +45,14 @@ async fn profiles_taste_hls_trickplay_markers() {
     .unwrap();
     make_video_with(&media.join("Главы (2020)/glavy.2020.mp4"), "aac", 20, Some(&meta));
     let big_poster = media.join("Главы (2020)/poster.jpg");
-    assert!(Command::new("ffmpeg")
-        .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=1000x1500", "-frames:v", "1"])
-        .arg(&big_poster)
-        .status()
-        .unwrap()
-        .success());
+    assert!(
+        Command::new("ffmpeg")
+            .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=1000x1500", "-frames:v", "1"])
+            .arg(&big_poster)
+            .status()
+            .unwrap()
+            .success()
+    );
     make_video(&media.join("Взрослый (2019)/adult.mp4"), "aac");
     make_video(&media.join("Мульт (2018)/cartoon.mp4"), "aac");
     make_video(&media.join("Комедия (2017)/comedy.mp4"), "aac");

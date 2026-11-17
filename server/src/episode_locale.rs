@@ -1,9 +1,9 @@
 //! Локализация серий отдельно от данных провайдера: обновление IMDb/TVMaze
 //! не стирает перевод, а старый свежий сезон тоже получает русские названия.
 use crate::{
+    App,
     ruwiki::has_cyrillic,
     util::{now_ms, sha256_hex},
-    App,
 };
 use std::{
     sync::{Arc, OnceLock},

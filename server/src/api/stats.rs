@@ -2,15 +2,15 @@
 //! диске по видам, плюс два действия хозяина - очистить кэш видео и сделать копию базы. Всё считается из базы и
 //! папок данных, без внешних запросов.
 
+use crate::App;
 use crate::auth::Manager;
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use parking_lot::Mutex;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -45,10 +45,10 @@ fn dir_size(root: &Path) -> u64 {
 /// Размеры папок данных: считать их долго (кэш видео бывает на десятки гигабайт), поэтому ответ живёт 30 секунд.
 fn disk_parts(data: &Path) -> Value {
     static LAST: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
-    if let Some((at, v)) = &*LAST.lock() {
-        if at.elapsed() < Duration::from_secs(30) {
-            return v.clone();
-        }
+    if let Some((at, v)) = &*LAST.lock()
+        && at.elapsed() < Duration::from_secs(30)
+    {
+        return v.clone();
     }
     let db = ["fsfy.db", "fsfy.db-wal", "fsfy.db-shm"]
         .iter()

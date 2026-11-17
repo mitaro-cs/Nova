@@ -4,7 +4,7 @@
 mod common;
 
 use common::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn person_suggestions_use_russian_and_find_original_names() {

@@ -4,16 +4,16 @@
 //! сессию хоста без пароля. Такая сессия действует **только** через этот порт: туннель тоже
 //! подключается с 127.0.0.1, но к другому порту.
 
+use crate::App;
 use crate::error::{ApiError, ApiResult};
 use crate::util::{now_ms, sha256_hex, token};
-use crate::App;
-use argon2::password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
+use argon2::password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash};
 use axum::extract::{ConnectInfo, FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
-use axum::http::{header, HeaderMap};
+use axum::http::{HeaderMap, header};
 use parking_lot::Mutex;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -205,10 +205,10 @@ pub fn client_ip(parts: &Parts) -> String {
     if peer.is_none_or(|p| p.is_loopback()) {
         // Через туннель все приходят с 127.0.0.1 — настоящий адрес в X-Forwarded-For. Берём
         // последний: его дописал сам туннель, а первые мог прислать кто угодно (обход лимитов).
-        if let Some(f) = parts.headers.get_all("x-forwarded-for").iter().filter_map(|v| v.to_str().ok()).next_back() {
-            if let Some(ip) = f.rsplit(',').next().and_then(|s| s.trim().parse::<IpAddr>().ok()) {
-                return ip.to_string();
-            }
+        if let Some(f) = parts.headers.get_all("x-forwarded-for").iter().filter_map(|v| v.to_str().ok()).next_back()
+            && let Some(ip) = f.rsplit(',').next().and_then(|s| s.trim().parse::<IpAddr>().ok())
+        {
+            return ip.to_string();
         }
     }
     peer.map(|p| p.to_string()).unwrap_or_else(|| "?".into())

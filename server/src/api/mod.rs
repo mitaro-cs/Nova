@@ -26,8 +26,8 @@ pub use links::backfill_thumbs as backfill_link_thumbs;
 pub use play::busy;
 
 use crate::App;
-use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
+use axum::routing::{delete, get, patch, post, put};
 use rusqlite::Row;
 use serde::Serialize;
 use std::sync::Arc;
@@ -320,11 +320,7 @@ pub const KIDS: &str = "((t.age_min IS NOT NULL AND t.age_min <= 12) OR EXISTS (
     WHERE value IN ('Мультфильм', 'Семейный', 'Анимация', 'Детский', 'Мультсериал', 'Family', 'Animation')))";
 
 pub fn visible(kids: bool) -> String {
-    if kids {
-        format!("{VISIBLE} AND {KIDS}")
-    } else {
-        VISIBLE.to_string()
-    }
+    if kids { format!("{VISIBLE} AND {KIDS}") } else { VISIBLE.to_string() }
 }
 
 pub const CARD_COLS: &str = "t.id, t.kind, t.title, t.original_title, t.year, COALESCE(t.poster_sm, t.poster), t.poster,
@@ -370,13 +366,9 @@ pub fn card(r: &Row) -> rusqlite::Result<Card> {
         my_rating: None,
         match_pct: None,
         country: r.get(17)?,
-        director: r.get::<_, Option<String>>(18)?.map(|d| {
-            if crate::names::has_latin(&d) {
-                crate::names::translit(&d)
-            } else {
-                d
-            }
-        }),
+        director: r
+            .get::<_, Option<String>>(18)?
+            .map(|d| if crate::names::has_latin(&d) { crate::names::translit(&d) } else { d }),
         accent: r.get(19)?,
         backdrop_small: img(r.get(20)?),
         status: None,

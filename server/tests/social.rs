@@ -3,8 +3,8 @@
 
 mod common;
 
-use common::{ffmpeg, make_video, until, Client};
-use serde_json::{json, Value};
+use common::{Client, ffmpeg, make_video, until};
+use serde_json::{Value, json};
 
 async fn signup(public: &str, login: &str) -> Client {
     let mut c = Client::new(public.to_string());
@@ -194,12 +194,14 @@ async fn reviews_friends_chat_photo() {
 
     // ---------- фото профиля ----------
     let jpg = std::fs::read(dir.path().join("p.jpg")).unwrap_or_else(|_| {
-        assert!(std::process::Command::new("ffmpeg")
-            .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=640x480", "-frames:v", "1"])
-            .arg(dir.path().join("p.jpg"))
-            .status()
-            .unwrap()
-            .success());
+        assert!(
+            std::process::Command::new("ffmpeg")
+                .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=640x480", "-frames:v", "1"])
+                .arg(dir.path().join("p.jpg"))
+                .status()
+                .unwrap()
+                .success()
+        );
         std::fs::read(dir.path().join("p.jpg")).unwrap()
     });
     let r = anna

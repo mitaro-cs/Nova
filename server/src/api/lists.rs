@@ -2,18 +2,18 @@
 //! добавляют фильмы, отмечают «посмотрели». Позвать можно только своего друга; создатель
 //! удаляет список, остальные - выходят из него.
 
-use super::social::{person, relation, text, title_visible, Person, PERSON_COLS, SOCIAL};
-use super::{card, visible, CARD_COLS, CARD_LEN};
+use super::social::{PERSON_COLS, Person, SOCIAL, person, relation, text, title_visible};
+use super::{CARD_COLS, CARD_LEN, card, visible};
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::Json;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 const MAX_LISTS: i64 = 30;
@@ -331,11 +331,7 @@ pub async fn of_title(State(app): State<Arc<App>>, v: Viewer, Path(title): Path<
 fn ext_exists(app: &App, ext: &str) -> ApiResult<()> {
     let ok: bool =
         app.db.with(|c| c.query_row("SELECT EXISTS (SELECT 1 FROM ext_titles WHERE id = ?)", [ext], |r| r.get(0)))?;
-    if ok {
-        Ok(())
-    } else {
-        Err(ApiError::not_found())
-    }
+    if ok { Ok(()) } else { Err(ApiError::not_found()) }
 }
 
 /// Фильм из ленты в список или убрать.
@@ -441,11 +437,7 @@ fn group_of(app: &App, list: i64, gid: i64) -> ApiResult<()> {
             r.get(0)
         })
     })?;
-    if ok {
-        Ok(())
-    } else {
-        Err(ApiError::not_found())
-    }
+    if ok { Ok(()) } else { Err(ApiError::not_found()) }
 }
 
 pub async fn rename_group(

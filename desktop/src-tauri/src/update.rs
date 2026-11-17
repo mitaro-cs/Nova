@@ -170,13 +170,7 @@ pub fn menu(app: &AppHandle) {
     let h = app.clone();
     let u = app.state::<Updates>();
     let has = u.found.lock().is_some();
-    tauri::async_runtime::spawn(async move {
-        if has {
-            install(&h).await
-        } else {
-            check(&h, From::Menu).await
-        }
-    });
+    tauri::async_runtime::spawn(async move { if has { install(&h).await } else { check(&h, From::Menu).await } });
 }
 
 /// Со страницы сайта: найдено - ставим, нет - сначала проверяем.

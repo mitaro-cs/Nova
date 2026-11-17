@@ -1,17 +1,17 @@
 //! Кто что смотрит: лента «Друзья смотрят», «Смотрят друзья» на странице фильма и «Сейчас смотрит»
 //! в профиле. Видно себе и друзьям - и только если человек не выключил «Показывать, что я смотрю».
 
-use super::social::{person, Person, PERSON_COLS, SOCIAL};
+use super::social::{PERSON_COLS, Person, SOCIAL, person};
 use super::{cards_by_ids, discover::ext_cards};
+use crate::App;
 use crate::auth::Viewer;
 use crate::error::ApiResult;
 use crate::taste::Taste;
 use crate::util::now_ms;
-use crate::App;
-use axum::extract::State;
 use axum::Json;
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use axum::extract::State;
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// Начатое давнее двух месяцев - уже не «смотрит сейчас».
@@ -123,10 +123,10 @@ pub fn render(app: &App, v: &Viewer, items: &[Now]) -> ApiResult<Vec<Value>> {
             let Some(mut c) = cards_by_ids(app, v.profile.kids, &[id])?.pop() else { continue };
             taste.apply(std::slice::from_mut(&mut c));
             out.push(json!({"at": n.at, "label": n.label, "card": c}));
-        } else if let Some(e) = &n.ext {
-            if let Some(c) = ext_cards(app, v, "e.id = ?2", "e.id", &[e])?.pop() {
-                out.push(json!({"at": n.at, "label": n.label, "ext": c}));
-            }
+        } else if let Some(e) = &n.ext
+            && let Some(c) = ext_cards(app, v, "e.id = ?2", "e.id", &[e])?.pop()
+        {
+            out.push(json!({"at": n.at, "label": n.label, "ext": c}));
         }
     }
     Ok(out)

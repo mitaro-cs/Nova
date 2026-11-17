@@ -97,10 +97,10 @@ fn title_year(s: &str) -> (String, Option<i32>) {
             break;
         }
     }
-    if let Some(j) = JUNK.find(&s[..cut]) {
-        if j.start() > 0 {
-            cut = j.start();
-        }
+    if let Some(j) = JUNK.find(&s[..cut])
+        && j.start() > 0
+    {
+        cut = j.start();
     }
     (clean(&s[..cut]), year)
 }
@@ -204,10 +204,10 @@ pub fn parse(rel: &Path, force: Option<bool>) -> Parsed {
             season = season_dir.map(|(_, n)| n).or(Some(1));
         }
         let (mut title, mut year) = title_year(before);
-        if title.is_empty() {
-            if let Some(d) = &show_dir {
-                (title, year) = title_year(d);
-            }
+        if title.is_empty()
+            && let Some(d) = &show_dir
+        {
+            (title, year) = title_year(d);
         }
         if title.is_empty() {
             title = tidy(&stem);

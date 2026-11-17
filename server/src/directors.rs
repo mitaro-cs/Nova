@@ -1,12 +1,12 @@
 //! Люди кино (любимые режиссёры, актёры у фильма): фото и фильмография с IMDb. Кто это на IMDb - по id из описаний фильмов
 //! (у новых описаний он есть), иначе поиском IMDb по имени. Фото и постеры - к себе, раз в неделю.
 
-use crate::discover::{parse_chart, posters_of, upsert};
-use crate::meta::imdb::{sized, Imdb};
-use crate::util::now_ms;
 use crate::App;
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use crate::discover::{parse_chart, posters_of, upsert};
+use crate::meta::imdb::{Imdb, sized};
+use crate::util::now_ms;
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -82,8 +82,8 @@ pub async fn resolve(app: &App, name: &str) -> anyhow::Result<Option<String>> {
                 .map(String::from);
         }
     }
-    if id.is_none() {
-        if let Ok(Ok(found)) = tokio::time::timeout(Duration::from_secs(6), async {
+    if id.is_none()
+        && let Ok(Ok(found)) = tokio::time::timeout(Duration::from_secs(6), async {
             let found: Value = app
                 .http
                 .get("https://www.wikidata.org/w/api.php")
@@ -131,9 +131,8 @@ pub async fn resolve(app: &App, name: &str) -> anyhow::Result<Option<String>> {
                 .map(String::from))
         })
         .await
-        {
-            id = found;
-        }
+    {
+        id = found;
     }
     if let Some(id) = &id {
         app.db.with(|c| {
@@ -149,11 +148,7 @@ pub async fn resolve(app: &App, name: &str) -> anyhow::Result<Option<String>> {
 
 /// Роль: режиссёр или актёр (у актрис на IMDb своя категория).
 pub fn role(r: &str) -> &'static str {
-    if r == "actor" {
-        "actor"
-    } else {
-        "director"
-    }
+    if r == "actor" { "actor" } else { "director" }
 }
 
 /// Фото и фильмография человека в этой роли - с IMDb не чаще раза в неделю.

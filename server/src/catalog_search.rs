@@ -1,12 +1,12 @@
 //! Поиск по IMDb, русской Википедии, Викиданным и сохранённому каталогу.
 //! JSON результатов не ждёт скачивания картинок; русские названия имеют отдельный кэш.
 use crate::{
+    App,
     discover::{self, Ext},
     meta::imdb::Imdb,
-    App,
 };
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 async fn get(app: &App, host: &str, args: &[(&str, &str)]) -> anyhow::Result<Value> {
@@ -37,7 +37,7 @@ async fn entities(app: &App, ids: &str) -> anyhow::Result<Value> {
     )
     .await
 }
-fn claim<'a>(e: &'a Value, p: &str) -> impl Iterator<Item = &'a Value> {
+fn claim<'a>(e: &'a Value, p: &str) -> impl Iterator<Item = &'a Value> + use<'a> {
     e["claims"][p].as_array().into_iter().flatten().map(|c| &c["mainsnak"]["datavalue"]["value"])
 }
 fn label(e: &Value) -> Option<&str> {
@@ -87,13 +87,10 @@ pub async fn wiki_search(app: &App, query: &str, people: bool) -> anyhow::Result
     let response = entities(app, &ids.join("|")).await?;
     let mut out = vec![];
     for (qid, e) in response["entities"].as_object().into_iter().flatten() {
-        let Some(id) = claim(e, "P345").filter_map(Value::as_str).find(|s| {
-            if people {
-                s.starts_with("nm")
-            } else {
-                discover::valid_id(s)
-            }
-        }) else {
+        let Some(id) = claim(e, "P345")
+            .filter_map(Value::as_str)
+            .find(|s| if people { s.starts_with("nm") } else { discover::valid_id(s) })
+        else {
             continue;
         };
         let Some(title) = label(e) else { continue };
@@ -307,32 +304,31 @@ pub async fn fallback_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
     let mut countries = vec![];
     let mut languages = vec![];
     let mut runtime = None;
-    if let Some(qid) = qid {
-        if let Ok(entity) = entities(app, qid).await {
-            let e = &entity["entities"][qid];
-            runtime = claim(e, "P2047")
-                .filter_map(|v| v["amount"].as_str())
-                .find_map(|s| s.parse::<f64>().ok())
-                .map(|m| m.round() as i64);
-            let mut related = vec![];
-            for (p, job, limit) in [
-                ("P57", "director", 3),
-                ("P58", "writer", 3),
-                ("P161", "actor", 12),
-                ("P495", "country", 6),
-                ("P364", "language", 6),
-            ] {
-                related.extend(claim(e, p).filter_map(|v| v["id"].as_str()).take(limit).map(|i| (i.to_string(), job)));
-            }
-            if !related.is_empty() {
-                if let Ok(all) = entities(app, &related.iter().map(|r| r.0.clone()).collect::<Vec<_>>().join("|")).await
-                {
-                    for (rid, job) in related {
-                        let p = &all["entities"][&rid];
-                        let Some(name) = label(p) else { continue };
-                        match job {"country"=>countries.push(name.to_string()),"language"=>languages.push(name.to_string()),_=>people.push(json!({"name":name,"job":job,"role":null,"photo":null,"id":claim(p,"P345").find_map(Value::as_str)}))}
-                    }
-                }
+    if let Some(qid) = qid
+        && let Ok(entity) = entities(app, qid).await
+    {
+        let e = &entity["entities"][qid];
+        runtime = claim(e, "P2047")
+            .filter_map(|v| v["amount"].as_str())
+            .find_map(|s| s.parse::<f64>().ok())
+            .map(|m| m.round() as i64);
+        let mut related = vec![];
+        for (p, job, limit) in [
+            ("P57", "director", 3),
+            ("P58", "writer", 3),
+            ("P161", "actor", 12),
+            ("P495", "country", 6),
+            ("P364", "language", 6),
+        ] {
+            related.extend(claim(e, p).filter_map(|v| v["id"].as_str()).take(limit).map(|i| (i.to_string(), job)));
+        }
+        if !related.is_empty()
+            && let Ok(all) = entities(app, &related.iter().map(|r| r.0.clone()).collect::<Vec<_>>().join("|")).await
+        {
+            for (rid, job) in related {
+                let p = &all["entities"][&rid];
+                let Some(name) = label(p) else { continue };
+                match job {"country"=>countries.push(name.to_string()),"language"=>languages.push(name.to_string()),_=>people.push(json!({"name":name,"job":job,"role":null,"photo":null,"id":claim(p,"P345").find_map(Value::as_str)}))}
             }
         }
     }

@@ -1,16 +1,16 @@
 //! Вход, регистрация по приглашению, свой профиль, вход окна хоста.
 
-use crate::auth::{self, client_ip, Via, Viewer};
+use crate::App;
+use crate::auth::{self, Via, Viewer, client_ip};
 use crate::error::{ApiError, ApiResult};
 use crate::util::now_ms;
-use crate::App;
 use axum::extract::{Path, Query, State};
-use axum::http::{header, request::Parts, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header, request::Parts};
 use axum::response::{Html, IntoResponse, Response};
 use axum::{Extension, Json};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub async fn health() -> Json<Value> {
@@ -383,23 +383,23 @@ pub async fn availability(State(app): State<Arc<App>>, Query(q): Query<Availabil
 pub async fn update_me(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<MeBody>) -> ApiResult<Json<Value>> {
     let name = b.name.as_deref().map(auth::check_name).transpose()?;
     let login = b.login.as_deref().map(auth::check_login).transpose()?;
-    if let Some(l) = &login {
-        if l != &v.login {
-            let taken: bool = app.db.with(|c| {
-                c.query_row("SELECT EXISTS(SELECT 1 FROM users WHERE login = ? AND id != ?)", params![l, v.id], |r| {
-                    r.get(0)
-                })
-            })?;
-            if taken {
-                return Err(ApiError::bad("login_taken", "Такой логин уже занят"));
-            }
+    if let Some(l) = &login
+        && l != &v.login
+    {
+        let taken: bool = app.db.with(|c| {
+            c.query_row("SELECT EXISTS(SELECT 1 FROM users WHERE login = ? AND id != ?)", params![l, v.id], |r| {
+                r.get(0)
+            })
+        })?;
+        if taken {
+            return Err(ApiError::bad("login_taken", "Такой логин уже занят"));
         }
     }
     let name_conflict = app.db.tx(|tx| {
-        if let Some(n) = &name {
-            if name_taken(tx, n, Some(v.id))? {
-                return Ok(true);
-            }
+        if let Some(n) = &name
+            && name_taken(tx, n, Some(v.id))?
+        {
+            return Ok(true);
         }
         if let Some(n) = &name {
             tx.execute("UPDATE users SET name = ? WHERE id = ?", params![n, v.id])?;

@@ -1,5 +1,5 @@
 mod common;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn catalog(domain: &str) -> Value {
     json!({"domain":domain,"name":domain,"kind":"all","enabled":true,"search":null,"manifest":null})
@@ -54,11 +54,13 @@ async fn imports_every_variant_orders_pins_and_disables_sources() {
     let third = host.json(&format!("/api/links/{next}/next")).await["next"]["id"].as_i64().unwrap();
     assert_eq!(host.json(&format!("/api/links/{third}")).await["season"], 2);
     let feed = host.json("/api/discover").await;
-    assert!(feed["rows"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|r| r["key"] == "catalog_movies" && r["items"][0]["id"] == "tt7654321"));
+    assert!(
+        feed["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["key"] == "catalog_movies" && r["items"][0]["id"] == "tt7654321")
+    );
     let mut off = b.clone();
     off["enabled"] = json!(false);
     assert!(host.send("PUT", "/api/admin/catalogs", json!({"items":[off,a]})).await.status().is_success());
@@ -78,11 +80,12 @@ async fn imports_every_variant_orders_pins_and_disables_sources() {
 async fn import_is_atomic_validates_urls_types_and_permissions() {
     let dir = tempfile::tempdir().unwrap();
     let (running, mut host) = common::start(dir.path()).await;
-    assert!(host
-        .send("PUT", "/api/admin/catalogs", json!({"items":[catalog("a.example.com")]}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PUT", "/api/admin/catalogs", json!({"items":[catalog("a.example.com")]}))
+            .await
+            .status()
+            .is_success()
+    );
     let mut bad = manifest();
     bad["items"][1]["streams"][0]["url"] = json!("http://127.0.0.1/private.mp4");
     assert_eq!(
@@ -117,11 +120,17 @@ async fn import_is_atomic_validates_urls_types_and_permissions() {
         400
     );
     let mut viewer = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-    assert!(viewer
-        .send("POST", "/api/auth/register", json!({"name":"Зритель","login":"catalogviewer","password":"пароль-12345"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        viewer
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"name":"Зритель","login":"catalogviewer","password":"пароль-12345"})
+            )
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(
         viewer
             .send("POST", "/api/admin/catalogs/import", json!({"domain":"a.example.com","manifest":manifest()}))

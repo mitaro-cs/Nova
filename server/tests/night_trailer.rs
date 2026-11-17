@@ -6,11 +6,17 @@ async fn night_is_local_only_and_trailer_replaces_old_english_cache() {
     let dir = tempfile::tempdir().unwrap();
     let (running, mut host) = common::start(dir.path()).await;
     let mut viewer = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-    assert!(viewer
-        .send("POST", "/api/auth/register", json!({"login":"nightviewer","name":"Зритель","password":"Password123"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        viewer
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"login":"nightviewer","name":"Зритель","password":"Password123"})
+            )
+            .await
+            .status()
+            .is_success()
+    );
     assert_eq!(viewer.send("POST", "/api/host/night", json!({"action":"off"})).await.status(), 404);
     assert_eq!(host.send("POST", "/api/host/night", json!({"action":"shutdown"})).await.status(), 400);
     let result: serde_json::Value =

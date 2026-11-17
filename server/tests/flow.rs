@@ -3,8 +3,8 @@
 
 mod common;
 
-use common::{ffmpeg, make_video, Client};
-use serde_json::{json, Value};
+use common::{Client, ffmpeg, make_video};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -58,11 +58,12 @@ async fn host_adds_folder_and_viewer_watches() {
         .unwrap();
     assert_eq!(csrf.status(), 403);
 
-    assert!(host
-        .send("PUT", "/api/admin/settings", json!({"provider": "off", "registration": "invite"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("PUT", "/api/admin/settings", json!({"provider": "off", "registration": "invite"}))
+            .await
+            .status()
+            .is_success()
+    );
     let r = host.send("POST", "/api/admin/libraries", json!({"path": media.to_str().unwrap()})).await;
     assert!(r.status().is_success(), "{}", r.text().await.unwrap());
 

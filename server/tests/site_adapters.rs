@@ -185,7 +185,7 @@ fn parses_real_provider_shapes_without_executing_javascript() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].1.audio, vec!["Русский", "", "English"]);
     assert_eq!(found[0].1.subtitles.len(), 1);
-    let master="#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"rus0\",URI=\"a0.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"rus1\",URI=\"a1.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"eng2\",URI=\"a2.m3u8\"\n#EXT-X-STREAM-INF:RESOLUTION=3840x2160,AUDIO=\"a\"\n4k.m3u8";
+    let master = "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"rus0\",URI=\"a0.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"rus1\",URI=\"a1.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"eng2\",URI=\"a2.m3u8\"\n#EXT-X-STREAM-INF:RESOLUTION=3840x2160,AUDIO=\"a\"\n4k.m3u8";
     let enriched = site_sources::hls_manifest(master, &found[0].1, 7);
     assert!(enriched.contains("NAME=\"Русский\""));
     assert!(enriched.contains("NAME=\"English\""));
@@ -236,18 +236,25 @@ async fn sources_require_host_opt_in_and_do_not_expose_cookies() {
     running.app.source_sessions.lock().insert("bear".into(), vec![("antibot".into(), "opaque-secret-value".into())]);
     let sources = host.json("/api/admin/site-sources").await;
     assert!(!sources.to_string().contains("opaque-secret-value"));
-    assert!(host
-        .send("POST", "/api/admin/site-sources/bear/verify", json!({"action":"forget"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        host.send("POST", "/api/admin/site-sources/bear/verify", json!({"action":"forget"}))
+            .await
+            .status()
+            .is_success()
+    );
     assert!(running.app.source_sessions.lock().is_empty());
     let mut viewer = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
-    assert!(viewer
-        .send("POST", "/api/auth/register", json!({"name":"Зритель","login":"sites-viewer","password":"пароль-12345"}))
-        .await
-        .status()
-        .is_success());
+    assert!(
+        viewer
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"name":"Зритель","login":"sites-viewer","password":"пароль-12345"})
+            )
+            .await
+            .status()
+            .is_success()
+    );
     for route in ["connect", "import", "stop", "verify", "match"] {
         assert_eq!(
             viewer

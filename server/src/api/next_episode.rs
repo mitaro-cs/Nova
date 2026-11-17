@@ -1,15 +1,15 @@
 //! Следующая серия: только точный сосед в том же сериале, без подстановки случайных роликов.
 use crate::{
+    App,
     auth::Viewer,
     error::{ApiError, ApiResult},
-    App,
 };
 use axum::{
-    extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
 pub async fn next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {

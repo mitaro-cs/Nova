@@ -6,7 +6,7 @@
 //! Запрос делится на основной и дополнительный: ошибка во втором не теряет первый.
 
 use super::{Candidate, Details, Episode, Person};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub struct Imdb {
     pub http: reqwest::Client,

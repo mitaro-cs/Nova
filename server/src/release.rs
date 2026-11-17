@@ -123,11 +123,11 @@ pub async fn download(
     }
     f.sync_all().await?;
     drop(f);
-    if let Some(want) = sha256 {
-        if hex::encode(hash.finalize()) != want.to_ascii_lowercase() {
-            let _ = tokio::fs::remove_file(&part).await;
-            anyhow::bail!("установщик не совпал с выпуском (SHA-256)");
-        }
+    if let Some(want) = sha256
+        && hex::encode(hash.finalize()) != want.to_ascii_lowercase()
+    {
+        let _ = tokio::fs::remove_file(&part).await;
+        anyhow::bail!("установщик не совпал с выпуском (SHA-256)");
     }
     tokio::fs::rename(&part, to).await?;
     Ok(())

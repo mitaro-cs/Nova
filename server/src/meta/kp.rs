@@ -94,24 +94,25 @@ impl Kp {
             }
         });
         let mut episodes = Vec::new();
-        if series && !seasons.is_empty() {
-            if let Ok(sv) = self.get("/v1.4/season", &[("movieId", id.to_string()), ("limit", "100".into())]).await {
-                for s in sv["docs"].as_array().into_iter().flatten() {
-                    let n = s["number"].as_i64().unwrap_or(-1) as i32;
-                    if !seasons.contains(&n) {
-                        continue;
-                    }
-                    for e in s["episodes"].as_array().into_iter().flatten() {
-                        episodes.push(Episode {
-                            season: n,
-                            episode: e["number"].as_i64().unwrap_or(0) as i32,
-                            name: text(&e["name"]).or_else(|| text(&e["enName"])),
-                            overview: text(&e["description"]),
-                            still: text(&e["still"]["url"]),
-                            air_date: text(&e["airDate"]).map(|d| d.chars().take(10).collect()),
-                            ..Default::default()
-                        });
-                    }
+        if series
+            && !seasons.is_empty()
+            && let Ok(sv) = self.get("/v1.4/season", &[("movieId", id.to_string()), ("limit", "100".into())]).await
+        {
+            for s in sv["docs"].as_array().into_iter().flatten() {
+                let n = s["number"].as_i64().unwrap_or(-1) as i32;
+                if !seasons.contains(&n) {
+                    continue;
+                }
+                for e in s["episodes"].as_array().into_iter().flatten() {
+                    episodes.push(Episode {
+                        season: n,
+                        episode: e["number"].as_i64().unwrap_or(0) as i32,
+                        name: text(&e["name"]).or_else(|| text(&e["enName"])),
+                        overview: text(&e["description"]),
+                        still: text(&e["still"]["url"]),
+                        air_date: text(&e["airDate"]).map(|d| d.chars().take(10).collect()),
+                        ..Default::default()
+                    });
                 }
             }
         }

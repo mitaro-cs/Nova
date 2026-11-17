@@ -1,9 +1,9 @@
 //! Фоновые задачи библиотеки: обход папок и разбор файлов через ffprobe.
 
 use super::probe;
-use super::scan::{scan_with, ScanStats};
+use super::scan::{ScanStats, scan_with};
 use crate::App;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -76,12 +76,13 @@ pub async fn probe_worker(app: Arc<App>) {
                     let path = PathBuf::from(path);
                     let p = probe::probe(&ffprobe, &path).await.unwrap_or_default();
                     let mut frame = None;
-                    if still.is_none() && p.video.is_some() {
-                        if let Some(ffmpeg) = &tools.ffmpeg {
-                            let at = p.duration.map(|d| (d * 0.15).min(600.0)).unwrap_or(30.0);
-                            if let Ok(jpg) = probe::frame(ffmpeg, &path, at, 640).await {
-                                frame = app.images.save(&jpg).ok();
-                            }
+                    if still.is_none()
+                        && p.video.is_some()
+                        && let Some(ffmpeg) = &tools.ffmpeg
+                    {
+                        let at = p.duration.map(|d| (d * 0.15).min(600.0)).unwrap_or(30.0);
+                        if let Ok(jpg) = probe::frame(ffmpeg, &path, at, 640).await {
+                            frame = app.images.save(&jpg).ok();
                         }
                     }
                     let json = serde_json::to_string(&p).unwrap_or_else(|_| "{}".into());

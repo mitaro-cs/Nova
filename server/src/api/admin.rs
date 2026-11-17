@@ -1,19 +1,19 @@
 //! Управление (хост и администраторы): папки, описания, люди, приглашения, доступ, настройки.
 
 use super::img;
+use crate::App;
 use crate::access::{Access, SUBDOMAIN};
 use crate::auth::{self, Manager};
 use crate::error::{ApiError, ApiResult};
 use crate::meta::{self, Provider};
 use crate::util::{human_code, now_ms};
-use crate::App;
+use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::Json;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 type Out = ApiResult<Json<Value>>;
@@ -555,10 +555,11 @@ pub async fn edit_title(
     Path(id): Path<i64>,
     Json(b): Json<TitleEdit>,
 ) -> Out {
-    if let Some(k) = &b.kind {
-        if k != "movie" && k != "series" {
-            return Err(ApiError::bad("bad_value", "Вид - фильм или сериал"));
-        }
+    if let Some(k) = &b.kind
+        && k != "movie"
+        && k != "series"
+    {
+        return Err(ApiError::bad("bad_value", "Вид - фильм или сериал"));
     }
     if b.title.as_deref().is_some_and(|t| t.trim().is_empty()) {
         return Err(ApiError::bad("bad_title", "Название не может быть пустым"));
@@ -1134,10 +1135,10 @@ pub async fn edit_user(State(app): State<Arc<App>>, m: Manager, Path(id): Path<i
     };
     let name = b.name.as_deref().map(auth::check_name).transpose()?;
     let name_conflict = app.db.tx(|tx| {
-        if let Some(name) = &name {
-            if super::account::name_taken(tx, name, Some(id))? {
-                return Ok(true);
-            }
+        if let Some(name) = &name
+            && super::account::name_taken(tx, name, Some(id))?
+        {
+            return Ok(true);
         }
         if let Some(n) = &name {
             tx.execute("UPDATE users SET name = ? WHERE id = ?", params![n, id])?;

@@ -4,7 +4,7 @@
 mod common;
 
 use common::{ffmpeg, make_video, until};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 async fn titles(host: &common::Client) -> Vec<String> {
     host.json("/api/titles")
