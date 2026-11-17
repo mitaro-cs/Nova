@@ -40,13 +40,16 @@ test('копия базы делается по кнопке', async ({ page }) 
 });
 
 test('кэш видео нельзя очистить, пока его нечем очищать', async ({ page }) => {
-  // Другие тесты гоняют видео и оставляют кэш: сначала очищаем его через сервер, потом проверяем кнопку.
-  await page.request.post(url('/api/admin/cache/clear'), { headers: { 'x-fsfy': '1' } });
-  await page.goto(url('/admin'));
+  // Другие тесты гоняют видео и оставляют кэш (а фоновая перепаковка может дописать его после очистки):
+  // очищаем через сервер и перезагружаем, пока кнопка не станет недоступной.
   const clear = page.getByRole('button', { name: /Очистить кэш видео/ });
-  await expect(clear).toBeVisible();
-  // Кэша нет: кнопка не активна и не обещает освободить место.
-  await expect(clear).toBeDisabled();
+  await expect(async () => {
+    await page.request.post(url('/api/admin/cache/clear'), { headers: { 'x-fsfy': '1' } });
+    await page.goto(url('/admin'));
+    await expect(clear).toBeVisible();
+    // Кэша нет: кнопка не активна и не обещает освободить место.
+    await expect(clear).toBeDisabled({ timeout: 2_000 });
+  }).toPass({ timeout: 25_000 });
 });
 
 test('вкладки управления: у каждой своя шапка с подсказками без флажков', async ({ page }) => {
