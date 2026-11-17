@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { artSet } from '$lib/ui/art';
-  import { hideBroken } from '$lib/ui/fade';
+  import { hideBroken } from '$lib/ui/hideBroken';
   import Icon from '$lib/ui/Icon.svelte';
   import type Hls from 'hls.js';
   import { trailerHeight } from './trailer-quality';

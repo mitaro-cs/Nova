@@ -42,7 +42,8 @@ test('разделы: внизу на телефоне и планшете, св
     const links = bar(page).getByRole('link');
     // У вкладки «Профиль» бывает число (просьбы и сообщения) - название всё равно в тексте.
     await expect(links).toHaveText([/Главное/, /Что смотреть/, /Профиль/, /Коллекция/, /Поиск/]);
-    await expect(bar(page)).toHaveCSS('background-color', 'rgb(20, 20, 20)');
+    // Фон панели - сплошной (цвет дизайна менялся), главное - что она не прозрачная.
+    await expect(bar(page)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const box = await bar(page).boundingBox();
     expect(box!.y + box!.height).toBeGreaterThan(height - 2);
     for (const name of ['Главное', 'Что смотреть', 'Профиль', 'Коллекция', 'Поиск']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
@@ -63,6 +64,9 @@ test('разделы ведут на свои страницы', async ({ page }
   await goTo(page, 'Профиль');
   await expect(page).toHaveURL(/\/people\/\d+$/);
   // Чаты, подборки и выход - на странице профиля (в меню аватара их больше нет).
+  // Меню быстрых разделов на странице профиля свёрнуто: открываем.
+  const menu = page.locator('details.shortcuts');
+  if (!(await menu.evaluate((d) => (d as HTMLDetailsElement).open))) await menu.locator('summary').click();
   const quick = page.getByRole('navigation', { name: 'Быстрые разделы' });
   await expect(quick.getByRole('link', { name: /Чаты/ })).toBeVisible();
   await expect(quick.getByRole('link', { name: /Подборки/ })).toBeVisible();

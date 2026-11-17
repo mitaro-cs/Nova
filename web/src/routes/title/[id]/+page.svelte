@@ -11,7 +11,8 @@
   import { untrack } from 'svelte';
   import { progressSync } from '$lib/progressSync.svelte';
   import { localized } from '$lib/localized.svelte';
-  import { fadeIn, hideBroken } from '$lib/ui/fade';
+  import { fadeIn } from '$lib/ui/fade';
+  import { hideBroken } from '$lib/ui/hideBroken';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, del, errorText, patch, post } from '$lib/api';
