@@ -13,6 +13,8 @@ export default defineConfig({
   expect: { timeout: 7_000 },
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
+    // PW_CHROMIUM - путь к готовому Chromium (песочницы без доступа к cdn.playwright.dev); в CI не задан.
+    launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
     storageState: 'e2e/.state.json',
     locale: 'ru-RU',
     timezoneId: 'Europe/Moscow',
