@@ -1099,10 +1099,18 @@ pub async fn franchise(
 
 /// Тема недели для главной: подпись и фильмы (карточки ленты; свои - с `local`).
 pub async fn theme(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {
-    let cur = tokio::time::timeout(Duration::from_secs(12), crate::themes::current(&app))
-        .await
-        .map_err(|_| ApiError::bad("imdb", "IMDb сейчас не отвечает - попробуйте позже"))?
-        .map_err(|e| ApiError::bad("imdb", format!("Тема недели недоступна: {e}")))?;
+    // Ряд необязательный: IMDb не ответил - главная просто без него (а не ошибка 400 в консоли).
+    let cur = match tokio::time::timeout(Duration::from_secs(12), crate::themes::current(&app)).await {
+        Ok(Ok(cur)) => cur,
+        Ok(Err(e)) => {
+            tracing::debug!(error = %e, "тема недели недоступна");
+            return Ok(Json(json!({"key": null, "title": "", "subtitle": "", "items": []})));
+        }
+        Err(_) => {
+            tracing::debug!("тема недели: IMDb не ответил");
+            return Ok(Json(json!({"key": null, "title": "", "subtitle": "", "items": []})));
+        }
+    };
     let items: Vec<ExtCard> = cur.ids.iter().filter_map(|id| ext_card(&app, &v, id).ok()).collect();
     Ok(Json(json!({"key": cur.key, "title": cur.title, "subtitle": cur.subtitle, "items": items})))
 }
