@@ -299,7 +299,7 @@
     padding: 16px;
     min-height: 132px;
     border: 1px solid color-mix(in srgb, var(--tone) 28%, transparent);
-    border-radius: 20px;
+    border-radius: 26px;
     background: linear-gradient(160deg, color-mix(in srgb, var(--tone) 16%, transparent), color-mix(in srgb, var(--tone) 4%, transparent) 70%);
     overflow: hidden;
   }
@@ -345,7 +345,7 @@
     min-width: 0;
     padding: 18px;
     border: 1px solid var(--line);
-    border-radius: 22px;
+    border-radius: 28px;
     background: var(--surface);
     margin-bottom: 14px;
   }

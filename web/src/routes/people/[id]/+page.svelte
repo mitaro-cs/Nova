@@ -133,6 +133,23 @@
   const what = (r: ProfilePage['reviews'][number]) => r.ext ?? r.title!;
   const favs = (kind: string) => (p?.decor.favorites ?? []).filter((f) => (f.card ?? f.ext)?.kind === kind);
   const seenOf = (name: string) => p?.decor.directorsInfo?.find((d) => d.name === name)?.seen ?? null;
+  // Итоги и жанры - из статистики; закрытая статистика (`stats: null`) сюда не попадает.
+  const tiles = $derived.by(() => {
+    const s = p?.stats;
+    if (!s || hidden.stats) return [];
+    const h = s.hours < 10 && s.hours % 1 ? s.hours.toFixed(1).replace('.', ',') : String(Math.round(s.hours));
+    return [
+      { v: `${h} ч`, l: 'за всё время' },
+      { v: String(s.watched ?? 0), l: 'просмотров' },
+      { v: String(s.episodes ?? 0), l: 'серий' },
+      { v: String(s.streak?.current ?? s.streak?.best ?? 0), l: 'дней подряд' },
+    ];
+  });
+  const topGenres = $derived.by(() => {
+    const g = (p?.stats?.genres ?? []).slice(0, 5);
+    const max = Math.max(1, ...g.map((x) => x.count));
+    return hidden.stats ? [] : g.map((x) => ({ name: x.genre, pct: Math.round((x.count / max) * 100) }));
+  });
   const empty = $derived(!!p && !p.watching.length && !p.decor.favorites.length && !p.decor.directors.length && !(p.decor.actors?.length) && !(p.decor.likedPeople?.length));
 </script>
 
@@ -140,9 +157,22 @@
   <div class="page empty"><Icon name="info" size={36} /> {error}</div>
 {:else if p}
   <div class="pf">
-    <ProfileCard bind:p />
+    <div class="hero"><ProfileCard bind:p /></div>
 
-    <main class="main">
+    {#if topGenres.length}
+      <aside class="side" aria-label="Любимые жанры">
+        <section class="tile">
+          <h2>Любимые жанры</h2>
+          <ul class="gbars">
+            {#each topGenres as g (g.name)}
+              <li><div class="gl"><span>{g.name}</span><span class="faint">{g.pct}%</span></div><div class="gt"><i style:width="{g.pct}%"></i></div></li>
+            {/each}
+          </ul>
+        </section>
+      </aside>
+    {/if}
+
+    <main class="main" class:solo={!topGenres.length}>
       <div class="tabs" role="tablist" aria-label="Разделы профиля">
         {#each defs as t (t.id)}
           <button
@@ -164,6 +194,11 @@
         {#key shown}
           <div class="in in-{dir}">
             {#if shown === 'home'}
+              {#if tiles.length}
+                <section class="stat-tiles" aria-label="Итоги">
+                  {#each tiles as t (t.l)}<div class="st"><b>{t.v}</b><small>{t.l}</small></div>{/each}
+                </section>
+              {/if}
               {#if p.watching.length}
                 <section class="sec now">
                   <PosterRow title="Сейчас смотрит" items={p.watching.map((n) => ({ card: n.card, ext: n.ext, label: n.label }))} />
@@ -290,11 +325,28 @@
 {/if}
 
 <style>
-  @media(min-width:1001px){.pf{grid-template-columns:minmax(0,1fr)!important;gap:28px!important}.main{width:100%}}
+  .hero { grid-column: 1 / -1; }
+  .side { display: contents; }
+  @media (min-width: 1001px) {
+    .side { display: block; grid-column: 1; grid-row: 2; align-self: start; position: sticky; top: calc(var(--header) + 18px); }
+    .main { grid-column: 2; grid-row: 2; min-width: 0; }
+    .main.solo { grid-column: 1 / -1; }
+  }
+  .tile { padding: 22px; border: 1px solid #ffffff1a; border-radius: 28px; background: #101012; }
+  .tile h2 { margin: 0 0 18px; font-size: 17px; font-weight: 700; }
+  .gbars { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  .gl { display: flex; justify-content: space-between; margin-bottom: 7px; font-size: 14px; font-weight: 600; }
+  .gt { height: 8px; border-radius: 999px; background: #ffffff14; overflow: hidden; }
+  .gt i { display: block; height: 100%; border-radius: 999px; background: #fff; }
+  .stat-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 26px; }
+  .st { min-width: 0; padding: 18px 20px; border: 1px solid #ffffff1a; border-radius: 26px; background: #101012; }
+  .st b { display: block; font-size: clamp(26px, 3vw, 44px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .st small { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 600px) { .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .pf {
     display: grid;
-    grid-template-columns: 304px minmax(0, 1fr);
-    gap: 22px;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 28px;
     align-items: start;
     max-width: none;
     margin: 0 auto;
@@ -465,7 +517,8 @@
     z-index: 3;
     left: 8px;
     bottom: 58px;
-    font-size: 34px;
+    font-size: clamp(44px, 5vw, 72px);
+    letter-spacing: -0.04em;
     font-weight: 800;
     line-height: 1;
     color: #fff;

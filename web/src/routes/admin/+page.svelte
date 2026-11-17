@@ -26,6 +26,12 @@
     ['settings', 'Настройки', 'sliders'],
     ['version', 'Версия', 'download'],
   ];
+  const GROUPS: { name: string; ids: string[] }[] = [
+    { name: 'Библиотека', ids: ['overview', 'folders', 'catalog'] },
+    { name: 'Люди', ids: ['people', 'wishes'] },
+    { name: 'Система', ids: ['access', 'settings', 'version'] },
+  ];
+  const TAB = Object.fromEntries(TABS.map(([id, label, icon]) => [id, { label, icon }])) as Record<string, { label: string; icon: IconName }>;
   // Значки разделов - белые и серые, без цветов-украшений (решение владельца, 2 ноября): цвет в управлении значит
   // только состояние - зелёный «работает», красный «ошибка».
   const TONE: Record<string, string> = Object.fromEntries(['overview', 'folders', 'catalog', 'people', 'wishes', 'access', 'settings', 'version'].map((id) => [id, '#e4e4e7']));
@@ -89,12 +95,17 @@
     {/if}
   </header>
   <nav class="sections" aria-label="Разделы управления">
-    {#each TABS as [id, label, icon] (id)}
-      <a href="?tab={id}" class:on={tab === id} style:--tone={TONE[id]} data-sveltekit-replacestate data-sveltekit-noscroll>
-        <span class="ic"><Icon name={icon} size={19} /></span><span class="lbl">{label}<small>{INFO[id]?.hint}</small></span>
-        {#if id === 'version' && status?.update?.state === 'available'}<i class="new" aria-label="есть обновление"></i>{/if}
-        {#if id === 'wishes' && badges.wishes}<i class="new" aria-label="есть просьбы"></i>{/if}
-      </a>
+    {#each GROUPS as g (g.name)}
+      <div class="group">
+        <div class="gname">{g.name}</div>
+        {#each g.ids as id (id)}
+          <a href="?tab={id}" class:on={tab === id} style:--tone={TONE[id]} data-sveltekit-replacestate data-sveltekit-noscroll>
+            <span class="ic"><Icon name={TAB[id].icon} size={19} /></span><span class="lbl">{TAB[id].label}<small>{INFO[id]?.hint}</small></span>
+            {#if id === 'version' && status?.update?.state === 'available'}<b class="cnt ok" aria-label="есть обновление">есть</b>{/if}
+            {#if id === 'wishes' && badges.wishes}<b class="cnt" aria-label="есть просьбы">{badges.wishes}</b>{/if}
+          </a>
+        {/each}
+      </div>
     {/each}
   </nav>
   <div class="cols">
@@ -124,17 +135,32 @@
 </div>
 
 <style>
-  .admin :global(.panel .pane){border:1px solid var(--line);border-radius:20px;padding:22px;margin-block:16px;background:var(--surface)}
+  /* Дизайн «База»: плиты #101012 с тонкой линией, радиус 28-30 px. Токены переопределены здесь: все 8 вкладок сразу. */
+  .admin {
+    --sheet: #101012;
+    --sheet-2: #17171a;
+    --sheet-3: #1f1f23;
+    --sheet-line: #ffffff1a;
+    --surface: #101012;
+    --surface-2: #17171a;
+    --surface-3: #1f1f23;
+    --line: #ffffff1a;
+  }
+  .admin :global(.rw-head h1) { font-size: clamp(34px, 4.2vw, 56px); letter-spacing: -0.04em; line-height: 1.02; }
+  .admin :global(.panel .pane){border:1px solid var(--line);border-radius:24px;padding:22px;margin-block:16px;background:#141416}
   .admin :global(.panel .pane h3){font-size:17px;letter-spacing:-.02em}
   .admin :global(.panel .input){min-height:42px;border-radius:12px}
   @media(min-width:1100px){
-    .admin{display:grid;grid-template-columns:220px minmax(0,1fr);gap:0 26px;max-width:1680px;margin:auto}
+    .admin{display:grid;grid-template-columns:300px minmax(0,1fr);gap:0 32px;max-width:1680px;margin:auto}
     .admin>.rw-head{grid-column:1 / -1;padding-block:12px 20px}
-    .sections{grid-column:1;display:flex!important;flex-direction:column;gap:6px!important;position:sticky;top:calc(var(--header) + 18px);align-self:start}
-    .sections a{border-radius:14px!important;padding:13px 12px!important;background:transparent!important}.sections a.on{background:var(--surface-2)!important}
-    .lbl small{display:block!important;white-space:normal!important;font-size:10px!important;margin-top:4px}
+    .sections{grid-column:1;display:flex!important;flex-direction:column;gap:22px!important;position:sticky;top:calc(var(--header) + 18px);align-self:start}
+    .group{display:flex;flex-direction:column;gap:4px}
+    .gname{display:block!important}
+    .sections a{border-radius:20px!important;padding:11px 14px!important;background:transparent!important}.sections a.on{background:#ffffff17!important}
+    .ic{width:40px!important;height:40px!important;border-radius:14px!important}
+    .lbl small{display:block!important;white-space:normal!important;font-size:12px!important;margin-top:2px}
     .cols{grid-column:2;min-width:0}.tab-head ul{display:none!important}
-    .cols .panel.rw-plate{background:var(--surface)!important;border:1px solid var(--line);border-radius:24px!important;padding:24px!important}
+    .cols .panel.rw-plate{background:#101012!important;border:1px solid #ffffff1a;border-radius:30px!important;padding:28px!important}
   }
   /* «Витрина»: разделы - плитки одной строкой сверху (на узком экране - лента), под ними один лист с содержимым.
      Никаких боковых колонок и залезающих друг на друга плит: всё идёт сверху вниз. */
@@ -144,6 +170,8 @@
     gap: 10px;
     margin-bottom: 18px;
   }
+  .group { display: contents; }
+  .gname { display: none; margin: 0 0 4px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
   .sections a {
     position: relative;
     display: flex;
@@ -185,15 +213,19 @@
     background: var(--tone);
     color: #000;
   }
-  .new {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ff5c7a;
+  .cnt {
+    margin-left: auto;
+    flex: none;
+    min-width: 22px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fff;
+    color: #0a0a0b;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
   }
+  .cnt.ok { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
   /* Лист содержимого: свой, со скруглением по всем углам, во всю ширину страницы. */
   .cols .panel.rw-plate {
     min-width: 0;

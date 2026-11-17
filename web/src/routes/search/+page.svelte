@@ -15,7 +15,6 @@
   import { genreRu } from '$lib/genres';
   import Loading from '$lib/ui/Loading.svelte';
   import { personHref } from '$lib/people';
-  import { artW } from '$lib/ui/art';
 
   // Поиск: своё (сразу) и IMDb - всё остальное (страница фильма - /ext). Поле - своё состояние:
   // раньше оно бралось из адреса и при быстром наборе теряло буквы (адрес отставал от ввода).
@@ -34,6 +33,8 @@
   let genre = $state('');
   let sort = $state('relevance');
   let failure = $state('');
+  function reset() { year = ''; rating = ''; genre = ''; sort = 'relevance'; }
+  const hue = (i: number) => [212, 28, 268, 165, 8, 192][i % 6];
   const cache = new Map<string, ExtCard[]>();
   const RATINGS = [{ value: '', label: 'Любой' }, ...[5, 6, 7, 8, 9].map((n) => ({ value: String(n), label: `${n} и выше` }))];
   const SORTS = [
@@ -122,7 +123,7 @@
 
 <div class="search-root">
 <Sheet title="Что посмотрим?" subtitle="Ваша коллекция и мир кино в одном поиске.">
-  <div class="rw-block">
+  <div class="rw-block panel">
   <form class="big" role="search" onsubmit={(e) => e.preventDefault()}>
     <Icon name="search" size={22} />
     <!-- svelte-ignore a11y_autofocus -->
@@ -139,6 +140,7 @@
     <label>Рейтинг<Select label="Рейтинг" variant="inline" bind:value={rating} options={RATINGS} /></label>
     <label>Жанр<Select label="Жанр" variant="inline" bind:value={genre} options={[{ value: '', label: 'Все жанры' }, ...genres.map((g) => ({ value: g, label: g }))]} /></label>
     <label>Порядок<Select label="Порядок" variant="inline" bind:value={sort} options={SORTS} /></label>
+    <button type="button" class="chip reset" onclick={reset}>Сбросить</button>
   </div>
   </div>
   {#if failure}<p class="rw-block" role="status">{failure}</p>{/if}
@@ -148,8 +150,8 @@
       <section class="suggest" aria-label="Советуем посмотреть">
         <div class="s-head"><h2>Советуем посмотреть</h2><a href="/discover">Все</a></div>
         <div class="tiles">
-          {#each picks as r (r.key)}
-            <a class="tile" href="/discover?chart={r.key}"><span class="cover"><img src={artW(r.items[0].poster!, 342)} alt="" loading="lazy" decoding="async" /></span><span class="cap">{r.title}</span></a>
+          {#each picks.slice(0, 3) as r, i (r.key)}
+            <a class="tile" href="/discover?chart={r.key}" style:background="linear-gradient(160deg, hsl({hue(i)} 36% 26%), hsl({hue(i) + 18} 26% 8%))"><span class="tag">Подборка IMDb</span><span class="cap">{r.title}</span></a>
           {/each}
         </div>
       </section>
@@ -248,16 +250,30 @@
   .s-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
   .s-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
   .s-head a { color: #fff; font-size: 16px; font-weight: 600; }
-  .tiles { display: flex; gap: 12px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
-  .tiles::-webkit-scrollbar { display: none; }
-  .tile { flex: none; width: calc(var(--pw) - 20px); color: #fff; }
-  /* Постер целиком (2:3), а не квадратный обрезок: названия и лица не режутся. */
-  .cover { display: block; width: 100%; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 18px; background: #1c1c1e; transition: transform .45s var(--ease); }
-  .cover img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
-  .tile:hover .cover { transform: translateY(-6px) scale(1.025); }
-  .cap { display: -webkit-box; margin-top: 10px; overflow: hidden; font-size: 14px; font-weight: 500; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .tile { display: flex; flex-direction: column; justify-content: flex-end; height: 230px; box-sizing: border-box; padding: 24px; border: 1px solid #ffffff1a; border-radius: 28px; color: #fff; transition: transform .45s var(--ease); }
+  .tile:hover { transform: translateY(-4px); }
+  .tag { font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #e4e4e7; }
+  .cap { display: -webkit-box; margin-top: 8px; overflow: hidden; font-size: clamp(20px, 2vw, 26px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.12; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
+  @media (max-width: 640px) {
+    .tiles { display: flex; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
+    .tiles::-webkit-scrollbar { display: none; }
+    .tile { flex: none; width: 250px; height: 170px; }
+  }
   .cats { display: flex; flex-wrap: wrap; gap: 10px; }
-  .cats button { height: 46px; padding: 0 20px; border: 0; border-radius: 23px; background: #1c1c1e; color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .cats button { height: 46px; padding: 0 20px; border: 1px solid #ffffff1a; border-radius: 23px; background: #141416; color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  /* Дизайн «База»: чёрная страница, поле и фильтры - одна панель #101012. */
+  @media (min-width: 641px) {
+    .search-root :global(.rw-head h1) { font-size: clamp(40px, 5vw, 64px); letter-spacing: -0.04em; line-height: 1.02; }
+    .search-root :global(.rw-plate) { background: transparent; border: 0; }
+    .panel { margin-bottom: 8px; padding: 20px; border: 1px solid #ffffff1a; border-radius: 32px; background: #101012; }
+    .big { height: 64px; margin-bottom: 16px; background: #1c1c1f; border-color: #ffffff24; }
+    .big input { font-size: 19px; }
+    .refine label { border-radius: 999px; background: #141416; border-color: #ffffff24; padding: 8px 14px; }
+    .filters { margin-bottom: 14px; }
+  }
+  .reset { align-self: center; }
+  @media (min-width: 1001px) { .posters { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   /* Телефон: поле 44 px с радиусом 8 и значком фильтров, дальше - блоки подборок и категорий на чёрном;
      заголовка страницы нет. */
   @media (max-width: 640px) {

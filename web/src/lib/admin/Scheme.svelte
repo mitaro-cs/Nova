@@ -105,8 +105,8 @@
   .scheme {
     margin-bottom: 18px;
     padding: 18px 20px 22px;
-    border-radius: 22px;
-    background: #ffffff0a;
+    border-radius: 28px;
+    background: #101012;
   }
   h3 {
     display: flex;
@@ -140,7 +140,7 @@
     min-width: 0;
     padding: 18px 12px 16px;
     border: 1px solid var(--line);
-    border-radius: 20px;
+    border-radius: 22px;
     background: #ffffff08;
     color: inherit;
     text-align: center;

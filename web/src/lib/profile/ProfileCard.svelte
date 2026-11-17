@@ -470,4 +470,13 @@
     .box{border:0;border-radius:0;padding:14px 0;text-align:left}
     .box div+div{padding-left:16px}.box small{margin-top:5px}
   }
+  /* Дизайн «База»: герой 36 px, обложка 360 px, аватар 148 px, имя до 52 px. Слой последний - перебивает прежние. */
+  @media (min-width: 1001px) {
+    .card { border-radius: 36px; border-color: #ffffff1a; background: #08080a; }
+    .cover { height: 360px; }
+    .who { grid-template-columns: 172px minmax(0, 1fr) auto; gap: 9px 26px; padding: 0 36px 30px; }
+    .ring { width: 148px; height: 148px; margin-top: -96px; }
+    h1 { font-size: clamp(34px, 4vw, 52px); letter-spacing: -0.04em; line-height: 1.02; }
+    .now { font-size: 16px; }
+  }
 </style>

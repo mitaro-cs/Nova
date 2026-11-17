@@ -53,7 +53,8 @@ test('вкладки управления: у каждой своя шапка �
   await page.goto(url('/admin?tab=folders'));
   const head = page.locator('.tab-head');
   await expect(head.getByRole('heading', { name: 'Папки' })).toBeVisible();
-  await expect(head.getByLabel('Что здесь можно сделать').getByRole('listitem').first()).toBeVisible();
+  // На компьютере список подсказок скрыт (дизайн «База»), описание раздела видно везде.
+  await expect(head.locator('p').first()).toBeVisible();
   // В подсказках больше нет значка-галочки.
   await expect(head.locator('svg[aria-hidden] path[d^="M20 6 9 17"]')).toHaveCount(0);
   await expectClean(page, 'папки');

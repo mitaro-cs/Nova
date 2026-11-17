@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { api } from '$lib/api';
+  import { api, post } from '$lib/api';
+  import { toast } from '$lib/ui/toast.svelte';
   import { clock, size } from '$lib/fmt';
   import { percent } from '$lib/library';
   import Icon from '$lib/ui/Icon.svelte';
@@ -132,11 +133,20 @@
   const diskPct = $derived(status.system?.diskFree != null && status.system.diskTotal ? Math.round(100 - (status.system.diskFree / status.system.diskTotal) * 100) : 0);
   const problems = $derived(checks.filter((c) => c.ok === false).length);
   const waiting = $derived(checks.filter((c) => c.ok === null).length);
+  async function scanNow() {
+    try {
+      await post('/api/admin/scan');
+      toast('Папки проверяются');
+      reload?.();
+    } catch {
+      toast('Не удалось запустить проверку папок');
+    }
+  }
 </script>
 
 <section class="summary" class:bad={problems > 0} aria-label="Сводка">
-  <span class="dot" aria-hidden="true"></span>
-  <div>
+  <span class="dot" aria-hidden="true"><Icon name={problems ? 'info' : 'check'} size={30} /></span>
+  <div class="msg">
     <h2>{problems ? `Нужно внимание: ${problems}` : waiting ? 'Всё работает, кое-что ещё в процессе' : 'Всё в порядке'}</h2>
     <p class="muted">
       {problems
@@ -144,6 +154,7 @@
         : 'Nova раздаёт фильмы, зрители могут смотреть. Ниже - подробности по каждой части.'}
     </p>
   </div>
+  <button class="btn primary scan" onclick={scanNow} disabled={status.scan.running}><Icon name="refresh" size={16} /> {status.scan.running ? 'Сканируем…' : 'Сканировать папки'}</button>
 </section>
 
 <Scheme {status} />
@@ -282,35 +293,44 @@
   .summary {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 22px;
     margin-bottom: 18px;
-    padding: 18px 20px;
-    border-radius: 20px;
-    background: color-mix(in srgb, var(--ok) 8%, transparent);
-    border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+    padding: 26px 30px;
+    border-radius: 30px;
+    background: linear-gradient(100deg, #0f2a1a, #0a140e);
+    border: 1px solid #1f6b3d;
   }
   .summary.bad {
-    background: rgba(255, 92, 108, 0.08);
-    border-color: rgba(255, 92, 108, 0.35);
+    background: linear-gradient(100deg, #2a1015, #140a0c);
+    border-color: rgba(255, 92, 108, 0.45);
   }
+  .msg { flex: 1; min-width: 0; }
   .summary h2 {
-    margin: 0 0 2px;
-    font-size: 20px;
+    margin: 0 0 4px;
+    font-size: clamp(20px, 2.2vw, 28px);
+    letter-spacing: -0.02em;
   }
   .summary p {
     margin: 0;
   }
   .dot {
     flex: none;
-    width: 14px;
-    height: 14px;
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
-    background: #30d158;
-    box-shadow: 0 0 0 6px rgba(48, 209, 88, 0.18);
+    background: #16a34a;
+    color: #fff;
   }
   .summary.bad .dot {
     background: var(--danger);
-    box-shadow: 0 0 0 6px rgba(255, 92, 108, 0.18);
+  }
+  .scan { flex: none; }
+  @media (max-width: 640px) {
+    .summary { flex-wrap: wrap; padding: 20px; gap: 14px; }
+    .dot { width: 48px; height: 48px; }
+    .scan { width: 100%; justify-content: center; }
   }
   .pane {
     margin-bottom: 16px;
