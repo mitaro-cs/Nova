@@ -12,6 +12,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import BrowseGenres from '$lib/ui/BrowseGenres.svelte';
   import Loading from '$lib/ui/Loading.svelte';
+  import PosterWall from '$lib/social/PosterWall.svelte';
 
   // Обзор как на IMDb: что смотрят друзья, «потому что вам понравилось», новинки, жанры, российское,
   // аниме, популярное и топ-250 (не только то, что есть у нас), поиск по всему IMDb, видео по ссылке.
@@ -108,23 +109,31 @@
 </script>
 
 <div class="rw-page">
-  <header class="rw-head">
-    <div>
+  <section class="stage">
+    <div class="wall" aria-hidden="true"><PosterWall posters={[]} prominent /></div>
+    <div class="inner">
       <h1>Обзор</h1>
-      <p>Что смотрит мир кино - и чего у вас пока нет.</p>
+      <p class="lead">Что смотрит мир кино - и чего у вас пока нет.</p>
+      <form class="find" role="search" onsubmit={submit}>
+        <Icon name="search" size={22} />
+        <input type="search" bind:value={text} placeholder="Поиск по всему IMDb" aria-label="Поиск по IMDb" />
+        {#if searching}<span class="spin" aria-hidden="true"></span>{/if}
+      </form>
+      <div class="bar">
+        <nav class="kinds" aria-label="Что показывать">
+          <a class="chip" class:on={!kind} href="/discover">Всё</a>
+          <a class="chip" class:on={kind === 'movies'} href="/discover?kind=movies">Фильмы</a>
+          <a class="chip" class:on={kind === 'series'} href="/discover?kind=series">Сериалы</a>
+        </nav>
+        <div class="acts">
+          <button class="btn" onclick={() => (finder = true)}><Icon name="link" size={18} /> Смотреть по ссылке</button>
+          {#if session.me?.user.role === 'host'}
+            <a class="btn" href="/admin?tab=catalog#sources">Источники каталога <Icon name="right" size={16} /></a>
+          {/if}
+        </div>
+      </div>
     </div>
-  </header>
-  {#if session.me?.user.role === 'host'}
-    <a class="btn source-settings" href="/admin?tab=catalog#sources">Источники каталога <Icon name="right" size={16} /></a>
-  {/if}
-  <div class="top">
-    <form class="find" role="search" onsubmit={submit}>
-      <Icon name="search" size={20} />
-      <input type="search" bind:value={text} placeholder="Поиск по всему IMDb" aria-label="Поиск по IMDb" />
-      {#if searching}<span class="spin" aria-hidden="true"></span>{/if}
-    </form>
-    <button class="btn" onclick={() => (finder = true)}><Icon name="link" size={18} /> Смотреть по ссылке</button>
-  </div>
+  </section>
 
   {#if q.trim().length >= 2}
     <section aria-label="Найдено">
@@ -164,11 +173,6 @@
     {/each}
   {:else if feed.rows.length}
     <BrowseGenres />
-    <nav class="kinds" aria-label="Что показывать">
-      <a class="chip" class:on={!kind} href="/discover">Всё</a>
-      <a class="chip" class:on={kind === 'movies'} href="/discover?kind=movies">Фильмы</a>
-      <a class="chip" class:on={kind === 'series'} href="/discover?kind=series">Сериалы</a>
-    </nav>
     {#if friendRows.length}<PosterRow title="Друзья смотрят" items={friendRows} />{/if}
     {#each rows as row, i (row.key)}
       <PosterRow title={row.title} items={row.items} href={row.key.startsWith('because') ? null : `/discover?chart=${row.key}`} ranked={row.key.startsWith('top')} {i} />
@@ -191,27 +195,63 @@
 <LinkFinder bind:open={finder} />
 
 <style>
-  .source-settings { margin-bottom: 24px; }
-  .top {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 28px;
+  /* Сцена: стена постеров подборок за заголовком и поиском. Только transform у стены, без blur. */
+  .stage {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: clamp(22px, 3vw, 36px);
+    background: #050506;
+  }
+  .wall {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.5;
+  }
+  .stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(90deg, #050506f2 0%, #050506b8 45%, #0505068c 100%),
+      linear-gradient(180deg, transparent 55%, #050506 100%);
+  }
+  .inner {
+    padding: clamp(28px, 5vw, 72px) clamp(20px, 4vw, 64px) clamp(22px, 3vw, 40px);
+    max-width: 980px;
+  }
+  .inner h1 {
+    font-size: clamp(38px, 5.4vw, 76px);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1;
+  }
+  .lead {
+    margin: 12px 0 clamp(20px, 3vw, 32px);
+    max-width: 46ch;
+    color: #d4d4d8;
+    font-size: clamp(15px, 1.5vw, 19px);
+    line-height: 1.4;
   }
   .find {
-    flex: 1;
-    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 48px;
-    padding: 0 18px;
+    gap: 12px;
+    height: clamp(52px, 5vw, 64px);
+    padding: 0 22px;
     border-radius: 999px;
-    border: 1px solid var(--line);
-    background: var(--surface-2);
+    border: 1px solid #ffffff2e;
+    background: #141416d9;
     color: var(--muted);
+    transition: border-color 0.2s, background 0.2s;
   }
   .find:focus-within {
-    border-color: var(--accent-2);
+    border-color: #ffffffa6;
+    background: #1b1b1e;
   }
   .find input {
     flex: 1;
@@ -219,19 +259,47 @@
     border: 0;
     outline: none;
     background: none;
-    font-size: 16px;
+    font-size: clamp(16px, 1.5vw, 19px);
     color: var(--text);
   }
-  .top .btn {
-    height: 48px;
-    flex: none;
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 16px;
+    margin-top: 18px;
+  }
+  .kinds {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid #ffffff1f;
+    border-radius: 999px;
+    background: #0c0c0ecc;
+  }
+  .kinds .chip {
+    border-color: transparent;
+    background: none;
+  }
+  .kinds .chip.on {
+    background: #fff;
+    color: #0a0a0b;
+  }
+  .acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   @media (max-width: 640px) {
-    .top {
-      flex-direction: column;
+    .acts,
+    .acts .btn {
+      width: 100%;
     }
-    .find {
-      flex: none;
+    .acts .btn {
+      justify-content: center;
     }
   }
   .spin {
@@ -304,12 +372,6 @@
   }
   .tall {
     min-height: 50vh;
-  }
-  .kinds {
-    display: flex;
-    gap: 8px;
-    margin: -8px 0 24px;
-    overflow-x: auto;
   }
   .foot {
     font-size: 13px;
