@@ -201,7 +201,7 @@
         {@const art = artOf(s.it)}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div class="slot" class:side={s.r !== 0} style:--rel={s.r} style:z-index={10 - Math.abs(s.r)} style:opacity={Math.abs(s.r) > 1 ? 0 : 1} in:fade|global={{ duration: 450 }} aria-hidden={s.r !== 0 ? 'true' : undefined} onclick={() => s.r !== 0 && pick(s.i)}>
-          {#if art.src}<img class="backdrop" src={art.src} srcset={art.set} sizes="(max-width: 640px) 100vw, 62vw" alt="" decoding="async" fetchpriority={s.r === 0 ? 'high' : 'auto'} />{/if}
+          {#if art.src}<img class="backdrop" src={art.src} srcset={art.set} sizes="(max-width: 640px) 100vw, 62vw" alt="" decoding="async" fetchpriority={s.r === 0 ? 'high' : 'auto'} onerror={(event) => { const img=event.currentTarget as HTMLImageElement; const fallback=s.it.card?.poster ?? s.it.ext?.poster; if(fallback && img.dataset.fallback !== fallback && img.getAttribute('src') !== fallback){img.dataset.fallback=fallback;img.removeAttribute('srcset');img.src=fallback;}else img.style.visibility='hidden'; }} />{/if}
           {#if Trailer && s.r === 0}<Trailer card={s.it.card} ext={s.it.ext} bind:active={trailerOn} />{/if}
           <div class="shade"></div>
           <div class="dim"></div>
@@ -262,7 +262,7 @@
   .copies { position: absolute; inset: auto 0 0; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr); padding: 0 clamp(20px, 3vw, 48px) clamp(22px, 2.6vw, 40px); }
   .copy { grid-area: 1 / 1; align-self: end; text-align: center; }
   .eyebrow { display: inline-block; padding: 4px 12px; border-radius: 999px; background: #ffffff1f; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #ffffffe0; }
-  h1 { font-size: clamp(34px, 4.7vw, 76px); line-height: .98; letter-spacing: -.04em; font-weight: 900; text-transform: uppercase; margin: 12px 0 10px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; padding-bottom: .06em; }
+  h1 { font-size: clamp(34px, 4.7vw, 76px); line-height: 1.22; letter-spacing: -.04em; font-weight: 900; text-transform: uppercase; margin: 6px 0 4px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; padding-block: .09em; }
   .meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; font-size: 14px; font-weight: 600; color: #ffffffc8; margin: 0; }
   .meta span + span::before { content: '•'; margin-right: 10px; opacity: .45; }
   .rating { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 7px; background: #ffffff26; font-weight: 700; font-size: 13px; }

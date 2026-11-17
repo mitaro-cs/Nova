@@ -18,6 +18,37 @@ const MONTH: i64 = 30 * 86_400_000;
 
 const DAY: i64 = 86_400_000;
 
+#[derive(Deserialize)]
+pub struct PersonSuggestQuery {
+    q: String,
+}
+
+pub async fn person_suggest(
+    State(app): State<Arc<App>>,
+    _viewer: Viewer,
+    Query(query): Query<PersonSuggestQuery>,
+) -> ApiResult<Json<Value>> {
+    let q = query.q.trim().to_lowercase();
+    if q.is_empty() || q.chars().count() > 80 {
+        return Ok(Json(json!([])));
+    }
+    let entries: Vec<(String, String)> = app.db.with(|c| {
+        let mut statement = c.prepare("SELECT ru, COALESCE(orig, '') FROM person_names ORDER BY at DESC LIMIT 5000")?;
+        let rows = statement.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect()
+    })?;
+    let mut found = Vec::new();
+    for (ru, orig) in entries {
+        if (ru.to_lowercase().contains(&q) || orig.to_lowercase().contains(&q)) && !found.contains(&ru) {
+            found.push(ru);
+            if found.len() == 12 {
+                break;
+            }
+        }
+    }
+    Ok(Json(json!(found)))
+}
+
 /// Кто видит раздел профиля: все, друзья или только сам человек.
 pub const LEVELS: [&str; 3] = ["all", "friends", "me"];
 
@@ -243,7 +274,7 @@ pub fn stats(app: &App, id: i64, now: i64, tz_min: i64) -> ApiResult<Value> {
         "dayparts": dayparts, "weekdays": weekdays, "streak": {"best": best, "current": streak},
         "ratings": {"avg": avg, "hist": hist, "count": stars.len()},
         "decades": decades.into_iter().map(|(d, n)| json!({"decade": d, "count": n})).collect::<Vec<_>>(),
-        "actors": cast.into_iter().map(|(n, c)| json!({"name": n, "count": c})).collect::<Vec<_>>(),
+        "actors": cast.into_iter().map(|(n, c)| json!({"name": crate::names::translit(&n), "count": c})).collect::<Vec<_>>(),
         "hours": ((minutes + external_minutes) / 60.0 * 10.0).round() / 10.0,
         "movies": movies + external_movies, "episodes": episodes + external_episodes, "series": series + external_series, "reviews": reviews, "friends": friends,
         "outside": outside,

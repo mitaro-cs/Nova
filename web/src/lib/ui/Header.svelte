@@ -291,9 +291,11 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     padding: 8px max(4px, calc((100% - 640px) / 2)) calc(6px + env(safe-area-inset-bottom));
-    /* Чёрная, как страница: на iPhone под панелью (зона жеста «домой») был виден тёмный ободок другого цвета. */
+    /* Единая панель до нижнего края; безопасная область жеста входит в её фон. */
     background: #000;
-    border-top: 1px solid #ffffff1a;
+    border: 0;
+    border-top: 1px solid #ffffff20;
+    border-radius: 0;
   }
   .tabs a {
     display: grid;

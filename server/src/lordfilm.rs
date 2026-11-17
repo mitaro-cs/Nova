@@ -11,7 +11,7 @@ pub fn movie_url(u: &Url) -> bool {
 
 fn source_url(u: &Url) -> bool {
     u.scheme() == "https"
-        && matches!(u.host_str(), Some(HOST | "sg.lordfilm5.pro"))
+        && matches!(u.host_str(), Some(HOST | "sg.lordfilm5.pro" | "sr.lordfilm5.pro"))
         && u.port().is_none()
         && u.username().is_empty()
         && u.password().is_none()

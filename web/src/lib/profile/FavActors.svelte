@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { errorText, patch } from '$lib/api';
+  import { api, errorText, patch } from '$lib/api';
   import { fadeIn } from '$lib/ui/fade';
   import { placeholder } from '$lib/ui/art';
   import Icon from '$lib/ui/Icon.svelte';
@@ -18,6 +18,20 @@
   let open = $state(false);
   let name = $state('');
   let busy = $state(false);
+  let focused = $state(false);
+  let remote = $state<string[]>([]);
+  const popular = ['Мартин Скорсезе', 'Леонардо Ди Каприо', 'Киллиан Мёрфи', 'Кристиан Бейл', 'Киану Ривз', 'Кейт Уинслет', 'Скарлетт Йоханссон', 'Том Хэнкс', 'Брэд Питт', 'Роберт Де Ниро', 'Марго Робби', 'Дженнифер Лоуренс'];
+  const choices = $derived([...new Set([...suggest, ...popular].filter(n => name.trim() && n.toLocaleLowerCase('ru').includes(name.trim().toLocaleLowerCase('ru'))).concat(remote))].filter(n => !actors.some(a => a.name.toLocaleLowerCase('ru') === n.toLocaleLowerCase('ru'))).slice(0, 8));
+  $effect(() => {
+    const q = name.trim();
+    remote = [];
+    if (!q) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      api<string[]>('/api/people/suggest?q=' + encodeURIComponent(q), {signal: controller.signal}).then(result => { if (!controller.signal.aborted) remote = result; }).catch(() => {});
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  });
 
   const initials = (n: string) => n.split(/\s+/).slice(0, 2).map((w) => w[0]).join('');
   const more = $derived(suggest.filter((s) => !actors.some((a) => a.name.toLowerCase() === s.toLowerCase())).slice(0, 4));
@@ -57,7 +71,7 @@
     <div class="edwrap" class:open>
       <div class="inner">
         <div class="ed">
-          <p class="hint">Любимых {actors.length} из {MAX}. Чтобы добавить другого, сначала уберите кого-то.</p>
+          <p class="hint">Любимых {actors.length} из {MAX}.{actors.length >= MAX ? ' Чтобы добавить другого, сначала уберите кого-то.' : ''}</p>
           <div class="chips">
             {#each actors as a (a.name)}
               <span class="chip">{a.name}<button type="button" aria-label="Убрать {a.name}" onclick={() => remove(a.name)}><Icon name="close" size={12} /></button></span>
@@ -68,7 +82,9 @@
             <div class="chips">{#each more as s (s)}<button type="button" class="sug" onclick={() => add(s)}>+ {s}</button>{/each}</div>
           {/if}
           <form class="add" onsubmit={(e) => (e.preventDefault(), add(name))}>
-            <input class="input" bind:value={name} maxlength="80" placeholder="Имя актёра или актрисы" aria-label="Имя актёра или актрисы" autocomplete="off" />
+            <div class="person-search"><input class="input" bind:value={name} maxlength="80" placeholder="Имя актёра или актрисы" aria-label="Имя актёра или актрисы" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded={focused && choices.length > 0} aria-controls="actor-options" onfocus={() => focused = true} onblur={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.parentElement?.contains(e.relatedTarget)) focused = false; }} onkeydown={(e) => { if (e.key === 'Escape') focused = false; if (e.key === 'ArrowDown' && choices.length) { e.preventDefault(); document.querySelector<HTMLButtonElement>('#actor-options button')?.focus(); } }} />
+              {#if focused && choices.length}<div id="actor-options" class="person-options" role="listbox" aria-label="Подсказки имён">{#each choices as choice (choice)}<button type="button" role="option" aria-selected="false" onpointerdown={(e) => e.preventDefault()} onclick={() => { name = choice; focused = false; }}>{choice}</button>{/each}</div>{/if}
+            </div>
             <button class="btn primary" disabled={!name.trim() || busy}>Добавить</button>
           </form>
         </div>
@@ -97,6 +113,7 @@
 </section>
 
 <style>
+  .person-search{position:relative;flex:1;min-width:0}.person-search>.input{width:100%}.person-options{position:absolute;z-index:20;inset:calc(100% + 6px) 0 auto;display:grid;max-height:280px;overflow:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 30px #0006;padding:6px}.person-options button{background:none;border:0;color:var(--text);font:inherit;text-align:left;padding:11px 12px;border-radius:9px;cursor:pointer}.person-options button:hover,.person-options button:focus-visible{background:var(--surface-3)}
   .sh {
     display: flex;
     align-items: center;

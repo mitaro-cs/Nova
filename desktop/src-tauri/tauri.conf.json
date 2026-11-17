@@ -18,7 +18,9 @@
     "targets": [
       "dmg",
       "app",
-      "nsis"
+      "nsis",
+      "deb",
+      "appimage"
     ],
     "category": "Entertainment",
     "shortDescription": "Домашний кинотеатр: фильмы с вашего компьютера — друзьям онлайн",

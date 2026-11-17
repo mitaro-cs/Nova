@@ -6,6 +6,22 @@ mod common;
 use common::Client;
 use serde_json::{json, Value};
 
+#[tokio::test(flavor = "multi_thread")]
+async fn person_suggestions_use_russian_and_find_original_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    running.app.db.with(|c| c.execute(
+        "INSERT INTO person_names(id,ru,source,at,orig) VALUES ('nm9999999','Мартин Скорсезе','wikidata',1,'Martin Scorsese')",
+        [],
+    )).unwrap();
+    for query in ["Скорсезе", "Scorsese"] {
+        let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
+        let result = host.json(&format!("/api/people/suggest?q={encoded}")).await;
+        assert_eq!(result, json!(["Мартин Скорсезе"]));
+    }
+    running.shutdown().await;
+}
+
 fn ext(id: &str, title: &str, year: i32) -> fsfy::discover::Ext {
     fsfy::discover::Ext {
         id: id.into(),
@@ -28,6 +44,22 @@ async fn signup(public: &str, login: &str) -> (Client, i64) {
     assert!(r.status().is_success(), "регистрация {login}: {}", r.status());
     let id = c.json("/api/me").await["user"]["profile"]["id"].as_i64().unwrap();
     (c, id)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn new_profile_gets_a_character_and_keeps_its_choice() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, host) = common::start(dir.path()).await;
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let (mut person, id) = signup(&public, "character-viewer").await;
+    let me = person.json("/api/me").await;
+    let avatar = me["user"]["profile"]["avatar"].as_i64().unwrap();
+    assert!((0..12).contains(&avatar));
+    assert!(me["user"]["profile"]["photo"].is_null());
+    assert!(person.send("PATCH", "/api/me", json!({"avatar":8})).await.status().is_success());
+    assert_eq!(person.json("/api/me").await["user"]["profile"]["avatar"], 8);
+    assert_eq!(host.json(&format!("/api/members/{id}")).await["person"]["avatar"], 8);
+    running.shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

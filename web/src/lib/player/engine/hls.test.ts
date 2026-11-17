@@ -5,7 +5,7 @@ import type { Step } from '../plan';
 type Handler = (event: string, data?: unknown) => void;
 
 class FakeHls {
-  static Events = { MANIFEST_PARSED: 'manifest', LEVEL_SWITCHED: 'level', ERROR: 'error' };
+  static Events = { MANIFEST_PARSED: 'manifest', LEVEL_SWITCHED: 'level', ERROR: 'error', AUDIO_TRACKS_UPDATED: 'audio', SUBTITLE_TRACKS_UPDATED:'subtitles' };
   static ErrorTypes = { MEDIA_ERROR: 'media', NETWORK_ERROR: 'network' };
   static isSupported = () => true;
   static last: FakeHls | null = null;
@@ -16,6 +16,11 @@ class FakeHls {
     { height: 720, width: 1280 },
   ];
   currentLevel = -1;
+  audioTracks = [{ name: 'Русский', lang: 'ru', default: true }, { name: 'Original', lang: 'en', default: false }];
+  audioTrack = 0;
+  subtitleTracks = [{name:'Русские',lang:'ru',forced:false},{name:'English',lang:'en',forced:false}];
+  subtitleTrack = -1;
+  subtitleDisplay = false;
   loadLevel = -1;
   src = '';
   media: unknown = null;
@@ -58,6 +63,17 @@ describe('createHlsEngine', () => {
     FakeHls.last = null;
   });
 
+  it('показывает и переключает аудиодорожки внешнего HLS', async () => {
+    const e = createHlsEngine({ source: '/stream.m3u8', light: false, loader });
+    let labels: string[] = [];
+    e.onAudioTracks((tracks) => { labels = tracks.map((t) => t.label); });
+    await e.start(video, auto, 0);
+    FakeHls.last!.emit('manifest');
+    expect(labels).toEqual(['Русский', 'Original']);
+    e.setAudioTrack(1);
+    expect(FakeHls.last!.audioTrack).toBe(1);
+  });
+
   it('грузит общий список с нужным звуком и начинает с места', async () => {
     const e = createHlsEngine(base);
     await e.start(video, auto, 90);
@@ -66,6 +82,35 @@ describe('createHlsEngine', () => {
     expect(h.config.startPosition).toBe(90);
     expect(h.media).toBe(video);
     expect(h.config.maxBufferLength).toBe(60);
+  });
+
+  it('показывает, выбирает и выключает все субтитры внешнего HLS',async()=>{
+    const e = createHlsEngine({source:'/master.m3u8',light:false,loader});
+    let tracks: string[] = [];
+    e.onSubtitleTracks(t => tracks = t.map(s => s.id));
+    await e.start(video,auto,0);
+    const h = FakeHls.last!; h.emit('manifest');
+    expect(tracks).toEqual(['hls:0','hls:1']);
+    for(let i=0;i<tracks.length;i++) { e.setSubtitleTrack(i); expect(h.subtitleTrack).toBe(i); expect(h.subtitleDisplay).toBe(true); }
+    h.subtitleTracks.push({name:'Третьи',lang:'ru',forced:false}); h.emit('subtitles');
+    expect(tracks).toHaveLength(3);
+    e.setSubtitleTrack(-1); expect(h.subtitleTrack).toBe(-1); expect(h.subtitleDisplay).toBe(false);
+  });
+
+  it('внешний поток сохраняет все уровни, в том числе одинаковую высоту, и обновляет список озвучек', async () => {
+    const e = createHlsEngine({source:'/master.m3u8',light:false,loader});
+    let tracks: string[] = [];
+    e.onAudioTracks(t => tracks = t.map(a => a.label));
+    await e.start(video,auto,0);
+    const h = FakeHls.last!;
+    h.levels.push({height:2160,width:3840});
+    h.emit('manifest');
+    expect(e.levels().map(l => l.i)).toEqual([3,0,1,2]);
+    for(const level of e.levels()) { e.setLevel(level.i); expect(h.currentLevel).toBe(level.i); }
+    h.audioTracks.push({name:'Третья озвучка',lang:'ru',default:false});
+    h.emit('audio');
+    expect(tracks).toEqual(['Русский','Original','Третья озвучка']);
+    for(let i=0;i<tracks.length;i++) { e.setAudioTrack(i); expect(h.audioTrack).toBe(i); }
   });
 
   it('высота: список этой высоты', async () => {

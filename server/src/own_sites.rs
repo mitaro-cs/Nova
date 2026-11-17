@@ -17,7 +17,39 @@ pub const MAX: usize = 20;
 pub struct Catalog {
     pub domain: String,
     #[serde(default)]
+    pub name: String,
+    #[serde(default = "all_kinds")]
+    pub kind: String,
+    #[serde(default)]
+    pub manifest: Option<String>,
+    #[serde(default)]
     pub search: Option<String>,
+    #[serde(default = "enabled_by_default")]
+    pub enabled: bool,
+}
+
+fn all_kinds() -> String {
+    "all".into()
+}
+
+pub fn enabled_domains(app: &App) -> Vec<String> {
+    load(app).into_iter().filter(|c| c.enabled).map(|c| c.domain).collect()
+}
+
+/// Проверка также действует для уже открытых ссылок после отключения источника.
+pub fn link_enabled(app: &App, id: i64) -> crate::error::ApiResult<()> {
+    use rusqlite::OptionalExtension;
+    let domain: Option<String> = app
+        .db
+        .with(|c| c.query_row("SELECT domain FROM catalog_links WHERE link_id = ?", [id], |r| r.get(0)).optional())?;
+    if domain.is_some_and(|d| !enabled_domains(app).contains(&d)) {
+        return Err(crate::error::ApiError::bad("source_disabled", "Источник выключен хостом - выберите другой"));
+    }
+    Ok(())
+}
+
+fn enabled_by_default() -> bool {
+    true
 }
 
 pub fn load(app: &App) -> Vec<Catalog> {
@@ -102,9 +134,10 @@ pub fn extract(html: &str, base: &Url, domain: &str, names: &[&str], year: Optio
         {
             continue;
         }
-        let mut labels = vec![plain(body)];
+        let mut labels = Vec::new();
         labels.extend(title.captures(attrs).map(|t| plain(&t[1])));
         labels.extend(alt.captures(body).map(|a| plain(&a[1])));
+        labels.push(plain(body));
         let path = url.path().replace(['-', '_', '/', '.'], " ");
         let Some(label) = labels
             .into_iter()
@@ -118,6 +151,17 @@ pub fn extract(html: &str, base: &Url, domain: &str, names: &[&str], year: Optio
             .and_then(|i| base.join(&decode(&i[1])).ok())
             .filter(crate::outbound::valid_url)
             .map(|u| u.to_string());
+        // Год может присутствовать только в URL карточки. Сохраняем его в подписи,
+        // чтобы последующая проверка результата не отбросила уже подтверждённое совпадение.
+        let label = if let Some(year) = year.filter(|year| path.split_whitespace().any(|p| p == year.to_string())) {
+            if !label.contains(&year.to_string()) {
+                format!("{label} ({year})")
+            } else {
+                label
+            }
+        } else {
+            label
+        };
         out.push(json!({
             "site": "own", "url": url.as_str(), "label": label.chars().take(200).collect::<String>(),
             "thumbUrl": thumb, "duration": null, "author": domain,
@@ -143,6 +187,56 @@ pub async fn search(c: &Catalog, names: &[&str], year: Option<i64>) -> Option<Ve
         }
     }
     answered.then(Vec::new)
+}
+
+/// Поиск серии на подключённом сайте: показываем только явно найденный сезон и эпизод.
+pub async fn search_episode(
+    app: &App,
+    c: &Catalog,
+    names: &[&str],
+    year: Option<i64>,
+    season: i64,
+    episode: i64,
+) -> Option<Vec<Value>> {
+    // Карточки некоторых сериалов не указывают год в результатах. Пропускаем только точное
+    // название и проверяем год на самой странице до разбора плеера.
+    let pages = search(c, names, None).await?;
+    let mut result = Vec::new();
+    for page in pages.into_iter().take(3) {
+        let Some(url) = page["url"].as_str() else { continue };
+        let label = page["label"].as_str().unwrap_or("");
+        if !names.iter().any(|n| crate::util::norm(n) == crate::util::norm(label)) {
+            continue;
+        }
+        if let Some(year) = year {
+            let Ok((_, html)) = crate::api::stream_link::page_for(Some(app), url).await else { continue };
+            let pattern =
+                format!(r#"(?is)itemprop=["'](?:dateCreated|datePublished)["'][^>]*>(?:\s|<[^>]*>)*{year}\b"#);
+            if !regex::Regex::new(&pattern).ok().is_some_and(|r| r.is_match(&html)) {
+                continue;
+            }
+        }
+        let entry = crate::site_sources::Entry {
+            url: url.to_owned(),
+            title: names.first().copied().unwrap_or("").to_owned(),
+            kind: "series".into(),
+            year: year.and_then(|y| i32::try_from(y).ok()),
+            imdb: None,
+            remote_id: None,
+            season: None,
+            episode: None,
+        };
+        let Ok((variants, _)) = crate::site_sources::variants(&entry, Some(app)).await else { continue };
+        for variant in variants.into_iter().filter(|v| v.season == Some(season) && v.episode == Some(episode)) {
+            let Ok(url) = Url::parse(&variant.url) else { continue };
+            if !crate::site_sources::is_provider(&url) {
+                continue;
+            }
+            let y = year.map(|v| format!(" ({v})")).unwrap_or_default();
+            result.push(json!({"site":"own","url":variant.url,"label":format!("{}{y} {season} сезон {episode} серия · {}",entry.title,variant.label),"thumbUrl":page["thumbUrl"],"duration":null,"author":c.domain}));
+        }
+    }
+    Some(result)
 }
 
 /// Какой из обычных адресов поиска у сайта работает: тот, чья страница откликается на известное название.

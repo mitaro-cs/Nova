@@ -4,6 +4,7 @@ pub(crate) mod account;
 mod activity;
 mod admin;
 mod catalog;
+mod catalog_import;
 mod diag;
 mod discover;
 pub(crate) mod links;
@@ -16,6 +17,7 @@ mod profile;
 mod profiles;
 mod resume;
 pub(crate) mod rooms;
+mod site_import;
 mod social;
 mod stats;
 pub(crate) mod stream_link;
@@ -46,6 +48,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/mail", get(mail::settings).put(mail::save_settings))
         .route("/api/admin/mail/test", post(mail::test_mail))
         .route("/api/auth/register", post(account::register))
+        .route("/api/auth/availability", get(account::availability))
         .route("/api/invites/{code}", get(account::invite))
         .route("/api/host/enter", get(account::enter))
         .route("/api/host/fullscreen", post(account::fullscreen))
@@ -103,6 +106,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/me/profile", patch(profile::set_decor))
         .route("/api/me/favorites", put(profile::set_favorite))
         .route("/api/me/people", get(profile::my_people).put(profile::like_person))
+        .route("/api/people/suggest", get(profile::person_suggest))
         .route("/api/people/{id}/watched", get(profile::watched))
         .route(
             "/api/me/cover",
@@ -128,6 +132,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/links/{id}/next", get(next_episode::next))
         .route("/api/links/{id}/stream/source", get(stream_link::source))
         .route("/api/links/{id}/stream/index.m3u8", get(stream_link::index))
+        .route("/api/links/{id}/stream/subtitle/{track}", get(stream_link::subtitle_playlist))
+        .route("/api/links/{id}/stream/index.mpd", get(stream_link::dash_index))
+        .route("/api/links/{id}/stream/dash/{origin}/{*path}", get(stream_link::dash_part))
         .route("/api/links/{id}/stream/p", get(stream_link::part))
         .route("/api/lists/{id}", get(lists::list).patch(lists::rename).delete(lists::delete))
         .route("/api/lists/{id}/members", post(lists::invite))
@@ -183,6 +190,17 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/settings", get(admin::settings).put(admin::save_settings))
         .route("/api/admin/catalogs", get(admin::catalogs).put(admin::save_catalogs))
         .route("/api/admin/catalogs/probe", post(admin::probe_catalog))
+        .route("/api/admin/site-sources", get(site_import::list))
+        .route("/api/admin/site-sources/{id}/connect", post(site_import::connect))
+        .route("/api/admin/site-sources/{id}/import", post(site_import::start))
+        .route("/api/admin/site-sources/{id}/stop", post(site_import::stop))
+        .route("/api/admin/site-sources/{id}/match", post(site_import::assign))
+        .route("/api/admin/site-sources/{id}/verify", post(site_import::verify))
+        .route("/api/admin/catalogs/check", post(catalog_import::check))
+        .route(
+            "/api/admin/catalogs/import",
+            post(catalog_import::import).layer(axum::extract::DefaultBodyLimit::max(catalog_import::MAX_BYTES)),
+        )
         .route("/api/admin/logins", get(admin::logins))
         .route("/api/admin/libraries", get(admin::libraries).post(admin::add_library))
         .route("/api/admin/libraries/pick", post(admin::pick_folder))
@@ -208,6 +226,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/imdb-art/preview", get(admin::imdb_art_preview))
         .route("/api/admin/ext/{id}/imdb-art", get(admin::ext_imdb_art))
         .route("/api/admin/ext/{id}/soon", put(admin::set_ext_soon))
+        .route(
+            "/api/admin/ext/{id}/image/{which}",
+            put(admin::upload_ext_image).layer(axum::extract::DefaultBodyLimit::max(crate::images::MAX_IMAGE + 1024)),
+        )
         .route("/api/admin/ext/{id}/image/{which}/imdb", post(admin::set_ext_imdb_image))
         .route("/api/admin/titles/{id}/image/{which}/imdb", post(admin::set_imdb_image))
         .route("/api/admin/files/{id}", patch(admin::edit_file))

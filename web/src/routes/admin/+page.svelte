@@ -34,7 +34,7 @@
   const INFO: Record<string, { hint: string; title: string; text: string; can: string[] }> = {
     overview: { hint: 'Всё ли работает', title: 'Обзор', text: 'Состояние Nova одним взглядом: что работает, что требует внимания и кто сейчас смотрит.', can: ['Проверить, всё ли в порядке', 'Скопировать адрес для друзей', 'Увидеть, кто и что смотрит'] },
     folders: { hint: 'Где лежат фильмы', title: 'Папки', text: 'Папки на этом компьютере или внешнем диске, из которых Nova берёт фильмы и сериалы. Новые файлы подхватываются сами.', can: ['Добавить или убрать папку', 'Перетащить файлы в своё место для фильмов', 'Посмотреть, как называть папки и файлы'] },
-    catalog: { hint: 'Описания и обложки', title: 'Каталог', text: 'Все фильмы и сериалы на сайте. Если описание нашлось не то - выберите верное; можно сменить обложку и фон или скрыть фильм.', can: ['Найти правильное описание', 'Изменить название, год, жанры', 'Скрыть от зрителей или убрать фильм без файлов'] },
+    catalog: { hint: 'Источники и библиотека', title: 'Каталог', text: 'Подключайте источники фильмов, сериалов и аниме, управляйте импортом и своей библиотекой.', can: ['Подключить сайт или YummyAnime', 'Управлять импортом и приоритетом', 'Изменить описание, постер и фон'] },
     people: { hint: 'Зрители и права', title: 'Люди', text: 'Кто может заходить в Nova. Приглашайте ссылкой, сбрасывайте пароль, давайте право скачивать.', can: ['Пригласить ссылкой или добавить вручную', 'Сбросить пароль без почты', 'Закрыть доступ или удалить'] },
     wishes: { hint: 'Что просят добавить', title: 'Просьбы', text: 'Фильмы, которые зрители попросили добавить. Положите фильм в папку - просьба уйдёт сама.', can: ['Посмотреть, что просят', 'Отклонить просьбу'] },
     access: { hint: 'Вход из интернета', title: 'Доступ', text: 'Как друзья попадают в Nova не из вашей домашней сети. Рекомендуемый способ - CloudPub: постоянный адрес без настройки роутера.', can: ['Включить доступ из интернета', 'Сменить способ доступа', 'Узнать адрес в домашней сети'] },
@@ -124,6 +124,18 @@
 </div>
 
 <style>
+  .admin :global(.panel .pane){border:1px solid var(--line);border-radius:20px;padding:22px;margin-block:16px;background:var(--surface)}
+  .admin :global(.panel .pane h3){font-size:17px;letter-spacing:-.02em}
+  .admin :global(.panel .input){min-height:42px;border-radius:12px}
+  @media(min-width:1100px){
+    .admin{display:grid;grid-template-columns:220px minmax(0,1fr);gap:0 26px;max-width:1680px;margin:auto}
+    .admin>.rw-head{grid-column:1 / -1;padding-block:12px 20px}
+    .sections{grid-column:1;display:flex!important;flex-direction:column;gap:6px!important;position:sticky;top:calc(var(--header) + 18px);align-self:start}
+    .sections a{border-radius:14px!important;padding:13px 12px!important;background:transparent!important}.sections a.on{background:var(--surface-2)!important}
+    .lbl small{display:block!important;white-space:normal!important;font-size:10px!important;margin-top:4px}
+    .cols{grid-column:2;min-width:0}.tab-head ul{display:none!important}
+    .cols .panel.rw-plate{background:var(--surface)!important;border:1px solid var(--line);border-radius:24px!important;padding:24px!important}
+  }
   /* «Витрина»: разделы - плитки одной строкой сверху (на узком экране - лента), под ними один лист с содержимым.
      Никаких боковых колонок и залезающих друг на друга плит: всё идёт сверху вниз. */
   .sections {

@@ -263,11 +263,12 @@ pub async fn register(
     auth::check_password(&b.password)?;
     let pw = b.password.clone();
     let hash = auth::password_job(move || auth::hash_password(&pw)).await.map_err(ApiError::internal)?;
-    let id = app.db.tx(|tx| {
+    let result:Result<i64,&str> = app.db.tx(|tx| {
         let taken: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM users WHERE login = ?)", [&login], |r| r.get(0))?;
         if taken {
-            return Ok(None);
+            return Ok(Err("login_taken"));
         }
+        if name_taken(tx,&name,None)? {return Ok(Err("name_taken"));}
         if let Some(c) = code.as_deref().filter(|_| need_invite) {
             tx.execute("UPDATE invites SET used = used + 1, uses_left = CASE WHEN uses_left IS NULL THEN NULL ELSE uses_left - 1 END WHERE code = ?", [c])?;
         }
@@ -275,11 +276,19 @@ pub async fn register(
             "INSERT INTO users (login, name, pass, role, created_at) VALUES (?, ?, ?, 'viewer', ?)",
             params![login, name, hash, now_ms()],
         )?;
-        Ok(Some(tx.last_insert_rowid()))
+        Ok(Ok(tx.last_insert_rowid()))
     })?;
-    let Some(id) = id else {
-        return Err(ApiError::new(StatusCode::CONFLICT, "login_taken", "Такой логин уже занят"));
-    };
+    let id = result.map_err(|code| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            if code == "name_taken" { "name_taken" } else { "login_taken" },
+            if code == "name_taken" {
+                "Это имя уже используется"
+            } else {
+                "Этот логин уже занят"
+            },
+        )
+    })?;
     app.signup_limit.fail(&signups);
     app.site_limit.fail("signup");
     let t = auth::create_session(&app, id, false)?;
@@ -334,17 +343,70 @@ pub async fn me(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>
 #[derive(Deserialize)]
 pub struct MeBody {
     name: Option<String>,
+    login: Option<String>,
     avatar: Option<i64>,
     autoplay: Option<bool>,
 }
 
-/// Имя (у аккаунта и профиля - одно), рисованный аватар, автозапуск следующей серии.
+pub(super) fn name_taken(c: &rusqlite::Connection, name: &str, except: Option<i64>) -> rusqlite::Result<bool> {
+    let key = name.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let mut statement = c.prepare("SELECT name FROM users WHERE (?1 IS NULL OR id!=?1)")?;
+    for row in statement.query_map([except], |r| r.get::<_, String>(0))? {
+        if row?.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase() == key {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+#[derive(Deserialize)]
+pub struct AvailabilityQuery {
+    login: Option<String>,
+    name: Option<String>,
+}
+pub async fn availability(State(app): State<Arc<App>>, Query(q): Query<AvailabilityQuery>) -> ApiResult<Json<Value>> {
+    let login = q.login.as_deref().map(auth::check_login).transpose()?;
+    let name = q.name.as_deref().map(auth::check_name).transpose()?;
+    let result = app.db.with(|c| {
+        let login_taken = if let Some(login) = &login {
+            c.query_row("SELECT EXISTS(SELECT 1 FROM users WHERE login=?)", [login], |r| r.get::<_, bool>(0))?
+        } else {
+            false
+        };
+        let name_taken = if let Some(name) = &name { name_taken(c, name, None)? } else { false };
+        Ok(json!({"loginTaken":login_taken,"nameTaken":name_taken}))
+    })?;
+    Ok(Json(result))
+}
+
+/// Имя (у аккаунта и профиля - одно), логин, рисованный аватар, автозапуск следующей серии.
 pub async fn update_me(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<MeBody>) -> ApiResult<Json<Value>> {
     let name = b.name.as_deref().map(auth::check_name).transpose()?;
-    app.db.tx(|tx| {
+    let login = b.login.as_deref().map(auth::check_login).transpose()?;
+    if let Some(l) = &login {
+        if l != &v.login {
+            let taken: bool = app.db.with(|c| {
+                c.query_row("SELECT EXISTS(SELECT 1 FROM users WHERE login = ? AND id != ?)", params![l, v.id], |r| {
+                    r.get(0)
+                })
+            })?;
+            if taken {
+                return Err(ApiError::bad("login_taken", "Такой логин уже занят"));
+            }
+        }
+    }
+    let name_conflict = app.db.tx(|tx| {
+        if let Some(n) = &name {
+            if name_taken(tx, n, Some(v.id))? {
+                return Ok(true);
+            }
+        }
         if let Some(n) = &name {
             tx.execute("UPDATE users SET name = ? WHERE id = ?", params![n, v.id])?;
             tx.execute("UPDATE profiles SET name = ? WHERE id = ?", params![n, v.profile.id])?;
+        }
+        if let Some(l) = &login {
+            tx.execute("UPDATE users SET login = ? WHERE id = ?", params![l, v.id])?;
         }
         if let Some(a) = b.avatar {
             let a = a.rem_euclid(super::profiles::AVATARS);
@@ -353,8 +415,11 @@ pub async fn update_me(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<MeB
         if let Some(a) = b.autoplay {
             tx.execute("UPDATE profiles SET autoplay = ? WHERE id = ?", params![a, v.profile.id])?;
         }
-        Ok(())
+        Ok(false)
     })?;
+    if name_conflict {
+        return Err(ApiError::new(StatusCode::CONFLICT, "name_taken", "Это имя уже используется"));
+    }
     Ok(Json(json!({"ok": true})))
 }
 

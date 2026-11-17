@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Catalogs from './Catalogs.svelte';
   import MailSettings from './MailSettings.svelte';
   import NightMode from './NightMode.svelte';
   import { api, errorText, post, put } from '$lib/api';
@@ -9,6 +8,8 @@
   import Icon from '$lib/ui/Icon.svelte';
   import Select from '$lib/ui/Select.svelte';
   import type { ExtCard } from '$lib/types';
+  import { artW, placeholder } from '$lib/ui/art';
+  let {sourcesOnly=false}:{sourcesOnly?:boolean}=$props();
 
   interface S {
     metadataLanguage: 'ru' | 'source';
@@ -35,12 +36,21 @@
   let site = $state('');
   let sourceQuery = $state(''), sourceUrl = $state('');
   let sourceOptions = $state<ExtCard[]>([]), sourceTitle = $state<ExtCard | null>(null), sourceBusy = $state(false);
-  async function findSourceTitle() {
-    if (sourceQuery.trim().length < 2) return;
-    sourceBusy = true; error = '';
-    try { sourceOptions = await api<ExtCard[]>('/api/discover/search?q=' + encodeURIComponent(sourceQuery.trim())); }
-    catch (e) { error = errorText(e); } finally { sourceBusy = false; }
-  }
+  let sourceSearching = $state(false), sourceSearchError = $state('');
+  $effect(() => {
+    const q = sourceQuery.trim();
+    sourceOptions = []; sourceTitle = null; sourceSearchError = '';
+    if (!q) { sourceSearching = false; return; }
+    const controller = new AbortController();
+    sourceSearching = true;
+    const timer = setTimeout(() => {
+      api<ExtCard[]>('/api/discover/search?q=' + encodeURIComponent(q), {signal: controller.signal})
+        .then(items => { if (!controller.signal.aborted) sourceOptions = items; })
+        .catch(() => { if (!controller.signal.aborted) sourceSearchError = 'Не удалось найти названия. Попробуйте ещё раз.'; })
+        .finally(() => { if (!controller.signal.aborted) sourceSearching = false; });
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
+  });
   async function importSource(e: SubmitEvent) {
     e.preventDefault(); if (!sourceTitle || !sourceUrl.trim() || sourceBusy) return;
     sourceBusy = true; error = msg = '';
@@ -88,13 +98,13 @@
 </script>
 
 {#if s}
-  <NightMode />
+  {#if !sourcesOnly}<NightMode />{/if}
   {#if msg}<p class="ok">{msg}</p>{/if}
   {#if error}<p class="error">{error}</p>{/if}
 
-  <section class="card pane">
+  {#if !sourcesOnly}<section class="card pane">
     <h3>Сайт</h3>
-    <label class="field"><span>Язык описаний</span><Select label="Язык описаний" value={s.metadataLanguage} onchange={(v) => save({ metadataLanguage: v })} options={[{ value: 'ru', label: 'Русский - без английских заглушек' }, { value: 'source', label: 'Разрешить текст на языке источника' }]} /></label>
+    <p class="muted small">Язык интерфейса и описаний — русский. Оригинальные имена сохраняются в метаданных.</p>
     <form class="line" onsubmit={(e) => (e.preventDefault(), save({ siteName: s!.siteName }))}>
       <label class="field grow"><span>Название</span><input class="input" bind:value={s.siteName} maxlength="60" /></label>
       <button class="btn">Сохранить</button>
@@ -160,7 +170,8 @@
     <button class="btn sm" onclick={refreshAll}><Icon name="refresh" size={14} /> Обновить все описания</button>
   </section>
 
-  <section class="card pane">
+  {/if}
+  {#if sourcesOnly}<section class="card pane">
     <h3>Видео по ссылке</h3>
     <p class="muted">
       Поиск на Rutube работает без ключа. Для поиска в VK Видео нужен сервисный ключ приложения VK
@@ -178,11 +189,9 @@
   <section class="card pane" aria-labelledby="video-import">
     <h3 id="video-import">Источник для фильма или сериала</h3>
     <p class="muted">Найдите фильм, сериал или аниме, затем вставьте ссылку на видео или страницу. Для поддерживаемого сериала Nova загрузит доступные серии и выберет их для всех зрителей.</p>
-    <form class="line" onsubmit={(e) => { e.preventDefault(); void findSourceTitle(); }}>
-      <label class="field grow"><span>Название</span><input class="input" bind:value={sourceQuery} placeholder="Название фильма или сериала" /></label>
-      <button class="btn" disabled={sourceBusy || sourceQuery.trim().length < 2}>Найти</button>
-    </form>
-    {#if sourceOptions.length}<label class="field"><span>Выберите из каталога</span><Select label="Выберите из каталога" value={sourceTitle?.id ?? ''} onchange={(v) => sourceTitle = sourceOptions.find(x => x.id === v) ?? null} options={[{ value: '', label: 'Выберите название' }, ...sourceOptions.map((item) => ({ value: item.id, label: `${item.title} ${item.year ?? ''} · ${item.kind === 'series' ? 'сериал' : 'фильм'}` }))]} /></label>{/if}
+    <label class="field"><span>Название</span><input class="input" bind:value={sourceQuery} placeholder="Название фильма или сериала" autocomplete="off" /></label>
+    {#if sourceSearching}<p class="muted small" role="status">Ищем названия…</p>{:else if sourceSearchError}<p class="error" role="alert">{sourceSearchError}</p>{:else if sourceQuery.trim() && !sourceOptions.length}<p class="muted small">Ничего не найдено</p>{/if}
+    {#if sourceOptions.length}<div class="source-results" role="listbox" aria-label="Названия из каталога">{#each sourceOptions as item (item.id)}<button type="button" class="source-result" role="option" aria-selected={sourceTitle?.id === item.id} onclick={() => sourceTitle = item}><span class="source-poster" style:background={placeholder(item.title)}>{#if item.poster}<img src={artW(item.poster, 160)} alt="" loading="lazy" onerror={(e) => (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'} />{/if}</span><span><b>{item.title}</b><small>{item.year ?? 'Год неизвестен'} · {item.kind === 'series' ? 'сериал' : 'фильм'}</small></span></button>{/each}</div>{/if}
     <form class="line" onsubmit={importSource}>
       <label class="field grow"><span>Ссылка на видео или страницу сериала</span><input class="input" type="url" bind:value={sourceUrl} placeholder="https://…" required /></label>
       <button class="btn" disabled={!sourceTitle || !sourceUrl.trim() || sourceBusy}>{sourceBusy ? 'Загружаем…' : 'Добавить и выбрать'}</button>
@@ -213,7 +222,8 @@
     {/if}
   </section>
 
-  <Catalogs />
+  {/if}
+  {#if !sourcesOnly}<a class="btn" href="/admin?tab=catalog#sources">Источники фильмов, сериалов и аниме →</a>
 
   <section class="card pane">
     <h3>ffmpeg</h3>
@@ -240,11 +250,13 @@
     </p>
     <LoginJournal />
   </section>
+  {/if}
 {/if}
 
 <MailSettings />
 
 <style>
+  .source-results{display:grid;gap:4px;max-height:350px;overflow:auto;border:1px solid var(--line);border-radius:14px;padding:6px}.source-result{display:flex;align-items:center;gap:12px;width:100%;padding:7px;border:0;border-radius:9px;background:transparent;color:var(--text);text-align:left;font:inherit;cursor:pointer}.source-result:hover,.source-result[aria-selected=true]{background:var(--surface-3)}.source-poster{width:40px;height:58px;flex:none;border-radius:5px;overflow:hidden}.source-poster img{width:100%;height:100%;object-fit:cover}.source-result small{display:block;color:var(--muted);margin-top:4px}
   .hint {
     margin: -4px 0 0;
     font-size: 12.5px;

@@ -16,6 +16,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
 mod night;
+mod source_access;
 // Автообновление с GitHub (mitaro-cs/Nova): подписанный `latest.json`, ключ - секрет выпуска.
 mod update;
 
@@ -29,6 +30,15 @@ struct DesktopHost {
 }
 
 impl Host for DesktopHost {
+    fn can_verify_sources(&self) -> bool {
+        true
+    }
+    fn source_open(&self, source: &str) -> Result<(), String> {
+        source_access::open(self.app.get().ok_or("Окно хоста недоступно")?, source)
+    }
+    fn source_cookies(&self, source: &str) -> Result<Vec<(String, String)>, String> {
+        source_access::cookies(self.app.get().ok_or("Окно хоста недоступно")?, source)
+    }
     fn night(&self, action: &str, lights: bool) -> serde_json::Value {
         self.app
             .get()

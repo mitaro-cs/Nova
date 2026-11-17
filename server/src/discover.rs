@@ -297,6 +297,10 @@ fn text(v: &Value) -> Option<String> {
 }
 
 pub fn valid_id(id: &str) -> bool {
+    imdb_id(id) || (id.len() == 66 && id.starts_with("nv") && id[2..].bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+pub fn imdb_id(id: &str) -> bool {
     id.len() >= 9 && id.len() <= 12 && id.starts_with("tt") && id[2..].bytes().all(|b| b.is_ascii_digit())
 }
 
@@ -464,7 +468,7 @@ pub fn pending_titles(db: &crate::db::Db, limit: i64, now: i64) -> rusqlite::Res
             "SELECT e.id FROM ext_titles e
              WHERE e.title NOT GLOB '*[а-яА-ЯёЁ]*'
                AND NOT EXISTS (SELECT 1 FROM title_localizations l WHERE l.id = e.id)
-               AND (e.ru_at IS NULL OR e.ru_at < ?1 - ?2)
+               AND e.id LIKE 'tt%' AND (e.ru_at IS NULL OR e.ru_at < ?1 - ?2)
              ORDER BY (SELECT MIN(pos) FROM ext_charts ch WHERE ch.ext_id = e.id) IS NULL,
                       (SELECT MIN(pos) FROM ext_charts ch WHERE ch.ext_id = e.id), e.updated_at DESC
              LIMIT ?3",
@@ -803,10 +807,27 @@ pub fn card_sql(kids: bool) -> String {
 }
 
 pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
+    let id: String = r.get(0)?;
+    let raw_title: String = r.get(2)?;
+    let title = if raw_title.chars().any(|c| matches!(c, 'А'..='я' | 'Ё' | 'ё')) {
+        raw_title.clone()
+    } else {
+        crate::site_sources::SOURCES
+            .iter()
+            .find(|s| s.imdb == Some(id.as_str()))
+            .and_then(|s| s.title)
+            .map(String::from)
+            .or_else(|| match id.as_str() {
+                "tt9458304" => Some("Дороро".into()),
+                "tt0468569" => Some("Тёмный рыцарь".into()),
+                _ => None,
+            })
+            .unwrap_or(raw_title)
+    };
     Ok(ExtCard {
         id: r.get(0)?,
         kind: r.get(1)?,
-        title: r.get(2)?,
+        title,
         original: r.get(3)?,
         year: r.get(4)?,
         rating: r.get(5)?,

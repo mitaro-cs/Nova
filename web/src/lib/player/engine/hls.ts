@@ -10,18 +10,24 @@ export interface Level {
   i: number;
   height: number;
   label?: number;
+  display?: string;
 }
 
 /** Минимум, который мы берём от hls.js (и что подменяем в тестах). */
 export interface HlsLike {
   new (config: Record<string, unknown>): HlsInstance;
   isSupported(): boolean;
-  Events: { MANIFEST_PARSED: string; LEVEL_SWITCHED: string; ERROR: string };
+  Events: { MANIFEST_PARSED: string; LEVEL_SWITCHED: string; ERROR: string; AUDIO_TRACKS_UPDATED?: string; SUBTITLE_TRACKS_UPDATED?: string };
   ErrorTypes: { MEDIA_ERROR: string; NETWORK_ERROR: string };
 }
 
 export interface HlsInstance {
-  levels: { height: number; width: number }[];
+  levels: { height: number; width: number; bitrate?: number; videoCodec?: string }[];
+  audioTracks?: { name?: string; lang?: string; default?: boolean }[];
+  audioTrack?: number;
+  subtitleTracks?: {name?:string;lang?:string;forced?:boolean}[];
+  subtitleTrack?: number;
+  subtitleDisplay?: boolean;
   currentLevel: number;
   loadLevel: number;
   on(event: string, cb: (event: string, data: never) => void): void;
@@ -54,6 +60,10 @@ export interface HlsEngine extends Engine {
   onLevels(cb: (levels: Level[]) => void): void;
   /** Высота текущего уровня (или null). */
   onLevel(cb: (height: number | null) => void): void;
+  onAudioTracks(cb: (tracks: { index: number; label: string; lang: string | null; default: boolean }[]) => void): void;
+  setAudioTrack(index: number): void;
+  onSubtitleTracks(cb: (tracks: {id:string;label:string;lang:string|null;forced:boolean}[]) => void): void;
+  setSubtitleTrack(index: number): void;
   /** На паузе hls.js не качает вперёд (экономит интернет и нагрузку на хосте). */
   pauseBuffering(): void;
   resumeBuffering(): void;
@@ -77,6 +87,8 @@ export function createHlsEngine(ctx: HlsCtx): HlsEngine {
   let fatalCb: ((code: string) => void) | null = null;
   let levelsCb: ((l: Level[]) => void) | null = null;
   let levelCb: ((h: number | null) => void) | null = null;
+  let tracksCb: ((tracks: { index: number; label: string; lang: string | null; default: boolean }[]) => void) | null = null;
+  let subtitlesCb: ((tracks: {id:string;label:string;lang:string|null;forced:boolean}[]) => void) | null = null;
   let current: Level[] = [];
 
   return {
@@ -108,15 +120,26 @@ export function createHlsEngine(ctx: HlsCtx): HlsEngine {
         fragLoadPolicy: policy(45_000, 120_000, [4, 500, 4000], [6, 1000, 8000]),
       }) as HlsInstance;
       hls = h;
+      if (ctx.source) h.subtitleDisplay = false;
       h.on(Hls.Events.LEVEL_SWITCHED, ((_e: string, d: { level: number }) => levelCb?.(h.levels[d.level]?.height ?? null)) as never);
       h.on(Hls.Events.MANIFEST_PARSED, (() => {
-        // Разные качества (без повторов подписи) - от лучшего.
+        // Для внешнего HLS показываем каждый вариант, включая одинаковые разрешения.
         const seen = new Set<number>();
         current = h.levels
-          .map((l, i) => ({ i, height: l.height, label: qualityTier(l.height, l.width) }))
-          .filter((l) => l.height && !seen.has(l.label) && seen.add(l.label))
+          .map((l, i) => ({ i, height: l.height, label: qualityTier(l.height, l.width),
+            ...(ctx.source ? {display: [l.height ? `${qualityTier(l.height,l.width)}p` : 'Исходный поток',
+              l.bitrate ? `${(l.bitrate / 1_000_000).toFixed(1)} Мбит/с` : null, l.videoCodec].filter(Boolean).join(' · ')} : {}) }))
+          .filter((l) => ctx.source || (l.height && !seen.has(l.label) && seen.add(l.label)))
           .sort((a, b) => b.height - a.height);
         levelsCb?.(current);
+        if (ctx.source) tracksCb?.((h.audioTracks ?? []).map((t, index) => ({ index, label: t.name || t.lang || `Дорожка ${index + 1}`, lang: t.lang || null, default: !!t.default })));
+        if (ctx.source) subtitlesCb?.((h.subtitleTracks ?? []).map((t,index) => ({id:`hls:${index}`,label:t.name || t.lang || `Субтитры ${index+1}`,lang:t.lang || null,forced:!!t.forced})));
+      }) as never);
+      if (ctx.source && Hls.Events.AUDIO_TRACKS_UPDATED) h.on(Hls.Events.AUDIO_TRACKS_UPDATED, (() => {
+        tracksCb?.((h.audioTracks ?? []).map((t,index) => ({index,label:t.name || t.lang || `Дорожка ${index+1}`,lang:t.lang || null,default:!!t.default})));
+      }) as never);
+      if (ctx.source && Hls.Events.SUBTITLE_TRACKS_UPDATED) h.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (() => {
+        subtitlesCb?.((h.subtitleTracks ?? []).map((t,index) => ({id:`hls:${index}`,label:t.name || t.lang || `Субтитры ${index+1}`,lang:t.lang || null,forced:!!t.forced})));
       }) as never);
       h.on(Hls.Events.ERROR, ((_e: string, d: { fatal?: boolean; type?: string }) => {
         if (!d.fatal) return;
@@ -151,6 +174,10 @@ export function createHlsEngine(ctx: HlsCtx): HlsEngine {
     onLevel(cb) {
       levelCb = cb;
     },
+    onAudioTracks(cb) { tracksCb = cb; },
+    setAudioTrack(index) { if (hls) hls.audioTrack = index; },
+    onSubtitleTracks(cb) { subtitlesCb = cb; },
+    setSubtitleTrack(index) { if(hls) { hls.subtitleDisplay = index >= 0; hls.subtitleTrack = index; } },
     pauseBuffering() {
       hls?.pauseBuffering?.();
     },

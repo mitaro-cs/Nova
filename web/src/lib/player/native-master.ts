@@ -9,6 +9,5 @@ export function nativeLevels(text: string) {
     variants.push({i: variants.length, height, label: qualityTier(height,Number(resolution?.[1]))});
   }
   return variants.filter(v => v.height > 0)
-    .filter((v, i, all) => all.findIndex(x => x.label === v.label) === i)
     .sort((a,b) => b.height-a.height);
 }

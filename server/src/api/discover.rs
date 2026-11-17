@@ -43,6 +43,19 @@ pub fn ext_card(app: &App, v: &Viewer, id: &str) -> ApiResult<ExtCard> {
 /// Подборки ленты. Пусто (ещё не загружали) - просим обновить.
 pub async fn feed(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {
     let mut rows = Vec::new();
+    let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
+    for (kind, key, label) in [
+        ("movie", "catalog_movies", "Фильмы из подключённых источников"),
+        ("series", "catalog_series", "Сериалы и аниме из подключённых источников"),
+    ] {
+        let mut items = ext_cards(&app, &v,
+            "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
+            "e.title LIMIT 20", &[&kind, &domains])?;
+        items.truncate(ROW as usize);
+        if !items.is_empty() {
+            rows.push(json!({"key":key,"title":label,"items":items}));
+        }
+    }
     if let Some(row) = because(&app, &v)? {
         rows.push(row);
     }
@@ -101,6 +114,18 @@ fn because(app: &App, v: &Viewer) -> ApiResult<Option<Value>> {
 
 /// Вся подборка целиком (например, топ-250).
 pub async fn chart(State(app): State<Arc<App>>, v: Viewer, Path(key): Path<String>) -> ApiResult<Json<Value>> {
+    if matches!(key.as_str(), "catalog_movies" | "catalog_series") {
+        let (kind, title) = if key == "catalog_movies" {
+            ("movie", "Фильмы из подключённых источников")
+        } else {
+            ("series", "Сериалы и аниме из подключённых источников")
+        };
+        let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
+        let items = ext_cards(&app, &v,
+            "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
+            "e.title", &[&kind, &domains])?;
+        return Ok(Json(json!({"key":key,"title":title,"items":items})));
+    }
     let title = FEEDS.iter().find(|c| c.0 == key).map(|c| c.1).ok_or_else(ApiError::not_found)?;
     let items = ext_cards(
         &app,
@@ -125,7 +150,7 @@ pub async fn search(
     Query(q): Query<SearchQuery>,
 ) -> ApiResult<axum::response::Response> {
     let query = q.q.trim();
-    if query.chars().count() < 2 {
+    if query.is_empty() {
         return Ok(axum::response::IntoResponse::into_response(Json(json!([]))));
     }
     if query.chars().count() > 120 {
@@ -174,6 +199,70 @@ pub async fn search(
     Ok(response)
 }
 
+/// Страница источника определяется по тому же устойчивому id, что и при импорте.
+async fn source_poster(app: &App, id: &str) -> Option<String> {
+    if !id.starts_with("nv") {
+        return None;
+    }
+    let rows: Vec<(String, String, String)> = app.db.with(|c| {
+        let mut st = c.prepare("SELECT domain,url,metadata FROM site_import_entries WHERE json_extract(metadata,'$.title')=(SELECT title FROM ext_titles WHERE id=?1) AND json_extract(metadata,'$.kind')=(SELECT kind FROM ext_titles WHERE id=?1)")?;
+        let rows = st.query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        rows.collect()
+    }).ok()?;
+    let (domain, source_url, metadata) = rows.into_iter().find(|(domain, url, _)| {
+        format!("nv{}", crate::util::sha256_hex(format!("{domain}:{url}").as_bytes())) == id
+    })?;
+    let source = crate::site_sources::by_domain(&domain)?;
+    let entry: crate::site_sources::Entry = serde_json::from_str(&metadata).ok()?;
+    if source.id == "yummy" {
+        let anime_id = entry.remote_id?;
+        let data = crate::site_sources::json(&format!("https://old.yummyani.me/api/anime/{anime_id}")).await.ok()?;
+        let raw = data["response"]["poster"]["fullsize"].as_str()?;
+        let raw = if raw.starts_with("//") { format!("https:{raw}") } else { raw.to_owned() };
+        let image = reqwest::Url::parse(&raw).ok()?;
+        return (image.scheme() == "https" && image.host_str() == Some("static.yani.tv")).then_some(raw);
+    }
+    let (page, html) = super::stream_link::page_for(Some(app), &source_url).await.ok()?;
+    let tags = regex::Regex::new(r#"(?is)<meta\b[^>]*>"#).ok()?;
+    let property = regex::Regex::new(r#"(?i)(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["']"#).ok()?;
+    let content = regex::Regex::new(r#"(?i)\bcontent\s*=\s*["']([^"']+)["']"#).ok()?;
+    for tag in tags.find_iter(&html) {
+        if !property.is_match(tag.as_str()) {
+            continue;
+        }
+        let Some(raw) = content.captures(tag.as_str()) else { continue };
+        let image = page.join(&crate::site_sources::decode(&raw[1])).ok()?;
+        if image.scheme() == "https" && image.host_str() == page.host_str() && crate::outbound::valid_url(&image) {
+            return Some(image.into());
+        }
+    }
+    None
+}
+
+/// Для старой отдельной карточки принимаем совпадение только с точным названием, типом и годом
+/// из адреса страницы источника. Если совпадений несколько, чужую обложку не выбираем.
+fn matched_source_poster(app: &App, id: &str) -> Option<String> {
+    if !id.starts_with("nv") {
+        return None;
+    }
+    let rows: Vec<(String,String,String,String,String)> = app.db.with(|c| {
+        let mut st=c.prepare("SELECT s.domain,s.url,e.title,e.kind,s.metadata FROM site_import_entries s JOIN ext_titles e ON e.id=?1 AND json_extract(s.metadata,'$.title')=e.title AND json_extract(s.metadata,'$.kind')=e.kind")?;
+        let rows=st.query_map([id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?)))?;
+        rows.collect()
+    }).ok()?;
+    let (_, url, title, kind, _) = rows.into_iter().find(|(domain, url, _, _, _)| {
+        format!("nv{}", crate::util::sha256_hex(format!("{domain}:{url}").as_bytes())) == id
+    })?;
+    let parsed = reqwest::Url::parse(&url).ok()?;
+    let re = regex::Regex::new(r"(?i)-((?:19|20)\d{2})\.html$").ok()?;
+    let year: i32 = re.captures(parsed.path())?[1].parse().ok()?;
+    let matches:Vec<String>=app.db.with(|c|{
+        let mut st=c.prepare("SELECT e.id FROM ext_titles e WHERE e.id LIKE 'tt%' AND e.kind=?1 AND e.year=?2 AND (NULLIF(e.poster,'') IS NOT NULL OR NULLIF(e.poster_url,'') IS NOT NULL) AND (e.title=?3 OR EXISTS(SELECT 1 FROM title_localizations l WHERE l.id=e.id AND l.title=?3)) LIMIT 2")?;
+        let rows=st.query_map(rusqlite::params![kind,year,title],|r|r.get(0))?;rows.collect()
+    }).ok()?;
+    (matches.len() == 1).then(|| format!("/api/discover/poster/{}", matches[0]))
+}
+
 /// Постер загружается отдельным запросом картинки, не задерживая JSON поиска.
 pub async fn poster(
     State(app): State<Arc<App>>,
@@ -191,7 +280,10 @@ pub async fn poster(
     if let Some(name) = saved.filter(|name| app.images.path(name).is_some_and(|path| path.is_file())) {
         return Ok(axum::response::Redirect::temporary(&format!("/img/{name}")));
     }
-    let miss = format!("poster.miss.{id}.{}", crate::util::sha256_hex(url.as_deref().unwrap_or("").as_bytes()));
+    if let Some(poster) = matched_source_poster(&app, &id) {
+        return Ok(axum::response::Redirect::temporary(&poster));
+    }
+    let miss = format!("poster.miss.v2.{id}.{}", crate::util::sha256_hex(url.as_deref().unwrap_or("").as_bytes()));
     if now_ms() - app.db.setting_or(&miss, "0").parse::<i64>().unwrap_or(0) < 600_000 {
         return Err(ApiError::not_found());
     }
@@ -200,11 +292,15 @@ pub async fn poster(
         name = tokio::time::timeout(Duration::from_secs(6), app.images.download(image)).await.ok().and_then(Result::ok);
     }
     if name.is_none() {
-        let candidate = tokio::time::timeout(Duration::from_secs(6), crate::media_meta::poster_candidate(&app, &id))
-            .await
-            .ok()
-            .and_then(Result::ok)
-            .flatten();
+        let candidate = tokio::time::timeout(Duration::from_secs(6), async {
+            if let Some(source) = source_poster(&app, &id).await {
+                return Some(source);
+            }
+            crate::media_meta::poster_candidate(&app, &id).await.ok().flatten()
+        })
+        .await
+        .ok()
+        .flatten();
         if let Some(image) = candidate.filter(|candidate| Some(candidate) != url.as_ref()) {
             name = tokio::time::timeout(Duration::from_secs(6), app.images.download(&image))
                 .await
@@ -256,6 +352,9 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
     let mut known: Option<i64> =
         app.db.with(|c| c.query_row("SELECT detailed FROM ext_titles WHERE id = ?", [&id], |r| r.get(0)).optional())?;
     if known.is_none() {
+        if !discover::imdb_id(&id) {
+            return Err(ApiError::not_found());
+        }
         let got = tokio::time::timeout(Duration::from_secs(7), discover::detail(&app, &id)).await;
         if !matches!(got, Ok(Ok(_))) {
             return Err(ApiError::bad("imdb", "IMDb сейчас не отвечает - попробуйте позже"));
@@ -279,7 +378,9 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
             |r| r.get(0),
         )
     })?;
-    let refreshing = (known != Some(discover::DETAILED) || missing_imdb_art) && now_ms() - retry > 5 * 60_000;
+    let refreshing = discover::imdb_id(&id)
+        && (known != Some(discover::DETAILED) || missing_imdb_art)
+        && now_ms() - retry > 5 * 60_000;
     if refreshing && app.detail_jobs.lock().insert(id.clone()) {
         let a = app.clone();
         let title_id = id.clone();
@@ -367,6 +468,18 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
         let jobs = app.detail_jobs.lock();
         jobs.contains(&id) || jobs.contains(&format!("rich:{id}"))
     };
+    let mut seasons = list("seasons");
+    let imported: Vec<i64> = app.db.with(|c| {
+        let mut st = c.prepare("SELECT DISTINCT season FROM ext_episodes WHERE ext_id=? ORDER BY season")?;
+        let rows = st.query_map([&id], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+    })?;
+    for season in imported {
+        if !seasons.contains(&json!(season)) {
+            seasons.push(json!(season));
+        }
+    }
+    seasons.sort_by_key(|s| s.as_i64().unwrap_or(0));
     Ok(Json(json!({
         "card": card, "overview": overview, "runtime": runtime, "votes": votes,
         "refreshing": refreshing,
@@ -378,7 +491,7 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
         "localCard": local.first(),
         "lists": super::lists::of_ext(&app, &v, &id)?,
         "links": super::links::of(&app, v.profile.id, None, Some(&id))?,
-        "seasons": list("seasons"),
+        "seasons": seasons,
         "lastSeen": last_seen.map(|(season, episode)| json!({"season": season, "episode": episode})),
         "friends": super::activity::of_title(&app, &v, None, Some(&id))?,
     })))
@@ -408,7 +521,8 @@ pub async fn episodes(
     let season = q.season.or_else(|| seasons.first().copied()).unwrap_or(1);
     let job = format!("episodes:{id}:{season}");
     let last = app.db.setting_or(&job, "0").parse::<i64>().unwrap_or(0);
-    if !discover::season_fresh(&app, &id, season)
+    if discover::imdb_id(&id)
+        && !discover::season_fresh(&app, &id, season)
         && now_ms() - last > 60_000
         && app.detail_jobs.lock().insert(job.clone())
     {

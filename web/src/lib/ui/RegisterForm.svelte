@@ -4,6 +4,7 @@
   import { api, errorText, post } from '$lib/api';
   import { toast } from '$lib/ui/toast.svelte';
   import { loadMe } from '$lib/session.svelte';
+  import Availability from '$lib/account/Availability.svelte';
 
   let { invite = '', askInvite = true }: { invite?: string; askInvite?: boolean } = $props();
 
@@ -45,9 +46,10 @@
       <input class="input" bind:value={code} autocapitalize="characters" autocomplete="off" required />
     </label>
   {/if}
-  <label class="field"><span>Как вас зовут</span><input class="input" bind:value={name} autocomplete="name" required maxlength="60" /></label>
+  <label class="field"><span>Как вас зовут</span><input class="input" bind:value={name} autocomplete="name" required maxlength="60" /><Availability value={name} kind="name" /></label>
   <label class="field">
     <span>Логин (латиница, цифры)</span><input class="input" bind:value={login} autocomplete="username" required minlength="3" maxlength="32" />
+    <Availability value={login} kind="login" />
   </label>
   <div class="field"><PasswordInput caption="Пароль (от 6 символов)" bind:value={password} autocomplete="new-password" required minlength={6} />
   </div>

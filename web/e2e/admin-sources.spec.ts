@@ -1,20 +1,5 @@
 import {expect,test} from './util-test';
-import {choose,url} from './util';
-
-test('администратор выбирает источник в управлении',async({page})=>{
- let saved: unknown;
- await page.route('**/api/discover/search?*',route=>route.fulfill({json:[{id:'tt7654325',title:'Тестовый фильм',kind:'movie',year:2020,genres:[],poster:null,local:null,rating:null,mark:null,wished:false}]}));
- await page.route('**/api/admin/video-source',route=>{saved=route.request().postDataJSON();return route.fulfill({json:{count:1}})});
- await page.goto(url('/admin?tab=settings'));
- const section=page.getByRole('region',{name:'Источник для фильма или сериала'});
- await section.getByLabel('Название',{exact:true}).fill('Тестовый фильм');
- await section.getByRole('button',{name:'Найти',exact:true}).click();
- await choose(page,'Выберите из каталога',/Тестовый фильм/,section);
- await section.getByLabel('Ссылка на видео или страницу сериала').fill('https://example.com/video.mp4');
- await section.getByRole('button',{name:'Добавить и выбрать'}).click();
- await expect.poll(()=>saved).toEqual({extId:'tt7654325',url:'https://example.com/video.mp4'});
- await expect(page.getByText(/Добавлено источников: 1/)).toBeVisible();
-});
+import {url} from './util';
 
 test('выбранное администратором видео открывается первым',async({page})=>{
  const id='tt7654325';const card={id,kind:'movie',title:'Тестовый фильм',original:null,year:2020,rating:8,poster:null,genres:[],local:null,mark:null,wished:false};

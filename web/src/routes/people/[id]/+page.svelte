@@ -15,7 +15,7 @@
   import { TABS, type ProfilePage, type ProfileTab } from '$lib/profile/types';
   import VisPick from '$lib/profile/VisPick.svelte';
   import StarsShow from '$lib/social/StarsShow.svelte';
-  import type { VisLevel } from '$lib/types';
+  import type { VisLevel, ExtCard } from '$lib/types';
   import { placeholder } from '$lib/ui/art';
   import Icon from '$lib/ui/Icon.svelte';
   import { toast } from '$lib/ui/toast.svelte';
@@ -65,6 +65,27 @@
   }
 
   const hidden = $derived(p?.hidden ?? { stats: false, watched: false, reviews: false });
+  let externalWatched = $state<ExtCard[]>([]);
+  let watchedLoading = $state(false);
+  let watchedError = $state(false);
+  $effect(() => {
+    const who = id;
+    if (!p || hidden.watched || shown !== 'watched') return;
+    const controller = new AbortController();
+    externalWatched = [];
+    watchedLoading = true;
+    watchedError = false;
+    Promise.all(['movie', 'series'].map(kind =>
+      api<{ ext: ExtCard[] }>(`/api/people/${who}/watched?kind=${kind}`, { signal: controller.signal })
+    )).then(results => {
+      if (!controller.signal.aborted) externalWatched = results.flatMap(result => result.ext);
+    }).catch(() => {
+      if (!controller.signal.aborted) watchedError = true;
+    }).finally(() => {
+      if (!controller.signal.aborted) watchedLoading = false;
+    });
+    return () => controller.abort();
+  });
   const isHidden = (t: ProfileTab) => t !== 'home' && (t === 'stats' ? hidden.stats : t === 'watched' ? hidden.watched : hidden.reviews);
   const defs = $derived<{ id: ProfileTab; label: string; n: number | null }[]>([
     { id: 'home', label: 'Обзор', n: null },
@@ -211,7 +232,7 @@
             {:else if shown === 'watched'}
               {#if hidden.watched}
                 <LockBox />
-              {:else if p.watched.length}
+              {:else if p.watched.length || externalWatched.length}
                 <ul class="posters">
                   {#each p.watched as c, i (c.id)}
                     <li class="rise" style:--i={i}>
@@ -220,13 +241,18 @@
                       </a>
                     </li>
                   {/each}
+                  {#each externalWatched as c (c.id)}
+                    <li><a href="/ext/{c.id}" title={c.title} style:background={c.poster ? undefined : placeholder(c.title)}>
+                      {#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" width="342" height="513" />{:else}<span>{c.title}</span>{/if}
+                    </a></li>
+                  {/each}
                 </ul>
                 <p class="seen-links">
                   <a class="btn sm" href="/people/{p.person.id}/watched?kind=movie"><Icon name="film" size={14} /> Все фильмы</a>
                   <a class="btn sm" href="/people/{p.person.id}/watched?kind=series"><Icon name="tv" size={14} /> Все сериалы</a>
                 </p>
               {:else}
-                <p class="muted none">Просмотренного пока нет.</p>
+                <p class="muted none">{watchedLoading ? 'Загружаем просмотренное…' : watchedError ? 'Не удалось загрузить просмотренное. Обновите страницу.' : 'Просмотренного пока нет.'}</p>
               {/if}
             {:else if hidden.reviews}
               <LockBox />
@@ -264,14 +290,15 @@
 {/if}
 
 <style>
+  @media(min-width:1001px){.pf{grid-template-columns:minmax(0,1fr)!important;gap:28px!important}.main{width:100%}}
   .pf {
     display: grid;
     grid-template-columns: 304px minmax(0, 1fr);
     gap: 22px;
     align-items: start;
-    max-width: 1440px;
+    max-width: none;
     margin: 0 auto;
-    padding: calc(var(--header) + 18px) var(--gutter) 64px;
+    padding: calc(var(--header) + 18px) var(--gutter) calc(40px + var(--tabbar));
   }
   .main {
     min-width: 0;
@@ -593,6 +620,13 @@
     }
   }
   /* Самое узкое окно или сильное увеличение: вкладки в две колонки, чёрту заменяет подчёркивание самой кнопки. */
+  @media (max-width: 600px) {
+    .pf { padding-top:0;padding-inline:0;gap:10px; }
+    .main { padding-inline:16px; }
+    .tabs { gap:10px; }
+    .tabs button { font-size:12px;padding:14px 0; }
+    .tabs sup { font-size:10px; }
+  }
   @media (max-width: 360px) {
     .tabs {
       display: grid;

@@ -98,6 +98,7 @@
         label: extra.label ?? null,
         thumb: extra.thumbUrl ?? null,
         duration: extra.duration ?? null,
+        sourceDomain: extra.site === 'own' ? extra.author : undefined,
       });
       onadded?.();
       if (together) {

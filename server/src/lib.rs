@@ -7,6 +7,7 @@ pub mod auth;
 pub mod catalog_search;
 pub mod cloudpub;
 pub mod copy;
+pub mod dash_proxy;
 pub mod db;
 pub mod directors;
 pub mod discover;
@@ -28,6 +29,7 @@ pub mod own_sites;
 pub mod release;
 pub mod rooms;
 pub mod ruwiki;
+pub mod site_sources;
 pub mod stream;
 pub mod taste;
 pub mod themes;
@@ -56,6 +58,8 @@ pub const DEFAULT_PORT: u16 = 17480;
 pub const DEFAULT_WINDOW_PORT: u16 = 17481;
 
 pub struct App {
+    pub source_sessions: Mutex<HashMap<String, Vec<(String, String)>>>,
+    pub site_jobs: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
     pub detail_jobs: Mutex<std::collections::HashSet<String>>,
     pub db: db::Db,
     pub data: PathBuf,
@@ -180,6 +184,9 @@ impl Running {
     /// Остановить приём запросов и дождаться окончания.
     pub async fn shutdown(self) {
         let _ = self.stop.send(true);
+        for (_, task) in self.app.site_jobs.lock().drain() {
+            task.abort();
+        }
         self.app.access.shutdown();
         for s in self.servers {
             let _ = tokio::time::timeout(Duration::from_secs(5), s).await;
@@ -228,6 +235,8 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
     }
 
     let app = Arc::new(App {
+        source_sessions: Mutex::default(),
+        site_jobs: Mutex::default(),
         detail_jobs: Mutex::default(),
         tools: RwLock::new(library::probe::Tools::find(db.setting("tools.ffmpeg").as_deref())),
         db,
@@ -280,7 +289,6 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
     tokio::spawn(discover::posters(app.clone()));
     tokio::spawn(discover::titles_ru(app.clone()));
     tokio::spawn(names::warm_directors(app.clone()));
-    tokio::spawn(video_search::warm(app.clone()));
     tokio::spawn(discover::shrink_posters(app.clone()));
     tokio::spawn(rooms::janitor(app.clone()));
     tokio::spawn(api::backfill_link_thumbs(app.clone()));

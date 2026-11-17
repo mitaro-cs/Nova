@@ -11,11 +11,20 @@
   // «Плеер сайта» (встроенный плеер Rutube/VK или страница своего сайта). YouTube - только своим.
   const id = $derived(Number(page.params.id));
   let link = $state<VideoLink | null>(null);
-  let src = $state<{ url: string; hls: boolean; title: string; linkId: number; start: number } | null>(null);
+  let src = $state<{ url: string; hls: boolean; dash?: boolean; title: string; linkId: number; start: number } | null>(null);
   let own = $state(false);
+  function sourcePage(l: VideoLink | null) {
+    if (l?.kind !== 'site') return null;
+    const url = new URL(l.url);
+    if (url.origin !== 'https://hd1.garri-potter-lordfilms.com' || !/^\/\d+-[\w-]+\.html$/.test(url.pathname)) return null;
+    url.hash = 'smotret';
+    return url.href;
+  }
+  const embeddedPage = $derived(sourcePage(link));
   // Другие видео этого фильма - «Озвучка» в плеере.
   let alts = $state<{ id: number; label: string }[]>([]);
   let error = $state('');
+  let fetchedTitle=$state('');
   let nextSource = $state<{id:number;title:string}|null>(null);
   let nextLoading = $state(false), nextChecked = false, finished = $state(false);
   function prepareNext() {
@@ -27,6 +36,8 @@
   $effect(() => {
     const want = id;
     link = null;
+    src = null;
+    fetchedTitle='';
     nextSource=null;nextLoading=false;nextChecked=false;finished=false;
     own = false;
     alts = [];
@@ -38,20 +49,19 @@
         const q = l.titleId ? `titleId=${l.titleId}` : l.extId ? `extId=${encodeURIComponent(l.extId)}` : '';
         if (q)
           api<VideoLink[]>(`/api/links?${q}`).then(
-            (all) => want === id && (alts = all.filter((a, index) => all.findIndex(b => b.url === a.url) === index).filter((a) => a.kind !== 'youtube' && a.season === l.season && a.episode === l.episode).map((a) => ({ id: a.id, label: a.label }))),
+            (all) => want === id && (alts = all.filter((a) => a.kind !== 'youtube' && a.season === l.season && a.episode === l.episode).map((a) => ({ id: a.id, label: a.label }))),
             () => {},
           );
-        if (l.kind === 'youtube') { src=null;own=true;return; }
+        if (l.kind === 'youtube' || sourcePage(l)) { src=null;own=true;return; }
         // С места, где остановился (досмотрел почти до конца - с начала).
         // Место - последнее в этом фильме (серии) по любому видео: на другом устройстве могли
         // смотреть другой источник.
         const r = await api<{ position: number | null; duration: number | null }>(`/api/links/${want}/resume`).catch(() => null);
         const p = r?.position != null && r.duration ? { position: r.position, duration: r.duration } : l.progress;
         const start = p && p.position < p.duration * 0.95 ? p.position : 0;
-        if (l.kind === 'direct') return void (src = { url: l.url, hls: /\.m3u8(\?|$)/i.test(l.url), title: l.label, linkId: l.id, start });
         try {
-          const s = await api<{ url: string; hls: boolean }>(`/api/links/${want}/stream/source`);
-          if (want === id) src = { ...s, title: l.label, linkId: l.id, start };
+          const s = await api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${want}/stream/source`);
+          if (want === id) src = { ...s, title: fetchedTitle||l.label, linkId: l.id, start };
         } catch (x) {
           if (want !== id) return;
           // Сайт не отдал поток - его собственный плеер (у своего сайта - сообщение и ссылка).
@@ -71,11 +81,14 @@
     expected = null;
     if (!l) return;
     const url = l.extId ? `/api/discover/title/${l.extId}` : l.titleId ? `/api/titles/${l.titleId}` : null;
-    if (!url || l.season != null) return;
-    api<{ runtime?: number | null; card?: { runtime?: number | null } }>(url).then(
+    if (!url) return;
+    api<{ runtime?: number | null; card?: { runtime?: number | null;title?:string } }>(url).then(
       (d) => {
         const min = d.runtime ?? d.card?.runtime ?? null;
-        if (link === l) expected = min ? min * 60 : null;
+        if (link === l) {
+          expected = l.season==null&&min ? min * 60 : null;
+          if(d.card?.title){fetchedTitle=d.card.title;if(src)src={...src,title:d.card.title};}
+        }
       },
       () => {},
     );
@@ -122,7 +135,12 @@
   </PlayerShell>
 {:else}
   <div class="stage">
-    {#if own && link?.embed}
+    {#if own && embeddedPage}
+      <iframe src={embeddedPage} title="Просмотр на странице источника"
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    {:else if own && link?.embed}
       <iframe
         src={link.embed}
         title={link.label}

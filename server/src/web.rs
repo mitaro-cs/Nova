@@ -64,13 +64,32 @@ fn is_tv(headers: &HeaderMap, query: Option<&str>) -> bool {
     })
 }
 
-/// Какое сжатие понимает браузер: brotli лучше, иначе gzip.
+/// Какое сжатие понимает браузер: brotli лучше, иначе gzip. `q=0` и `*` учитываем:
+/// `br;q=0` значит «brotli не надо», `*` без явного запрета - можно любой из наших.
 fn accepts(headers: &axum::http::HeaderMap) -> Option<bool> {
     let v = headers.get(header::ACCEPT_ENCODING)?.to_str().ok()?;
-    let has = |n: &str| v.split(',').any(|p| p.split(';').next().is_some_and(|x| x.trim() == n));
-    if has("br") {
+    let q = |name: &str| -> Option<f32> {
+        for p in v.split(',') {
+            let mut it = p.split(';');
+            if it.next()?.trim() != name {
+                continue;
+            }
+            let mut weight = 1.0f32;
+            for param in it {
+                if let Some(w) = param.trim().strip_prefix("q=") {
+                    weight = w.parse().unwrap_or(0.0);
+                }
+            }
+            return Some(weight);
+        }
+        None
+    };
+    let star = q("*").unwrap_or(0.0);
+    let br = q("br").unwrap_or(star);
+    let gz = q("gzip").unwrap_or(star);
+    if br > 0.0 && br >= gz {
         Some(true)
-    } else if has("gzip") {
+    } else if gz > 0.0 {
         Some(false)
     } else {
         None
@@ -142,7 +161,7 @@ pub async fn spa(uri: Uri, headers: HeaderMap) -> Response {
 const CSP: &str =
     "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; \
 script-src 'self' 'unsafe-inline'; connect-src 'self' https:; font-src 'self'; \
-frame-src https://rutube.ru https://vkvideo.ru https://vk.com https://www.youtube-nocookie.com; \
+frame-src https://rutube.ru https://vkvideo.ru https://vk.com https://www.youtube-nocookie.com https://hd1.garri-potter-lordfilms.com; \
 frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 /// Заголовки на все ответы. `X-Fsfy: 1` - метка «ответил наш сервер», а не страница туннеля:
@@ -239,6 +258,12 @@ mod pack_tests {
         assert_eq!(accepts(&h), Some(false));
         h.insert(header::ACCEPT_ENCODING, HeaderValue::from_static("brx, identity"));
         assert_eq!(accepts(&h), None);
+        h.insert(header::ACCEPT_ENCODING, HeaderValue::from_static("br;q=0, gzip"));
+        assert_eq!(accepts(&h), Some(false), "br запрещён - только gzip");
+        h.insert(header::ACCEPT_ENCODING, HeaderValue::from_static("gzip;q=0, br;q=0.5"));
+        assert_eq!(accepts(&h), Some(true));
+        h.insert(header::ACCEPT_ENCODING, HeaderValue::from_static("*"));
+        assert_eq!(accepts(&h), Some(true), "звёздочка разрешает brotli");
 
         let data = "let x = 1; ".repeat(500);
         let gz = pack("_app/immutable/test.js", data.as_bytes(), false);

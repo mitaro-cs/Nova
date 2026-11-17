@@ -23,6 +23,9 @@
     // настройки и источник
     qualityLabel = '',
     rate,
+    volume=1,
+    onvolume,
+    onnext,
     alts = [],
     linkId = null,
     canReportWrong = false,
@@ -57,6 +60,9 @@
     episodesBusy?: boolean;
     qualityLabel?: string;
     rate: number;
+    volume?:number;
+    onvolume?:(value:number)=>void;
+    onnext?:()=>void;
     alts?: { id: number; label: string }[];
     linkId?: number | null;
     canReportWrong?: boolean;
@@ -105,8 +111,11 @@
     {/each}
   {:else if panel === 'settings'}
     <h4>Настройки просмотра</h4>
+    {#if onnext}<button role="menuitem" onclick={onnext}><Icon name="next" size={18} /> Следующая серия</button>{/if}
+    {#if info.titleId && info.kind === 'series'}<button role="menuitem" onclick={() => onpanel('episodes')}><Icon name="tv" size={18} /> Сезоны и серии</button>{/if}
     <button role="menuitem" onclick={() => onpanel('quality')}><Icon name="sliders" size={18} /> Качество <small>{qualityLabel}</small></button>
     <button role="menuitem" onclick={() => onpanel('speed')}><Icon name="play" size={18} /> Скорость <small>{speedText(rate)}</small></button>
+    {#if onvolume}<label class="boost">Громкость · {Math.round(volume*100)}%<input aria-label="Громкость до 200%" type="range" min="0" max="2" step="0.02" value={volume} oninput={e=>onvolume?.(Number(e.currentTarget.value))} /><span>0% <b>100%</b> 200%</span></label>{/if}
     {#if info.play.subs.length}<button role="menuitem" onclick={() => onpanel('subs')}><Icon name="captions" size={18} /> Субтитры и размер</button>{/if}
     {#if info.play.audio.length > 1}<button role="menuitem" onclick={() => onpanel('audio')}><Icon name="audio" size={18} /> Озвучка</button>{/if}
     {#if linked && alts.length > 1}<button role="menuitem" onclick={() => onpanel('sources')}><Icon name="link" size={18} /> Источник видео</button>{/if}
@@ -116,24 +125,25 @@
     <h4>Источник видео</h4>
     {#each alts as a (a.id)}
       <button role="menuitemradio" aria-checked={a.id === linkId} class:on={a.id === linkId} onclick={() => onalt?.(a.id)}>
-        <Icon name="check" size={16} /> {a.label}
+        {a.label}
       </button>
     {/each}
   {:else if panel === 'audio'}
     <h4>Озвучка</h4>
     {#each info.play.audio as a (a.index)}
       <button role="menuitemradio" aria-checked={audio === a.index} class:on={audio === a.index} onclick={() => onaudio(a.index)}>
-        <Icon name="check" size={16} /> {a.label}
+        {a.label}
       </button>
     {/each}
   {:else if panel === 'subs'}
     <h4>Субтитры</h4>
-    <button role="menuitemradio" aria-checked={!subId} class:on={!subId} onclick={() => onsubs('')}><Icon name="check" size={16} /> Выключены</button>
+    <button role="menuitemradio" aria-checked={!subId} class:on={!subId} onclick={() => onsubs('')}>Выключены</button>
     {#each info.play.subs as s (s.id)}
       <button role="menuitemradio" aria-checked={subId === s.id} class:on={subId === s.id} onclick={() => onsubs(s.id)}>
-        <Icon name="check" size={16} /> {s.label}
+        {s.label}
       </button>
     {/each}
+    {#if !linked}
     <h4 class="sep">Вид</h4>
     <div class="looks" role="radiogroup" aria-label="Вид субтитров">
       {#each SUB_LOOKS as l (l.id)}
@@ -151,11 +161,12 @@
       <button role="radio" aria-checked={!subLook.high} class:on={!subLook.high} onclick={() => onlook({ high: false })}>Внизу</button>
       <button role="radio" aria-checked={subLook.high} class:on={subLook.high} onclick={() => onlook({ high: true })}>Выше</button>
     </div>
+    {/if}
   {:else if panel === 'speed'}
     <h4>Скорость</h4>
     {#each SPEEDS as r (r)}
       <button role="menuitemradio" aria-checked={rate === r} class:on={rate === r} onclick={() => onrate(r)}>
-        <Icon name="check" size={16} /> {speedText(r)}
+        {speedText(r)}
       </button>
     {/each}
   {:else if panel === 'keys'}
@@ -177,11 +188,11 @@
   {:else if panel === 'quality' && linked}
     <h4>Качество</h4>
     <button role="menuitemradio" aria-checked={srcLevel === -1} class:on={srcLevel === -1} onclick={() => onlevel(-1)}>
-      Авто <small>под скорость интернета</small>
+      Авто
     </button>
     {#each srcLevels as l (l.i)}
       <button role="menuitemradio" aria-checked={srcLevel === l.i} class:on={srcLevel === l.i} onclick={() => onlevel(l.i)}>
-        {l.label ?? qualityTier(l.height)}p
+        {l.height ? `${l.label ?? qualityTier(l.height)}p` : 'Исходное качество'}
       </button>
     {/each}
   {:else if panel === 'quality'}
@@ -189,21 +200,21 @@
     {#if origOk}
       <button role="menuitemradio" aria-checked={quality === 'orig'} class:on={quality === 'orig'} onclick={() => onquality('orig')}>
         Оригинал
-        <small>{info.play.height && tier(info.play.height, info.play.width) >= 1440 ? `${heightLabel(tier(info.play.height, info.play.width))}, как в файле` : 'как в файле'}</small>
       </button>
     {/if}
     <button role="menuitemradio" aria-checked={quality === 'auto'} class:on={quality === 'auto'} onclick={() => onquality('auto')}>
-      Авто <small>под скорость интернета</small>
+      Авто
     </button>
     {#each ladder as l (l)}
       <button role="menuitemradio" aria-checked={quality === l} class:on={quality === l} onclick={() => onquality(l)}>
-        {heightLabel(l)}{#if l > 1080}<small>перекодирование, нагружает компьютер</small>{/if}
+        {heightLabel(l)}
       </button>
     {/each}
   {/if}
 </div>
 
 <style>
+  .boost{display:grid;gap:10px;padding:12px;font-size:13px}.boost input{width:100%;accent-color:white}.boost span{display:flex;justify-content:space-between;color:#aaa;font-size:11px}.boost b{font-weight:400}
   .panel {
     position: absolute;
     right: clamp(14px, 3vw, 36px);

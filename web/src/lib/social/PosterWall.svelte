@@ -1,22 +1,28 @@
 <script lang="ts">
+  import { MediaQuery } from 'svelte/reactivity';
+  import { api } from '$lib/api';
   // Фон из постеров просмотренного: наклонённые колонки плавно плывут вверх, каждая своей
   // скоростью. `page` - на весь экран за страницей профиля; иначе - внутри своего блока (превью).
   // Постеров мало - между ними цветные плитки, чтобы стена не была из одного фильма.
   // Только transform: видеокарте легко.
-  let { posters, accent = null, page = false }: { posters: string[]; accent?: string | null; page?: boolean } = $props();
+  let { posters, accent = null, page = false, prominent=false }: { posters: string[]; accent?: string | null; page?: boolean;prominent?:boolean } = $props();
 
   // Колонок с запасом: стена на 1920+ px закрывает всю площадь шапки, а не только середину.
-  const COLS = $derived(page ? 16 : 15);
-  const PER = 6;
+  const wide=new MediaQuery('(min-width:1001px)');
+  const COLS = $derived(page ? 16 : prominent ? (wide.current?12:7) : 15);
+  const PER = $derived(prominent?4:6);
+  let fallback=$state<string[]>([]);
+  $effect(()=>{if(!prominent||posters.length)return;let alive=true;void api<string[]>('/api/site/wall').then(items=>{if(alive)fallback=items;},()=>{});return()=>{alive=false;};});
+  const available=$derived(posters.length?posters:fallback);
   const pool = $derived(
-    posters.length >= 8 ? posters : [...posters, ...Array<null>(Math.max(0, 8 - posters.length)).fill(null)],
+    available.length ? available : Array<null>(8).fill(null),
   );
   const cols = $derived(
     Array.from({ length: COLS }, (_, c) => Array.from({ length: PER }, (_, i) => pool[(c * PER + i * 5 + c * 3) % pool.length] ?? null)),
   );
 </script>
 
-<div class="wall" class:page style:--acc={accent ?? '#3a3a3c'} aria-hidden="true">
+<div class="wall" class:page class:prominent style:--acc={accent ?? '#3a3a3c'} aria-hidden="true">
   <div class="tilt">
     {#each cols as col, c (c)}
       <div class="col" style:--speed="{70 + ((c * 17) % 5) * 10}s" style:--delay="{-((c * 23) % 50)}s">
@@ -32,6 +38,7 @@
 </div>
 
 <style>
+  .prominent .tile{width:clamp(110px,11vw,180px)}.prominent .tilt{inset:-30% -30%}.prominent .veil{background:linear-gradient(180deg,#0001,#0002 65%,#0008)}
   .wall {
     position: absolute;
     inset: 0;
@@ -73,6 +80,8 @@
     animation: drift var(--speed) linear infinite;
     animation-delay: var(--delay);
   }
+  .prominent .col { animation-duration: calc(var(--speed) * .85); }
+  .prominent .col:nth-child(even) { animation-direction: reverse; }
   @keyframes drift {
     to {
       transform: translateY(-50%);

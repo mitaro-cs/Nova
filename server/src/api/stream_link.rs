@@ -23,8 +23,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 /// Как обычный браузер: иначе сайты отдают страницу-заглушку.
-const UA: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36";
+const UA: &str = crate::site_sources::USER_AGENT;
 /// Ссылки на поток у сайтов живут несколько часов - помним 20 минут.
 const KEEP_MS: i64 = 20 * 60_000;
 
@@ -72,12 +71,53 @@ pub async fn page(url: &str) -> anyhow::Result<String> {
 }
 
 pub async fn page_with_url(url: &str) -> anyhow::Result<(Url, String)> {
+    page_with_cookies(url, HashMap::new(), None).await
+}
+
+pub async fn page_for(app: Option<&App>, url: &str) -> anyhow::Result<(Url, String)> {
+    let parsed = Url::parse(url)?;
+    let mut cookies = HashMap::new();
+    if let (Some(app), Some(source)) = (app, parsed.host_str().and_then(crate::site_sources::by_domain)) {
+        if parsed.origin() == Url::parse(source.url)?.origin() {
+            let values = app.source_sessions.lock().get(source.id).cloned().unwrap_or_default();
+            for (k, v) in values {
+                if !k.contains([';', '\r', '\n']) && !v.contains([';', '\r', '\n']) {
+                    cookies.insert(k, v);
+                }
+            }
+        }
+    }
+    page_with_cookies(url, cookies, None).await
+}
+
+async fn page_with_cookies(
+    url: &str,
+    mut cookies: HashMap<String, String>,
+    parent: Option<&Url>,
+) -> anyhow::Result<(Url, String)> {
     let mut url = Url::parse(url)?;
-    let mut cookies: HashMap<String, String> = HashMap::new();
+    let referer = parent
+        .filter(|u| crate::outbound::valid_url(u))
+        .and_then(|u| Url::parse(&format!("{}/", u.origin().ascii_serialization())).ok())
+        .or_else(|| {
+            url::form_urlencoded::parse(url.fragment().unwrap_or("").as_bytes())
+                .find(|(k, _)| k == "nova-origin")
+                .and_then(|(_, v)| Url::parse(&v).ok())
+                .filter(|u| {
+                    u.scheme() == "https"
+                        && u.path() == "/"
+                        && u.query().is_none()
+                        && u.host_str().and_then(crate::site_sources::by_domain).is_some()
+                })
+        });
     for _ in 0..10 {
         anyhow::ensure!(crate::outbound::valid_url(&url), "внутренний адрес запрещён");
         let jar = cookies.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ");
-        let r = client().get(url.clone()).header(header::COOKIE, jar).timeout(Duration::from_secs(12)).send().await?;
+        let mut request = client().get(url.clone()).header(header::COOKIE, jar).timeout(Duration::from_secs(12));
+        if let Some(ref origin) = referer {
+            request = request.header(header::REFERER, origin.as_str());
+        }
+        let r = request.send().await?;
         for c in r.headers().get_all(header::SET_COOKIE) {
             let c = c.to_str().unwrap_or("");
             let kv = c.split(';').next().unwrap_or("");
@@ -137,12 +177,11 @@ pub fn find_iframes(page: &str, base: &Url) -> Vec<Url> {
         return vec![];
     };
     re.captures_iter(page)
-        .filter_map(|c| base.join(&c.get(1).or_else(|| c.get(2))?.as_str().trim().replace("&amp;", "&")).ok())
+        .filter_map(|c| base.join(&crate::site_sources::decode(c.get(1).or_else(|| c.get(2))?.as_str().trim())).ok())
         .filter(|u| u.scheme() == "https" || u.scheme() == "http")
         .filter(|u| {
             !u.path().to_ascii_lowercase().split('/').any(|part| matches!(part, "trailer" | "trailers" | "teaser"))
         })
-        .take(8)
         .collect()
 }
 
@@ -167,6 +206,22 @@ fn allowed_for(kind: &str, u: &Url, extra: &[String]) -> bool {
 /// Главный плейлист (или файл) видео у сайта и какие ещё адреса можно (свой сайт).
 async fn master(kind: &str, id: &str, url: &str, embed: Option<&str>) -> anyhow::Result<(String, Vec<String>)> {
     let found = match kind {
+        "site"
+            if crate::site_sources::is_provider(&Url::parse(url)?)
+                || (Url::parse(url)?.fragment().is_some_and(|f| f.contains("nova-season="))
+                    && !crate::lordfilm::series_url(&Url::parse(url)?)) =>
+        {
+            let media = crate::site_sources::resolve_player(&Url::parse(url)?)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Плеер не поддержан"))?;
+            let mut extra: Vec<String> = base_domain(&Url::parse(&media.url)?).into_iter().collect();
+            for (_, sub) in &media.subtitles {
+                if let Some(host) = Url::parse(sub).ok().and_then(|u| u.host_str().map(String::from)) {
+                    extra.push(host);
+                }
+            }
+            (media.url, extra)
+        }
         "rutube" => {
             let v: serde_json::Value = client()
                 .get(format!("https://rutube.ru/api/play/options/{id}/?no_404=true&referer=https%3A%2F%2Frutube.ru"))
@@ -218,23 +273,30 @@ async fn master(kind: &str, id: &str, url: &str, embed: Option<&str>) -> anyhow:
             let mut extra: Vec<String> = base_domain(&base).into_iter().collect();
             let p = page(url).await?;
             let mut media = find_media(&p);
-            let mut queue: std::collections::VecDeque<(Url, usize)> =
-                find_iframes(&p, &base).into_iter().map(|u| (u, 1)).collect();
+            let mut queue: std::collections::VecDeque<(Url, Url, usize)> =
+                find_iframes(&p, &base).into_iter().map(|u| (u, base.clone(), 1)).collect();
+            let has_player = !queue.is_empty();
             let mut visited = std::collections::HashSet::new();
             while media.is_none() && visited.len() < 8 {
-                let Some((frame, depth)) = queue.pop_front() else { break };
+                let Some((frame, parent, depth)) = queue.pop_front() else { break };
                 if !visited.insert(frame.to_string()) {
                     continue;
                 }
                 // Не останавливаемся на рекламном/недоступном iframe: пробуем следующий плеер.
-                let Ok(html) = page(frame.as_str()).await else { continue };
+                let Ok((actual, html)) = page_with_cookies(frame.as_str(), HashMap::new(), Some(&parent)).await else {
+                    continue;
+                };
                 extra.extend(base_domain(&frame));
                 media = find_media(&html);
                 if depth < 3 {
-                    queue.extend(find_iframes(&html, &frame).into_iter().map(|u| (u, depth + 1)));
+                    queue.extend(find_iframes(&html, &actual).into_iter().map(|u| (u, actual.clone(), depth + 1)));
                 }
             }
-            let media = media.ok_or_else(|| anyhow::anyhow!("на странице не нашлось видео - откройте его на сайте"))?;
+            let media = media.ok_or_else(|| anyhow::anyhow!(if has_player {
+                "встроенный плеер сайта не предоставил прямую ссылку на видео. Попробуйте другую ссылку или источник"
+            } else {
+                "на странице не нашлось видео. Попробуйте другую ссылку или источник"
+            }))?;
             extra.extend(Url::parse(&media).ok().as_ref().and_then(base_domain));
             extra.dedup();
             (media, extra)
@@ -307,6 +369,7 @@ fn b64(u: &str) -> String {
 
 /// Видео ссылки у сайта (из памяти на 20 минут): вид, адрес, какие ещё адреса можно.
 async fn resolve(app: &App, id: i64) -> ApiResult<(String, String, Vec<String>)> {
+    crate::own_sites::link_enabled(app, id)?;
     let (kind, url, embed) = link_of(app, id)?;
     if kind == "direct" {
         let parsed = Url::parse(&url).map_err(failed)?;
@@ -319,6 +382,20 @@ async fn resolve(app: &App, id: i64) -> ApiResult<(String, String, Vec<String>)>
     if hosts(&kind).is_empty() && kind != "site" {
         return Err(ApiError::bad("own_player", "Этот сайт играет только своим плеером"));
     }
+    if let Some(c) = cache().lock().get(&url).filter(|c| now_ms() - c.1 < KEEP_MS) {
+        return Ok((kind, c.0.clone(), c.2.clone()));
+    }
+    // Одновременные зрители одного видео ждут одно получение адреса у провайдера.
+    static FLIGHTS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let gate = {
+        let mut gates = FLIGHTS.get_or_init(Mutex::default).lock();
+        if gates.len() > 1024 {
+            gates.retain(|_, gate| Arc::strong_count(gate) > 1);
+        }
+        gates.entry(url.clone()).or_default().clone()
+    };
+    let _guard = gate.lock().await;
+    crate::own_sites::link_enabled(app, id)?;
     if let Some(c) = cache().lock().get(&url).filter(|c| now_ms() - c.1 < KEEP_MS) {
         return Ok((kind, c.0.clone(), c.2.clone()));
     }
@@ -386,31 +463,67 @@ async fn fetch_media(
 pub async fn source(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
     let (kind, m, _) = resolve(&app, id).await?;
     let u = Url::parse(&m).map_err(failed)?;
-    Ok(Json(if !matches!(kind.as_str(), "site" | "direct") || is_playlist(&u) {
+    Ok(Json(if u.path().ends_with(".mpd") {
+        json!({"url":format!("/api/links/{id}/stream/index.mpd"),"hls":false,"dash":true})
+    } else if !matches!(kind.as_str(), "site" | "direct") || is_playlist(&u) {
         json!({"url": format!("/api/links/{id}/stream/index.m3u8"), "hls": true})
     } else {
         json!({"url": format!("/api/links/{id}/stream/p?u={}", b64(&m)), "hls": false})
     }))
 }
 
+pub async fn dash_index(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<i64>) -> ApiResult<Response> {
+    let (kind, m, extra) = resolve(&app, id).await?;
+    let base = Url::parse(&m).map_err(failed)?;
+    let (base, r) = fetch_media(&kind, base, &extra, None).await.map_err(failed)?;
+    let bytes =
+        crate::outbound::limited(r.error_for_status().map_err(failed)?, 2 * 1024 * 1024).await.map_err(failed)?;
+    let text = std::str::from_utf8(&bytes).map_err(failed)?;
+    let body = crate::dash_proxy::rewrite(text, &base, id).map_err(failed)?;
+    Ok(([(header::CONTENT_TYPE, "application/dash+xml"), (header::CACHE_CONTROL, "no-cache")], body).into_response())
+}
+
+pub async fn dash_part(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path((id, origin, path)): Path<(i64, String, String)>,
+    uri: axum::http::Uri,
+    headers: axum::http::HeaderMap,
+) -> ApiResult<Response> {
+    let url = crate::dash_proxy::target(&origin, &path, uri.query()).map_err(failed)?;
+    part(State(app), v, Path(id), Query(PartQuery { u: b64(url.as_str()) }), headers).await
+}
+
 /// Главный плейлист видео по ссылке - для нашего плеера.
 #[derive(Deserialize)]
 pub struct QualityQuery {
     height: Option<u32>,
+    level: Option<usize>,
 }
 
-fn select_quality(text: &str, height: Option<u32>) -> String {
-    let Some(height) = height else { return text.to_owned() };
+fn select_quality(text: &str, height: Option<u32>, level: Option<usize>) -> String {
+    if height.is_none() && level.is_none() {
+        return text.to_owned();
+    }
     let lines: Vec<_> = text.lines().collect();
-    let wanted = format!("x{height}");
+    let wanted = height.map(|h| format!("x{h}"));
     let mut found = false;
     let mut output = Vec::new();
     let mut n = 0;
+    let mut variant = 0;
     while n < lines.len() {
         if lines[n].starts_with("#EXT-X-STREAM-INF:") {
-            let matches = lines[n]
-                .split_once("RESOLUTION=")
-                .is_some_and(|(_, r)| r.split(',').next().is_some_and(|resolution| resolution.ends_with(&wanted)));
+            let matches = level.map_or_else(
+                || {
+                    wanted.as_ref().is_some_and(|wanted| {
+                        lines[n].split_once("RESOLUTION=").is_some_and(|(_, r)| {
+                            r.split(',').next().is_some_and(|resolution| resolution.ends_with(wanted))
+                        })
+                    })
+                },
+                |l| l == variant,
+            );
+            variant += 1;
             if matches {
                 found = true;
                 output.push(lines[n]);
@@ -448,7 +561,47 @@ pub async fn index(
     }
     let text =
         String::from_utf8(crate::outbound::limited(r, 2 * 1024 * 1024).await.map_err(failed)?).map_err(failed)?;
-    Ok(playlist(rewrite(&select_quality(&text, q.height), &base)))
+    let text = rewrite(&select_quality(&text, q.height, q.level), &base);
+    let text = crate::site_sources::metadata(&m)
+        .map(|media| crate::site_sources::hls_manifest(&text, &media, id))
+        .unwrap_or(text);
+    Ok(playlist(text))
+}
+
+pub async fn subtitle_playlist(
+    State(app): State<Arc<App>>,
+    _v: Viewer,
+    Path((id, track)): Path<(i64, String)>,
+) -> ApiResult<Response> {
+    let track = track.strip_suffix(".m3u8").unwrap_or(&track).parse::<usize>().map_err(|_| ApiError::not_found())?;
+    let (kind, url, extra) = resolve(&app, id).await?;
+    let media = crate::site_sources::metadata(&url).ok_or_else(ApiError::not_found)?;
+    let (_, subtitle) = media.subtitles.get(track).ok_or_else(ApiError::not_found)?;
+    let mut duration = media.duration;
+    if !duration.is_finite() || duration <= 0.0 {
+        let mut playlist_url = Url::parse(&url).map_err(failed)?;
+        for _ in 0..3 {
+            let (base, r) = fetch_media(&kind, playlist_url, &extra, None).await.map_err(failed)?;
+            let data = crate::outbound::limited(r.error_for_status().map_err(failed)?, 2 * 1024 * 1024)
+                .await
+                .map_err(failed)?;
+            let text = std::str::from_utf8(&data).map_err(failed)?;
+            duration =
+                text.lines().filter_map(|l| l.strip_prefix("#EXTINF:")?.split(',').next()?.parse::<f64>().ok()).sum();
+            if duration.is_finite() && duration > 0.0 {
+                break;
+            }
+            let child = text
+                .lines()
+                .find(|l| !l.is_empty() && !l.starts_with('#'))
+                .ok_or_else(|| failed("Не найдена длительность субтитров"))?;
+            playlist_url = base.join(child).map_err(failed)?;
+        }
+        if !duration.is_finite() || duration <= 0.0 {
+            return Err(failed("Не удалось определить длительность видео для субтитров"));
+        }
+    }
+    Ok(playlist(format!("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:{}\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:{duration:.3},\n/api/links/{id}/stream/p?u={}\n#EXT-X-ENDLIST\n",duration.ceil() as u64,b64(subtitle))))
 }
 
 #[derive(Deserialize)]
@@ -506,12 +659,16 @@ mod tests {
     #[test]
     fn native_quality_preserves_audio_and_auto() {
         let text = "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:RESOLUTION=1280x720,AUDIO=\"a\"\n720.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=640x360,AUDIO=\"a\"\n360.m3u8\n";
-        let selected = select_quality(text, Some(720));
+        let selected = select_quality(text, Some(720), None);
         assert!(selected.contains("#EXT-X-MEDIA:"));
         assert!(selected.contains("720.m3u8"));
         assert!(!selected.contains("360.m3u8"));
-        assert_eq!(select_quality(text, None), text);
-        assert_eq!(select_quality(text, Some(1080)), text);
+        assert_eq!(select_quality(text, None, None), text);
+        assert_eq!(select_quality(text, Some(1080), None), text);
+        let exact = select_quality(text, None, Some(1));
+        assert!(exact.contains("360.m3u8"));
+        assert!(!exact.contains("720.m3u8"));
+        assert!(exact.contains("#EXT-X-MEDIA:TYPE=AUDIO"));
     }
 
     #[test]

@@ -11,6 +11,7 @@
   import { motionOn, setMotion } from '$lib/motion';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import Availability from '$lib/account/Availability.svelte';
   import { toast } from '$lib/ui/toast.svelte';
 
   // Мой аккаунт: у каждого один - имя, фото или рисованный аватар, оформление страницы, пароль.
@@ -18,6 +19,7 @@
   const profile = $derived(me?.user.profile);
 
   let name = $state('');
+  let login = $state('');
   let old = $state('');
   let fresh = $state('');
   let err = $state('');
@@ -29,6 +31,7 @@
 
   $effect(() => {
     name = session.me?.user.name ?? '';
+    login = session.me?.user.login ?? '';
   });
 
   async function saveName(e: SubmitEvent) {
@@ -43,9 +46,23 @@
     }
   }
 
+  async function saveLogin(e: SubmitEvent) {
+    e.preventDefault();
+    err = '';
+    try {
+      await patch('/api/me', { login });
+      await loadMe();
+      toast('Логин сохранён');
+    } catch (x) {
+      err = errorText(x);
+    }
+  }
+
   async function setAvatar(i: number) {
-    await patch('/api/me', { avatar: i }).catch(() => {});
-    await loadMe();
+    try {
+      await patch('/api/me', { avatar: i });
+      await loadMe();
+    } catch (e) { toast(errorText(e)); }
   }
 
   // Своё фото: сервер обрежет до квадрата 256 px.
@@ -130,10 +147,11 @@
     {#if tab === 'style' && !profile.photo}
       <section class="rw-block pane">
         <h2 class="rw-h2">Аватар</h2>
+        <p class="muted small">При регистрации Nova выбирает вам случайного персонажа. Найдите своего — или загрузите фото.</p>
         <div class="avatars" role="radiogroup" aria-label="Аватар">
-          {#each Array(12) as _, i (i)}
-            <button type="button" role="radio" aria-checked={profile.avatar === i} aria-label={CHARACTERS[i].name} title={CHARACTERS[i].name} class:on={profile.avatar === i} onclick={() => setAvatar(i)}>
-              <Avatar avatar={i} size={44} />
+          {#each CHARACTERS as character, i (character.name)}
+            <button type="button" role="radio" aria-checked={profile.avatar === i} aria-label={character.name} title={character.name} class:on={profile.avatar === i} onclick={() => setAvatar(i)}>
+              <Avatar avatar={i} size={52} /><span>{character.name}</span>
             </button>
           {/each}
         </div>
@@ -167,6 +185,15 @@
     <form class="rw-block pane" onsubmit={saveName}>
       <h2 class="rw-h2">Имя</h2>
       <label class="field"><span>Как вас видят другие</span><input class="input" bind:value={name} maxlength="60" /></label>
+      <Availability value={name} kind="name" original={me.user.name} />
+      <button class="btn">Сохранить</button>
+    </form>
+
+    <form class="rw-block pane" onsubmit={saveLogin}>
+      <h2 class="rw-h2">Логин</h2>
+      <label class="field"><span>Для входа по паролю с других устройств</span><input class="input" bind:value={login} maxlength="32" autocomplete="username" /></label>
+      <Availability value={login} kind="login" original={me.user.login} />
+      <p class="muted small">3-32 символа: буквы, цифры, «_», «-», «.».</p>
       <button class="btn">Сохранить</button>
     </form>
 
@@ -181,7 +208,7 @@
       <button class="btn">Сохранить пароль</button>
     </form>
     <EmailSettings />
-    {#if me.hasPassword}<Security />{/if}
+    <Security />
     </div>
     {/if}
     {#if err}<p class="error">{err}</p>{/if}
@@ -232,16 +259,18 @@
   }
   .avatars {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
     gap: 10px;
   }
   .avatars button {
     display: grid;
     place-items: center;
-    padding: 2px;
+    gap:8px;
+    padding: 12px 4px;
     border: 2px solid transparent;
-    border-radius: 50%;
-    background: none;
+    border-radius: 16px;
+    background: var(--surface);
+    color:var(--text);
     cursor: pointer;
     transition: transform 0.15s;
   }
@@ -251,6 +280,7 @@
   .avatars .on {
     border-color: var(--text);
   }
+  .avatars span { font-size:11px;line-height:1.3; }
   .switch {
     display: flex;
     align-items: flex-start;

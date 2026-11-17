@@ -276,7 +276,8 @@
     font-size: clamp(34px, 4.6vw, 64px);
     font-weight: 800;
     letter-spacing: -0.02em;
-    line-height: 1.02;
+    line-height: 1.22;
+    padding-block:.08em;
     text-transform: uppercase;
     white-space: nowrap;
     text-overflow: ellipsis;

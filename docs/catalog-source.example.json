@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "imdbId": "tt7654321",
+      "title": "Пример фильма",
+      "kind": "movie",
+      "year": 2020,
+      "streams": [
+        { "id": "4k-ru", "url": "https://media.example.com/movie-4k-ru.mp4", "label": "Полная версия", "quality": "2160p", "voice": "Русский" },
+        { "id": "hd-en", "url": "https://media.example.com/movie-hd-en.mp4", "label": "Полная версия", "quality": "1080p", "voice": "Оригинал" },
+        { "id": "hls-all", "url": "https://media.example.com/master.m3u8", "label": "Все варианты HLS" }
+      ]
+    },
+    {
+      "imdbId": "tt7654322",
+      "title": "Пример сериала",
+      "kind": "series",
+      "streams": [
+        { "id": "s1e1", "url": "https://media.example.com/s1e1.m3u8", "label": "Серия 1", "season": 1, "episode": 1 },
+        { "id": "s1e2", "url": "https://media.example.com/s1e2.m3u8", "label": "Серия 2", "season": 1, "episode": 2 }
+      ]
+    }
+  ]
+}
