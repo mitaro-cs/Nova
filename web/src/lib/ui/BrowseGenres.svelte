@@ -1,14 +1,14 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import type { IconName } from './icons';
-  const genres: { label: string; chart: string; icon: IconName }[] = [
-    {label:'Комедии',chart:'comedy_movies',icon:'sparkle'}, {label:'Фантастика',chart:'scifi_movies',icon:'globe'},
-    {label:'Триллеры',chart:'thriller_movies',icon:'eye'}, {label:'Боевики',chart:'action_movies',icon:'play'},
-    {label:'Драмы',chart:'drama_movies',icon:'film'}, {label:'Анимация',chart:'animation_movies',icon:'star'},
+  const genres: { label: string; chart: string; icon: IconName; hue: number }[] = [
+    {label:'Комедии',hue:50,chart:'comedy_movies',icon:'sparkle'}, {label:'Фантастика',hue:212,chart:'scifi_movies',icon:'globe'},
+    {label:'Триллеры',hue:165,chart:'thriller_movies',icon:'eye'}, {label:'Боевики',hue:8,chart:'action_movies',icon:'play'},
+    {label:'Драмы',hue:268,chart:'drama_movies',icon:'film'}, {label:'Анимация',hue:192,chart:'animation_movies',icon:'star'},
   ];
   const franchises = ['Гарри Поттер','Властелин колец','Звёздные войны','Матрица','Мстители'];
 </script>
-<section class="browse" aria-label="Жанры"><h2>Под настроение</h2><div class="genres">{#each genres as genre}<a href="/discover?chart={genre.chart}"><Icon name={genre.icon} size={27} /><b>{genre.label}</b><span>Открыть подборку <Icon name="right" size={13} /></span></a>{/each}</div></section>
+<section class="browse" aria-label="Жанры"><h2>Под настроение</h2><div class="genres">{#each genres as genre}<a href="/discover?chart={genre.chart}" style:background="linear-gradient(160deg, hsl({genre.hue} 34% 22%), hsl({genre.hue + 18} 24% 8%))"><Icon name={genre.icon} size={27} /><b>{genre.label}</b><span>Открыть подборку <Icon name="right" size={13} /></span></a>{/each}</div></section>
 <section class="browse" aria-label="Франшизы"><h2>Любимые киновселенные</h2><div class="franchises">{#each franchises as title}<a href="/search?q={encodeURIComponent(title)}"><Icon name="film" size={18} />{title}<Icon name="right" size={14} /></a>{/each}</div></section>
 <style>
   .browse {
@@ -28,6 +28,7 @@
   /* Плитки и капсулы - как чипы на плите Rewind: фон --surface-2, тонкая линия, без толстой рамки. */
   .genres a {
     min-width: 0;
+    min-height: 176px;
     display: flex;
     flex-direction: column;
     gap: 18px;

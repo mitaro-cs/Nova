@@ -195,6 +195,11 @@
 <LinkFinder bind:open={finder} />
 
 <style>
+  @media (min-width: 1001px) {
+    :global(.rw-page) {
+      --pw: 176px;
+    }
+  }
   /* Сцена: стена постеров подборок за заголовком и поиском. Только transform у стены, без blur. */
   .stage {
     position: relative;

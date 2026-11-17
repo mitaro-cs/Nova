@@ -20,8 +20,8 @@
 
   const c = $derived(
     local
-      ? { title: local.title, year: local.year, rating: local.rating, poster: local.poster, here: false, kind: local.kind }
-      : { title: card!.title, year: card!.year, rating: card!.rating, poster: card!.poster, here: !!card!.local, kind: card!.kind },
+      ? { title: local.title, year: local.year, rating: local.rating, poster: local.poster, here: false, kind: local.kind, genre: local.genres?.[0] ?? '' }
+      : { title: card!.title, year: card!.year, rating: card!.rating, poster: card!.poster, here: !!card!.local, kind: card!.kind, genre: card!.genres?.[0] ?? '' },
   );
   // Не вышел: плашка «Скоро» на постере и «Скоро · год» вместо одного года.
   const soon = $derived(!local && (!!card?.soon || !!upcomingYear(card?.release)));
@@ -48,7 +48,7 @@
     {#if soon}<span class="soon">Скоро</span>{/if}
   </span>
   <span class="name">{c.title}</span>
-  {#if c.year}<span class="sub">{soon ? `Скоро · ${c.year}` : c.year}</span>{/if}
+  {#if c.year}<span class="sub">{soon ? `Скоро · ${c.year}` : c.genre ? `${c.year} · ${c.genre}` : c.year}</span>{/if}
 {/snippet}
 
 <div class="tile" class:rise={i !== null} style:--i={i}>
@@ -135,12 +135,13 @@
     font-weight: 700;
     overflow: hidden;
   }
-  .ranked .ph { bottom: 44px; }
+  .ranked .ph { bottom: 60px; }
   .rank {
     position: absolute;
     left: 8px;
     bottom: 6px;
-    font-size: 30px;
+    font-size: 52px;
+    letter-spacing: -0.04em;
     font-weight: 800;
     line-height: 1;
     color: #fff;
