@@ -14,7 +14,7 @@
   import { rankFound } from '$lib/links/best';
   import SourceStatus from '$lib/links/SourceStatus.svelte';
   import { localized } from '$lib/localized.svelte';
-  import { fadeIn } from '$lib/ui/fade';
+  import { fadeIn, hideBroken } from '$lib/ui/fade';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, del, errorText, patch, post, put } from '$lib/api';
@@ -704,7 +704,7 @@
         {#if d?.backdrop || d?.posterLarge || c.poster}<img use:fadeIn src={d?.backdrop ?? d?.posterLarge ?? c.poster} srcset={artSet(d?.backdrop ?? d?.posterLarge ?? c.poster)} sizes="100vw" alt="" decoding="async" />{:else}<div class="ph" style:background={placeholder(c.title)}></div>{/if}
       {/key}
     </div>
-    <div class="cinema-stage">{#if d?.backdrop ?? d?.posterLarge ?? c.poster}<img src={d?.backdrop ?? d?.posterLarge ?? c.poster} alt="" />{/if}</div>
+    <div class="cinema-stage">{#if d?.backdrop ?? d?.posterLarge ?? c.poster}<img use:hideBroken src={d?.backdrop ?? d?.posterLarge ?? c.poster} alt="" />{/if}</div>
     <div class="wrap">
       <div class="hero-heading">
         <span class="eyebrow">{kindLabel(c.kind)}{c.year ? ` · ${c.year}` : ''}</span>

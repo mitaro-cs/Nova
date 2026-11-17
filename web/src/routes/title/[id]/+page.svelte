@@ -11,7 +11,7 @@
   import { untrack } from 'svelte';
   import { progressSync } from '$lib/progressSync.svelte';
   import { localized } from '$lib/localized.svelte';
-  import { fadeIn } from '$lib/ui/fade';
+  import { fadeIn, hideBroken } from '$lib/ui/fade';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, del, errorText, patch, post } from '$lib/api';
@@ -442,7 +442,7 @@
         <button class="glass" onclick={() => (imdbArt = true)}><Icon name="search" size={15} /> С IMDb</button>
       </div>
     {/if}
-    <div class="cinema-stage">{#if c.backdrop ?? c.posterLarge ?? c.poster}<img src={c.backdrop ?? c.posterLarge ?? c.poster} alt="" />{/if}</div>
+    <div class="cinema-stage">{#if c.backdrop ?? c.posterLarge ?? c.poster}<img use:hideBroken src={c.backdrop ?? c.posterLarge ?? c.poster} alt="" />{/if}</div>
     <div class="wrap">
       <div class="hero-heading">
         <span class="eyebrow">{isSeries ? 'Сериал' : 'Фильм'}{c.year ? ` · ${c.year}` : ''}</span>

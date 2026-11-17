@@ -287,6 +287,7 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
     tokio::spawn(copy::janitor(app.clone()));
     tokio::spawn(discover::worker(app.clone()));
     tokio::spawn(discover::posters(app.clone()));
+    tokio::spawn(discover::images_backfill(app.clone()));
     tokio::spawn(discover::titles_ru(app.clone()));
     tokio::spawn(names::warm_directors(app.clone()));
     tokio::spawn(discover::shrink_posters(app.clone()));

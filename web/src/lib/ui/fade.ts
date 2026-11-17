@@ -10,3 +10,11 @@ export function fadeIn(img: HTMLImageElement) {
   if(img.complete){if(img.naturalWidth)show();else fail();}
   return {destroy(){img.removeEventListener('load',show);img.removeEventListener('error',fail);}};
 }
+
+// Битая картинка не должна показывать значок ошибки: прячем (под ней - фон или заглушка).
+export function hideBroken(img: HTMLImageElement) {
+  const fail = () => {img.style.visibility='hidden';};
+  img.addEventListener('error', fail);
+  if(img.complete&&!img.naturalWidth&&img.src)fail();
+  return {destroy(){img.removeEventListener('error',fail);}};
+}

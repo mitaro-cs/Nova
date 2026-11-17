@@ -594,6 +594,154 @@ async fn fetch_posters(app: &Arc<App>, todo: Vec<(String, String)>) -> usize {
     todo.len()
 }
 
+/// Адрес картинки у источника: из прокси `/api/discover/art?url=…` или сам адрес (`http` -> `https`).
+pub fn art_source(raw: &str) -> Option<String> {
+    if let Some(rest) = raw.strip_prefix("http://") {
+        return Some(format!("https://{rest}"));
+    }
+    if raw.starts_with("https://") {
+        return Some(raw.into());
+    }
+    let u = reqwest::Url::parse("http://localhost").ok()?.join(raw).ok()?;
+    (u.path() == "/api/discover/art").then(|| u.query_pairs().find(|(k, _)| k == "url").map(|(_, v)| v.into_owned()))?
+}
+
+/// Не локальная картинка: прокси или адрес источника (локальные - имя файла или `/img/…`).
+fn is_remote_art(s: &str) -> bool {
+    s.starts_with("/api/discover/art") || s.starts_with("http://") || s.starts_with("https://")
+}
+
+/// Скачать картинку к себе и уменьшить до `width` (нет ffmpeg - как есть). Имя файла в `images/`.
+pub async fn keep_image(app: &App, raw: &str, width: u32) -> Option<String> {
+    let src = art_source(raw)?;
+    let name = tokio::time::timeout(Duration::from_secs(15), app.images.download(&src)).await.ok()?.ok()?;
+    let ffmpeg = app.tools.read().ffmpeg.clone();
+    if let (Some(ffmpeg), Some(path)) = (ffmpeg, app.images.path(&name))
+        && let Ok(bytes) = crate::library::probe::scale_image(&ffmpeg, &path, width).await
+        && let Ok(small) = app.images.save(&bytes)
+    {
+        return Some(small);
+    }
+    Some(name)
+}
+
+/// Все внешние картинки страницы фильма (`extra`) - к себе: (путь JSON, имя файла) для скачанных
+/// и «всё ли скачалось».
+async fn localize_extra(app: &App, extra: &Value) -> (Vec<(String, String)>, bool) {
+    use futures_util::StreamExt;
+    let mut jobs: Vec<(String, String, u32)> = vec![];
+    let mut want = |path: String, v: &Value, width: u32| {
+        if let Some(s) = v.as_str().filter(|s| is_remote_art(s)) {
+            jobs.push((path, s.into(), width));
+        }
+    };
+    want("$.poster".into(), &extra["poster"], 640);
+    want("$.imdbBackdrop".into(), &extra["imdbBackdrop"], 1280);
+    for (i, p) in extra["people"].as_array().into_iter().flatten().enumerate() {
+        want(format!("$.people[{i}].photo"), &p["photo"], 342);
+    }
+    for (i, g) in extra["gallery"].as_array().into_iter().flatten().enumerate() {
+        want(format!("$.gallery[{i}]"), g, 1280);
+    }
+    let total = jobs.len();
+    let done: Vec<(String, Option<String>)> = futures_util::stream::iter(jobs)
+        .map(|(path, raw, width)| async move { (path, keep_image(app, &raw, width).await) })
+        .buffer_unordered(4)
+        .collect()
+        .await;
+    let ok: Vec<(String, String)> = done.into_iter().filter_map(|(p, n)| n.map(|n| (p, n))).collect();
+    let all = ok.len() == total;
+    (ok, all)
+}
+
+/// Картинки одного фильма ленты - к себе (кадр, большой постер, фото актёров, кадры из фильма).
+/// Что не скачалось - остаётся прежним (повторит `images_backfill`). `true` - всё уже у нас.
+pub async fn localize_row(app: &App, id: &str) -> bool {
+    let row: Option<(Option<String>, Option<String>)> = app
+        .db
+        .with(|c| {
+            c.query_row("SELECT backdrop, extra FROM ext_titles WHERE id = ?", [id], |r| Ok((r.get(0)?, r.get(1)?)))
+                .optional()
+        })
+        .unwrap_or(None);
+    let Some((backdrop, extra)) = row else { return true };
+    let extra: Value = extra.and_then(|e| serde_json::from_str(&e).ok()).unwrap_or(Value::Null);
+    let (done, mut all) = localize_extra(app, &extra).await;
+    for (path, name) in &done {
+        let _ = app.db.with(|c| {
+            c.execute(
+                "UPDATE ext_titles SET extra = json_set(COALESCE(extra, '{}'), ?1, ?2) WHERE id = ?3",
+                params![path, name, id],
+            )
+        });
+    }
+    if let Some(old) = backdrop.filter(|b| is_remote_art(b)) {
+        match keep_image(app, &old, 1280).await {
+            Some(name) => {
+                let _ = app.db.with(|c| {
+                    c.execute(
+                        "UPDATE ext_titles SET backdrop = ?1 WHERE id = ?2 AND backdrop = ?3",
+                        params![name, id, old],
+                    )
+                });
+            }
+            None => all = false,
+        }
+    }
+    all
+}
+
+/// Фоновая докачка: картинки страниц фильмов, которые ещё ходят через прокси или адреса источников,
+/// и постеры, не скачавшиеся раньше. Неудача - повтор через час, чтобы не молотить одно и то же.
+pub async fn images_backfill(app: Arc<App>) {
+    const RETRY_MS: i64 = 3_600_000;
+    tokio::time::sleep(Duration::from_secs(45)).await;
+    let mut retry: std::collections::HashMap<String, i64> = Default::default();
+    loop {
+        let now = now_ms();
+        retry.retain(|_, at| *at > now);
+        let pages: Vec<String> = app
+            .db
+            .with(|c| {
+                let mut st = c.prepare(
+                    "SELECT id FROM ext_titles
+                     WHERE backdrop LIKE '/api/discover/art%' OR backdrop LIKE 'http%' OR extra LIKE '%/api/discover/art%'
+                     ORDER BY updated_at DESC LIMIT 200",
+                )?;
+                let r = st.query_map([], |r| r.get(0))?;
+                r.collect()
+            })
+            .unwrap_or_default();
+        let pages: Vec<String> = pages.into_iter().filter(|i| !retry.contains_key(i)).take(6).collect();
+        let posters: Vec<(String, String)> = app
+            .db
+            .with(|c| {
+                let mut st = c.prepare(
+                    "SELECT id, poster_url FROM ext_titles WHERE poster = '' AND poster_url IS NOT NULL LIMIT 200",
+                )?;
+                let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                r.collect()
+            })
+            .unwrap_or_default();
+        let posters: Vec<(String, String)> =
+            posters.into_iter().filter(|(i, _)| !retry.contains_key(&format!("p:{i}"))).take(6).collect();
+        if pages.is_empty() && posters.is_empty() {
+            tokio::time::sleep(Duration::from_secs(600)).await;
+            continue;
+        }
+        for id in pages {
+            if !localize_row(&app, &id).await {
+                retry.insert(id, now_ms() + RETRY_MS);
+            }
+        }
+        for (id, _) in &posters {
+            retry.insert(format!("p:{id}"), now_ms() + RETRY_MS);
+        }
+        fetch_posters(&app, posters).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
 /// Что сейчас качается: два открытия одного фильма не идут к IMDb дважды.
 static LOADING: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
     std::sync::LazyLock::new(Default::default);
@@ -660,6 +808,14 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
         extra.as_object_mut().expect("extra object").remove("seasons");
     }
     app.db.with(|c|c.execute("UPDATE ext_titles SET overview=COALESCE(overview,?1),runtime=?2,backdrop=CASE WHEN json_extract(COALESCE(extra,'{}'),'$.picked.backdrop') IS NOT NULL THEN backdrop ELSE COALESCE(?3,NULLIF(backdrop,'')) END,extra=json_patch(COALESCE(extra,'{}'),?4),detailed=?5 WHERE id=?6",params![d.overview,d.runtime,d.backdrop.as_deref().map(crate::media_meta::art),extra.to_string(),DETAILED,id]))?;
+    // Картинки страницы - к себе в фоне: страница откроется сразу, браузер потом возьмёт их у нас.
+    {
+        let a = app.clone();
+        let id = id.to_string();
+        tokio::spawn(async move {
+            localize_row(&a, &id).await;
+        });
+    }
     let a = app.clone();
     let id = id.to_string();
     let rich_job = format!("rich:{id}");
@@ -937,5 +1093,28 @@ mod tests {
         assert_eq!(release_of(&json!({"year": 2027, "month": 11, "day": null})).as_deref(), Some("2027-11"));
         assert_eq!(release_of(&json!({"year": 2028})).as_deref(), Some("2028"));
         assert_eq!(release_of(&json!(null)), None);
+    }
+}
+
+#[cfg(test)]
+mod art_source_tests {
+    use super::{art_source, is_remote_art};
+
+    #[test]
+    fn source_is_taken_from_proxy_or_upgraded_to_https() {
+        let proxy = crate::media_meta::art("https://m.media-amazon.com/images/a.jpg?x=1&y=2");
+        assert_eq!(art_source(&proxy).as_deref(), Some("https://m.media-amazon.com/images/a.jpg?x=1&y=2"));
+        assert_eq!(art_source("http://static.tvmaze.com/a.jpg").as_deref(), Some("https://static.tvmaze.com/a.jpg"));
+        assert_eq!(art_source("https://m.media-amazon.com/a.jpg").as_deref(), Some("https://m.media-amazon.com/a.jpg"));
+        assert_eq!(art_source("abc123.jpg"), None);
+        assert_eq!(art_source("/img/abc123.jpg"), None);
+    }
+
+    #[test]
+    fn local_names_are_not_remote() {
+        assert!(is_remote_art("/api/discover/art?url=x"));
+        assert!(is_remote_art("https://a/b.jpg"));
+        assert!(!is_remote_art("abc123.jpg"));
+        assert!(!is_remote_art("/img/abc123.jpg"));
     }
 }
