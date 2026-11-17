@@ -15,6 +15,7 @@
     title,
     art,
     poster = null,
+    fallbackPoster = null,
     tall = false,
     meta = [],
     age = null,
@@ -32,6 +33,7 @@
     title: string;
     art: string | null;
     poster?: string | null;
+    fallbackPoster?: string | null;
     /** Кадра нет, вместо него - постер (размытый). */
     tall?: boolean;
     meta?: string[];
@@ -57,16 +59,27 @@
   const set = $derived(artSet(art));
   // Постер - широкий кадр на ровных полосах: вместо него плитка с названием (см. letterbox.ts).
   let boxed = $state(false);
+  let artFailed = $state(false);
+  let posterFailed = $state(false);
+  let primaryFailed = $state(false);
+  const visiblePoster = $derived(primaryFailed ? fallbackPoster : poster ?? fallbackPoster);
+  function imageFailed() {
+    if (!primaryFailed && fallbackPoster && fallbackPoster !== visiblePoster) primaryFailed = true;
+    else posterFailed = true;
+  }
   $effect(() => {
-    void poster;
+    void poster; void art; void fallbackPoster;
+    primaryFailed = false;
     boxed = false;
+    artFailed = false;
+    posterFailed = false;
   });
 </script>
 
 <section class="rwh rw">
   <div class="shot" aria-hidden="true">
     {#key art}
-      {#if art}<img use:fadeIn class:tall src={art} srcset={set} sizes="100vw" alt="" decoding="async" fetchpriority="high" />{:else}<div class="ph" style:background={placeholder(title)}></div>{/if}
+      {#if art && !artFailed}<img use:fadeIn class:tall src={art} srcset={set} sizes="100vw" alt="" decoding="async" fetchpriority="high" onerror={() => artFailed = true} />{:else if visiblePoster && !posterFailed}<img use:fadeIn class="tall" src={visiblePoster} alt="" decoding="async" onerror={imageFailed} />{:else}<div class="ph" style:background={placeholder(title)}></div>{/if}
     {/key}
   </div>
   <div class="veil" aria-hidden="true"></div>
@@ -78,8 +91,8 @@
   </div>
 
   <div class="stage">
-    <div class="poster" style:background={poster && !boxed ? undefined : placeholder(title)}>
-      {#if poster && !boxed}<img use:fadeIn src={artW(poster, 640)} alt={title} width="460" height="690" decoding="async" onload={(e) => (boxed = posterLetterboxed(e.currentTarget as HTMLImageElement))} />{:else}<span>{title}</span>{/if}
+    <div class="poster" style:background={placeholder(title)}>
+      {#if visiblePoster && !boxed && !posterFailed}<img use:fadeIn src={artW(visiblePoster, 640)} alt={title} width="460" height="690" decoding="async" onload={(e) => (boxed = posterLetterboxed(e.currentTarget as HTMLImageElement))} onerror={imageFailed} />{:else}<span>{title}</span>{/if}
     </div>
     <div class="text">
       <h1 use:fitTitle={title}>{title}</h1>
@@ -213,7 +226,8 @@
   h1 {
     margin: 0;
     font-size: max(30px, calc(57 * var(--s)));
-    line-height: 1.06;
+    line-height: 1.22;
+    padding-block:.08em;
     font-weight: 700;
     letter-spacing: -0.02em;
     white-space: nowrap;

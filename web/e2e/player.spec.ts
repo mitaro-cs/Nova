@@ -109,7 +109,8 @@ test('плеер: смена качества не теряет место, сп
   await page.getByRole('menuitemradio', { name: /Авто/ }).click();
   await expect(page.getByRole('button', { name: 'Качество' })).toContainText('Авто');
   await expect.poll(async () => (await state(page)).t, { timeout: 15_000 }).toBeGreaterThanOrEqual(before);
-  await page.getByRole('button', { name: 'Сезоны и серии' }).click();
+  await page.getByRole('button', { name: 'Настройки плеера' }).click();
+  await page.getByRole('menuitem', { name: 'Сезоны и серии' }).click();
   await expect(page.locator('.episode-option')).toHaveCount(2);
   await page.locator('.episode-option').nth(1).click();
   await expect(page).toHaveURL(new RegExp(`/watch/${second}$`));

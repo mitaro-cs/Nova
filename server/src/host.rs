@@ -24,6 +24,15 @@ pub struct UpdateInfo {
 }
 
 pub trait Host: Send + Sync + 'static {
+    fn source_open(&self, _source: &str) -> Result<(), String> {
+        Err("Проверка источника доступна в приложении Nova на компьютере хоста".into())
+    }
+    fn source_cookies(&self, _source: &str) -> Result<Vec<(String, String)>, String> {
+        Err("Окно проверки источника недоступно".into())
+    }
+    fn can_verify_sources(&self) -> bool {
+        false
+    }
     fn night(&self, _action: &str, _lights: bool) -> serde_json::Value {
         serde_json::json!({"ok":false,"error":"Откройте Nova на компьютере хоста"})
     }

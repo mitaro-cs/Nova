@@ -114,6 +114,9 @@
       <p>Что смотрит мир кино - и чего у вас пока нет.</p>
     </div>
   </header>
+  {#if session.me?.user.role === 'host'}
+    <a class="btn source-settings" href="/admin?tab=catalog#sources">Источники каталога <Icon name="right" size={16} /></a>
+  {/if}
   <div class="top">
     <form class="find" role="search" onsubmit={submit}>
       <Icon name="search" size={20} />
@@ -188,6 +191,7 @@
 <LinkFinder bind:open={finder} />
 
 <style>
+  .source-settings { margin-bottom: 24px; }
   .top {
     display: flex;
     gap: 10px;

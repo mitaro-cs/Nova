@@ -22,13 +22,16 @@
   let results = $state<ExtCard[] | null>(null);
   let searching = $state(false);
   let finale = $state(false);
+  let finishTimer: ReturnType<typeof setTimeout> | undefined;
+  let tourTimer: ReturnType<typeof setTimeout> | undefined;
   const profile = $derived(session.me?.user.profile?.id);
-  const d = $derived(motionOn() ? 320 : 0);
+  const d = $derived(motionOn() && !window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 320 : 0);
   const shown = $derived(query.trim().length > 1 && results ? results : films);
   const chosen = (card: ExtCard) => picked.some((p) => p.id === card.id);
 
   $effect(() => {
-    if (!profile || sessionStorage.getItem(`nova-onboarding:${profile}`) !== '1') return;
+    if (!profile) return;
+    try { if (sessionStorage.getItem(`nova-onboarding:${profile}`) !== '1') return; } catch { return; }
     open = true;
     api<{ rows: { items: ExtCard[] }[] }>('/api/discover')
       .then((r) => {
@@ -46,6 +49,7 @@
       return;
     }
     searching = true;
+    results = null;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       api<ExtCard[]>(`/api/discover/search?q=${encodeURIComponent(q)}`, { signal: controller.signal }).then(
@@ -68,17 +72,27 @@
   });
 
   const toggleGenre = (g: string) => (genres = genres.includes(g) ? genres.filter((x) => x !== g) : [...genres, g]);
-  const toggleFilm = (card: ExtCard) => (picked = chosen(card) ? picked.filter((p) => p.id !== card.id) : [...picked, card]);
+  const toggleFilm = (card: ExtCard) => {
+    if (chosen(card)) picked = picked.filter((p) => p.id !== card.id);
+    else if (picked.length < 5) picked = [...picked, card];
+    else error = 'Можно выбрать до пяти любимых произведений.';
+  };
   function go(to: number) {
     dir = to > step ? 1 : -1;
     step = to;
   }
   function startTour() {
-    setTimeout(() => window.dispatchEvent(new Event('nova-tour')), 450);
+    clearTimeout(tourTimer);
+    tourTimer = setTimeout(() => window.dispatchEvent(new Event('nova-tour')), motionOn() ? 450 : 0);
   }
 
+  $effect(() => () => {
+    clearTimeout(finishTimer);
+    clearTimeout(tourTimer);
+  });
+
   async function finish() {
-    if (!profile || busy) return;
+    if (!profile || busy || finale) return;
     busy = true;
     error = '';
     try {
@@ -86,12 +100,12 @@
         const result = await put<{ favorites: string[] }>('/api/me/favorites', { key: `x:${film.id}`, value: true });
         if (session.me) session.me.favorites = result.favorites;
       }
-      localStorage.setItem(`nova-genres:${profile}`, JSON.stringify(genres));
-      sessionStorage.removeItem(`nova-onboarding:${profile}`);
+      try { localStorage.setItem(`nova-genres:${profile}`, JSON.stringify(genres)); } catch { /* хранилище недоступно */ }
+      try { sessionStorage.removeItem(`nova-onboarding:${profile}`); } catch { /* хранилище недоступно */ }
       window.dispatchEvent(new Event('nova-preferences'));
       // Финальная сцена: галочка прорисовывается, потом окно закрывается и начинается экскурсия.
       finale = true;
-      setTimeout(
+      finishTimer = setTimeout(
         () => {
           open = false;
           finale = false;
@@ -106,7 +120,8 @@
     }
   }
   function skip() {
-    if (profile) sessionStorage.removeItem(`nova-onboarding:${profile}`);
+    if (busy) return;
+    if (profile) try { sessionStorage.removeItem(`nova-onboarding:${profile}`); } catch { /* хранилище недоступно */ }
     open = false;
     startTour();
   }
@@ -135,7 +150,7 @@
       {:else}
         <div class="top">
           <span>Знакомство с Nova · {step + 1}/3</span>
-          <button class="skip" onclick={skip}>Пропустить</button>
+          <button class="skip" disabled={busy} onclick={skip}>Пропустить</button>
         </div>
         <div class="progress" aria-hidden="true"><i style:width="{((step + 1) / 3) * 100}%"></i></div>
         <div class="stage">
@@ -188,7 +203,7 @@
         </div>
         {#if error}<p role="alert" class="err">{error}</p>{/if}
         <div class="actions">
-          {#if step > 0}<button class="btn" onclick={() => go(step - 1)}>Назад</button>{/if}
+          {#if step > 0}<button class="btn" disabled={busy} onclick={() => go(step - 1)}>Назад</button>{/if}
           <button class="btn primary" disabled={busy} onclick={() => (step < 2 ? go(step + 1) : finish())}>{step < 2 ? 'Продолжить' : busy ? 'Сохраняем…' : 'Начать смотреть'}</button>
         </div>
       {/if}
@@ -501,6 +516,13 @@
   :global(.no-motion) .choices button,
   :global(.no-motion) .films button {
     animation: none;
+  }
+  :global(.no-motion) .finale circle,
+  :global(.no-motion) .finale path { animation: none; stroke-dashoffset: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .aurora, .col, .ping, .word, .choices button, .films button { animation: none; }
+    .finale circle, .finale path { animation: none; stroke-dashoffset: 0; }
+    .progress i { transition: none; }
   }
   @keyframes breathe {
     50% {

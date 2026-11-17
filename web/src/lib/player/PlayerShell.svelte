@@ -21,6 +21,7 @@
   import { buildChain, detectCaps, type Quality, type Step } from './plan';
   import { createProgress, elsewherePosition } from './progress';
   import { qualityTier } from './quality-label';
+  import { createVolumeControl } from './volume';
   import { browserName, reportEvent } from './report';
   import { PlaySession, type Engine, type PlayEvent } from './session.svelte';
   import { inCredits as inCreditsAt, inIntro as inIntroAt, nearEnd, NextEpisode } from './skip.svelte';
@@ -52,7 +53,7 @@
   }: {
     fileId?: number;
     /** `linkId` - ссылка, у которой сохраняем место; `start` - откуда начать (где остановился). */
-    src?: { url: string; hls: boolean; title: string; linkId?: number; start?: number } | null;
+    src?: { url: string; hls: boolean; dash?: boolean; title: string; linkId?: number; start?: number } | null;
     onfail?: () => void;
     sync?: PlayerSync | null;
     sidebar?: boolean;
@@ -80,6 +81,7 @@
   let session = $state.raw<PlaySession | null>(null);
   let nativeEngine: NativeEngine | null = null;
   let hlsEngine: HlsEngine | null = null;
+  let sourceTracks:Partial<HlsEngine>|null=null;
   let quality = $state<Quality>('orig');
   let audio = $state(0);
   let hlsHeight = $state<number | null>(null);
@@ -102,6 +104,8 @@
   let volume = $state(1);
   let lastVolume = 1;
   let muted = $state(false);
+  let volumeControl:ReturnType<typeof createVolumeControl>|null=null;
+  $effect(()=>{if(!video)return;const control=createVolumeControl(video);volumeControl=control;return()=>{control.destroy();volumeControl=null;};});
   let full = $state(false);
   let shown = $state(true);
   let dragging = $state(false);
@@ -113,7 +117,8 @@
   let roomBusy = $state(false);
   let mutedByBrowser = $state(false);
 
-  const pipOk = typeof document !== 'undefined' && !!document.pictureInPictureEnabled;
+  const pipOk = typeof document !== 'undefined' && !/SmartTV|Tizen|webOS|HbbTV|NetCast/i.test(navigator.userAgent)
+    && (!!document.pictureInPictureEnabled || 'webkitSetPresentationMode' in HTMLVideoElement.prototype);
   const mode = $derived(session?.step?.mode ?? 'raw');
   const failed = $derived(session?.state === 'failed');
   const waiting = $derived(!info && !localError ? true : session?.state === 'loading' || session?.state === 'buffering');
@@ -174,12 +179,22 @@
   function makeEngine(step: Step): Engine {
     const caps = detectCaps(video);
     if (src) {
-      const e = createLinkEngine({ url: src.url, hls: src.hls, nativeHls: caps.nativeHls, startLevel: srcLevel });
+      const e = createLinkEngine({ url: src.url, hls: src.hls, dash: src.dash, nativeHls: caps.nativeHls, startLevel: srcLevel });
+      sourceTracks=e;
       if ('onLevels' in e && e.onLevels && e.onLevel) {
         hlsEngine = e as HlsEngine;
         e.onLevels((l) => (srcLevels = l));
         e.onLevel((h) => (hlsHeight = h));
       }
+        e.onAudioTracks?.((tracks) => {
+          if (!info || !src) return;
+          const previous = info.play.audio[audio];
+          info.play.audio = tracks;
+          const kept = previous ? tracks.findIndex(t => t.label === previous.label && t.lang === previous.lang) : -1;
+          audio = kept >= 0 ? kept : Math.max(0, tracks.findIndex((t) => t.default));
+          sourceTracks?.setAudioTrack?.(audio);
+        });
+        e.onSubtitleTracks?.((tracks) => { if (info && src) info.play.subs = tracks; });
       return e;
     }
     if (step.mode === 'hls') {
@@ -203,6 +218,7 @@
     session?.destroy();
     nativeEngine = null;
     hlsEngine = null;
+    sourceTracks=null;
     hlsHeight = null;
     offset = 0;
     current = 0;
@@ -233,6 +249,7 @@
     session = null;
     nativeEngine = null;
     hlsEngine = null;
+    sourceTracks=null;
   }
 
   // ---------- источник: файл хоста или видео по ссылке ----------
@@ -293,13 +310,14 @@
       api<PlayInfo>(`/api/files/${id}/info`).then(
         async (i) => {
           if (resource !== resourceGeneration) return;
-          // Замер сам укладывается в 2,5 с (медленно - считает по пришедшему); 3 с - на всякий случай.
-          mbit = await Promise.race([speed, new Promise<null>((r) => setTimeout(() => r(null), 3000))]);
+          // Первый кадр не ждёт полного замера сети: максимум 150 мс, остальное в фоне.
+          mbit = await Promise.race([speed, new Promise<null>((r) => setTimeout(() => r(null), 150))]);
           if (resource !== resourceGeneration) return;
+          void speed.then(value=>{if(resource===resourceGeneration)mbit=value;});
           info = i;
           audio = Math.max(0, i.play.audio.findIndex((a) => a.default));
-          quality = slow ? 'auto' : startQuality(mbit, i.bitrate ?? null);
-          if (quality === 'auto' && i.hls) say(`Интернет ${mbit} Мбит/с - включили автокачество`);
+          quality = slow || (mbit===null&&i.hls) ? 'auto' : startQuality(mbit, i.bitrate ?? null);
+          if (quality === 'auto' && i.hls) say('Включили автоматическое качество');
           const forced = i.play.subs.find((x) => x.forced && x.lang?.startsWith('ru'));
           if (forced) void pickSubs(forced.id);
           const start = sync && remote
@@ -319,7 +337,7 @@
   function onLoaded() {
     if (!video) return;
     try {
-      video.volume = volume;
+      video.volume = Math.min(1,volume);
     } catch {
       /* iOS не даёт менять громкость */
     }
@@ -472,6 +490,7 @@
 
   function toggle() {
     if (!video) return;
+    volumeControl?.resume();
     // В комнате «пауза или пуск» решает состояние комнаты, а не своё видео: у зрителя оно могло
     // стоять (браузер не дал запустить, ещё грузится) - и «пауза» запускала видео у всех.
     const play = sync && remote ? !remote.playing : video.paused;
@@ -493,6 +512,7 @@
     panel = '';
     if (i === audio) return;
     audio = i;
+    if (src && sourceTracks?.setAudioTrack) { sourceTracks.setAudioTrack(i); return; }
     begin(time);
   }
 
@@ -510,8 +530,7 @@
     else if (video && src?.hls && src.linkId) {
       // Safari играет HLS сам: другой уровень - тот же поток с высотой в запросе, с того же места.
       const url = new URL(i === -1 ? src.url : `/api/links/${src.linkId}/stream/index.m3u8`, location.href);
-      const height = srcLevels.find((l) => l.i === i)?.height;
-      if (height) url.searchParams.set('height', String(height));
+      if (i !== -1) url.searchParams.set('level', String(i));
       const at = video.currentTime;
       video.src = url.href;
       video.addEventListener('loadedmetadata', () => (video!.currentTime = at), { once: true });
@@ -523,6 +542,7 @@
     panel = '';
     subId = id;
     cues = [];
+    if (src && sourceTracks?.setSubtitleTrack) { sourceTracks.setSubtitleTrack(id ? Number(id.replace(/^(hls|dash|native):/,'')) : -1); return; }
     if (!id) return;
     const loaded = await loadSubtitles(fileId, id);
     if (loaded === null) subId = '';
@@ -540,17 +560,18 @@
     say(rate === 1 ? 'Обычная скорость' : `Скорость ×${String(rate).replace('.', ',')}`);
   }
 
-  function setVolume(v: number) {
-    volume = Math.max(0, Math.min(1, v));
+  async function setVolume(v: number) {
+    const requested=Math.max(0, Math.min(2, v));
+    volume = volumeControl ? await volumeControl.set(requested) : Math.min(1,requested);
     if (volume > 0) lastVolume = volume;
     muted = volume === 0;
-    say(muted ? 'Звук выключен' : `Громкость ${Math.round(volume * 100)}%`);
+    say(requested>1&&volume<=1?'Браузер не поддерживает усиление звука':muted ? 'Звук выключен' : `Громкость ${Math.round(volume * 100)}%`);
     if (video) {
-      video.volume = volume;
+      video.volume = Math.min(1,volume);
       video.muted = muted;
     }
     try {
-      localStorage.setItem('fsfy-volume', String(volume));
+      localStorage.setItem('fsfy-volume', String(Math.min(1,volume)));
     } catch {
       /* приватный режим */
     }
@@ -563,7 +584,8 @@
   async function pip() {
     try {
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
-      else await video?.requestPictureInPicture();
+      else if(video?.requestPictureInPicture)await video.requestPictureInPicture();
+      else (video as (HTMLVideoElement & {webkitSetPresentationMode?:(mode:string)=>void})|undefined)?.webkitSetPresentationMode?.('picture-in-picture');
     } catch {
       say('Картинка в картинке недоступна');
     }
@@ -870,6 +892,7 @@
     ontimeupdate={onTime}
     onprogress={onTime}
     onplay={() => {
+      volumeControl?.resume();
       paused = false;
       desiredPlaying = true;
       hlsEngine?.resumeBuffering();
@@ -935,7 +958,7 @@
   {@render children?.()}
 
   <Controls
-    title={info?.title ?? ''}
+    title={src?.title ?? info?.title ?? ''}
     episode={info?.episode ?? ''}
     {shown}
     {paused}
@@ -989,6 +1012,9 @@
       {episodesBusy}
       {qualityLabel}
       {rate}
+      {volume}
+      onvolume={onVolume}
+      onnext={canNext?goNext:undefined}
       {alts}
       linkId={src?.linkId ?? null}
       canReportWrong={!!onwrong}
@@ -1000,7 +1026,7 @@
       {ladder}
       {srcLevels}
       {srcLevel}
-      onpanel={(n) => (panel = n)}
+      onpanel={onPanel}
       onepisode={pickEpisode}
       onalt={(id) => {
         panel = '';

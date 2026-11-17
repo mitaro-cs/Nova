@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 
 pub async fn next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+    crate::own_sites::link_enabled(&app, id)?;
     type Target = (Option<i64>, Option<String>, Option<i64>, Option<i64>, String);
     let target: Option<Target> = app.db.with(|c| {
         c.query_row("SELECT title_id,ext_id,season,episode,url FROM links WHERE id=?", [id], |r| {
@@ -30,8 +31,23 @@ pub async fn next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
     if let Some(e) = &ext {
         super::discover::ext_card(&app, &v, e)?;
     }
+    let links = super::links::of(&app, v.profile.id, title, ext.as_deref())?;
     let existing = |s: i64, e: i64| -> ApiResult<Option<(i64, String)>> {
-        Ok(app.db.with(|c|c.query_row("SELECT id,label FROM links WHERE title_id IS ? AND ext_id IS ? AND season=? AND episode=? AND kind!='youtube' AND (?=0 OR url LIKE 'https://sd.lordfilm5.pro/%' OR url LIKE 'https://sg.lordfilm5.pro/%' OR EXISTS (SELECT 1 FROM settings pref WHERE pref.key = ('video.preferred.' || COALESCE('t' || links.title_id, 'e' || links.ext_id) || '.' || COALESCE(links.season, -1) || '.' || COALESCE(links.episode, -1)) AND pref.value = CAST(links.id AS TEXT))) ORDER BY EXISTS (SELECT 1 FROM settings pref WHERE pref.key = ('video.preferred.' || COALESCE('t' || links.title_id, 'e' || links.ext_id) || '.' || COALESCE(links.season, -1) || '.' || COALESCE(links.episode, -1)) AND pref.value = CAST(links.id AS TEXT)) DESC, added_at DESC LIMIT 1",params![title,ext,s,e,lordfilm],|r|Ok((r.get(0)?,r.get(1)?))).optional())?)
+        Ok(links
+            .iter()
+            .find(|l| {
+                l["season"].as_i64() == Some(s)
+                    && l["episode"].as_i64() == Some(e)
+                    && l["kind"] != "youtube"
+                    && (!lordfilm
+                        || l["preferred"] == true
+                        || l["catalogDomain"].is_string()
+                        || reqwest::Url::parse(l["url"].as_str().unwrap_or(""))
+                            .ok()
+                            .as_ref()
+                            .is_some_and(crate::lordfilm::series_url))
+            })
+            .and_then(|l| Some((l["id"].as_i64()?, l["label"].as_str()?.to_string()))))
     };
     if let Some((id, label)) = existing(season, episode + 1)? {
         return Ok(Json(json!({"next":{"id":id,"title":label}})));
@@ -58,7 +74,8 @@ pub async fn next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
     let (s, e) = if max.is_some_and(|max| episode < max) {
         (season, episode + 1)
     } else if max == Some(episode)
-        && x["seasons"].as_array().is_some_and(|a| a.iter().any(|n| n.as_i64() == Some(season + 1)))
+        && (x["seasons"].as_array().is_some_and(|a| a.iter().any(|n| n.as_i64() == Some(season + 1)))
+            || links.iter().any(|l| l["season"].as_i64() == Some(season + 1) && l["episode"].as_i64() == Some(1)))
     {
         (season + 1, 1)
     } else {
@@ -68,7 +85,7 @@ pub async fn next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
         return Ok(Json(json!({"next":{"id":id,"title":label}})));
     }
     let query = super::links::SearchQuery {
-        provider: lordfilm.then(|| "lordfilm".to_owned()),
+        provider: Some("own".to_owned()),
         q: format!("{name} {s} сезон {e} серия"),
         min: Some(600),
         title_id: None,
@@ -81,14 +98,22 @@ pub async fn next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
     let Some(video) = found.first() else {
         return Ok(Json(json!({"next":null,"unavailable":true,"season":s,"episode":e})));
     };
-    let Some(parsed) = video["url"].as_str().and_then(super::links::parse) else {
+    let Some(parsed) =
+        video["url"].as_str().and_then(|u| super::links::parse_with(u, &super::links::extra_sites(&app)))
+    else {
         return Ok(Json(json!({"next":null})));
     };
     let label = format!("{name} · {s} сезон · {e} серия");
-    let id=app.db.with(|c|{
+    let domain = video["author"].as_str().filter(|d| crate::own_sites::enabled_domains(&app).iter().any(|s| s == *d));
+    let id=app.db.tx(|c|{
         if let Some(id)=c.query_row("SELECT id FROM links WHERE url=? AND ext_id=? AND season=? AND episode=?",params![parsed.url,ext,s,e],|r|r.get::<_,i64>(0)).optional()?{return Ok(id)}
         c.execute("INSERT INTO links(kind,url,embed,label,duration,title_id,ext_id,season,episode,added_at) VALUES(?,?,?,?,?,?,?,?,?,?)",params![parsed.kind,parsed.url,parsed.embed,label,video["duration"].as_i64(),title,ext,s,e,crate::util::now_ms()])?;
-        Ok(c.last_insert_rowid())
+        let id=c.last_insert_rowid();
+        if let Some(domain)=domain {
+            let stream=format!("play:{}",crate::util::sha256_hex(format!("{}:{:?}:{:?}",parsed.url,Some(s),Some(e)).as_bytes()));
+            c.execute("INSERT INTO catalog_links(link_id,domain,item_key,stream_key) VALUES(?1,?2,?3,?4)",params![id,domain,ext,stream])?;
+        }
+        Ok(id)
     })?;
     Ok(Json(json!({"next":{"id":id,"title":label}})))
 }

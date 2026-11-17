@@ -39,7 +39,7 @@ function poster(path: string, [c0, c1]: string[]) {
 
 function binary(): string {
   const env = process.env.FSFY_BIN;
-  for (const p of [env, join(ROOT, 'target/release/fsfy'), join(ROOT, 'target/debug/fsfy')]) {
+  for (const p of [env, join(ROOT, 'target/release/fsfy'), join(ROOT, 'target/debug/fsfy'), join(ROOT, 'target/release/fsfy.exe'), join(ROOT, 'target/debug/fsfy.exe')]) {
     if (p && existsSync(p)) return p;
   }
   throw new Error('Нет сервера: соберите `cargo build --release -p fsfy-server` (или задайте FSFY_BIN)');

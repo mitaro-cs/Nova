@@ -246,6 +246,18 @@ pub async fn save_catalogs(State(app): State<Arc<App>>, m: Manager, Json(b): Jso
             ApiError::bad("bad_site", format!("«{}» - не адрес сайта (нужно вроде kino.example)", c.domain))
         })?;
         let search = c.search.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let name = c.name.trim().to_string();
+        if name.chars().count() > 100 || !matches!(c.kind.as_str(), "all" | "movie" | "series" | "anime") {
+            return Err(ApiError::bad("bad_catalog", "Проверьте название и тип каталога"));
+        }
+        let manifest = c.manifest.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        if let Some(raw) = &manifest {
+            let url = reqwest::Url::parse(raw)
+                .map_err(|_| ApiError::bad("bad_catalog", "Некорректный адрес JSON-каталога"))?;
+            if !crate::outbound::valid_url(&url) {
+                return Err(ApiError::bad("bad_catalog", "JSON-каталог должен иметь публичный HTTP или HTTPS адрес"));
+            }
+        }
         if search.as_deref().is_some_and(|s| !crate::own_sites::valid_template(&domain, s)) {
             return Err(ApiError::bad(
                 "bad_search",
@@ -253,7 +265,7 @@ pub async fn save_catalogs(State(app): State<Arc<App>>, m: Manager, Json(b): Jso
             ));
         }
         if !keep.iter().any(|k| k.domain == domain) {
-            keep.push(crate::own_sites::Catalog { domain, search });
+            keep.push(crate::own_sites::Catalog { domain, name, kind: c.kind, manifest, search, enabled: c.enabled });
         }
     }
     if keep.len() > crate::own_sites::MAX {
@@ -777,13 +789,52 @@ pub async fn upload_image(
 /// Записать готовую картинку обложкой или фоном фильма (сброс маленьких копий, фильм «закреплён» - описание
 /// больше не затирает выбор хоста).
 fn apply_image(app: &App, id: i64, col: &str, name: &str) -> Out {
-    app.db.with(|c| {
+    let n=app.db.with(|c| {
         c.execute(
             &format!("UPDATE titles SET {col} = ?, poster_sm = CASE WHEN '{col}' = 'poster' THEN NULL ELSE poster_sm END, backdrop_sm = CASE WHEN '{col}' = 'backdrop' THEN NULL ELSE backdrop_sm END, backdrop_md = CASE WHEN '{col}' = 'backdrop' THEN NULL ELSE backdrop_md END, locked = 1, updated_at = ? WHERE id = ?"),
             params![name, now_ms(), id],
         )
     })?;
+    if n == 0 {
+        return Err(ApiError::not_found());
+    }
     Ok(Json(json!({"ok": true, "url": format!("/img/{name}")})))
+}
+
+pub async fn upload_ext_image(
+    State(app): State<Arc<App>>,
+    _m: Manager,
+    Path((id, which)): Path<(String, String)>,
+    body: Bytes,
+) -> Out {
+    let col = match which.as_str() {
+        "poster" => "poster",
+        "backdrop" => "backdrop",
+        _ => return Err(ApiError::not_found()),
+    };
+    if !app
+        .db
+        .with(|c| c.query_row("SELECT EXISTS(SELECT 1 FROM ext_titles WHERE id=?)", [&id], |r| r.get::<_, bool>(0)))?
+    {
+        return Err(ApiError::not_found());
+    }
+    if body.len() > crate::images::MAX_IMAGE {
+        return Err(ApiError::bad("too_big", "Картинка больше 15 МБ"));
+    }
+    let a = app.clone();
+    let name = tokio::task::spawn_blocking(move || a.images.save(&body))
+        .await
+        .map_err(ApiError::internal)?
+        .map_err(|e| ApiError::bad("bad_image", e.to_string()))?;
+    app.db.with(|c| {
+        c.execute(
+            &format!(
+                "UPDATE ext_titles SET {col}=?1,extra=json_set(COALESCE(extra,'{{}}'),'$.picked.{col}',?1) WHERE id=?2"
+            ),
+            params![name, id],
+        )
+    })?;
+    Ok(Json(json!({"ok":true,"url":format!("/img/{name}")})))
 }
 
 const IMDB_IMG_HOST: &str = "https://m.media-amazon.com/images/";
@@ -1027,12 +1078,19 @@ pub async fn create_user(State(app): State<Arc<App>>, m: Manager, Json(b): Json<
     auth::check_password(&b.password)?;
     let pw = b.password;
     let hash = auth::password_job(move || auth::hash_password(&pw)).await.map_err(ApiError::internal)?;
-    let n = app.db.with(|c| {
+    let n = app.db.tx(|c| {
+        if super::account::name_taken(c, &name, None)? {
+            return Ok(-1);
+        }
         c.execute(
             "INSERT OR IGNORE INTO users (login, name, pass, role, created_at) VALUES (?, ?, ?, ?, ?)",
             params![login, name, hash, role, now_ms()],
         )
+        .map(|n| n as i64)
     })?;
+    if n == -1 {
+        return Err(ApiError::new(StatusCode::CONFLICT, "name_taken", "Это имя уже используется"));
+    }
     if n == 0 {
         return Err(ApiError::new(StatusCode::CONFLICT, "login_taken", "Такой логин уже занят"));
     }
@@ -1075,7 +1133,12 @@ pub async fn edit_user(State(app): State<Arc<App>>, m: Manager, Path(id): Path<i
         None => None,
     };
     let name = b.name.as_deref().map(auth::check_name).transpose()?;
-    app.db.tx(|tx| {
+    let name_conflict = app.db.tx(|tx| {
+        if let Some(name) = &name {
+            if super::account::name_taken(tx, name, Some(id))? {
+                return Ok(true);
+            }
+        }
         if let Some(n) = &name {
             tx.execute("UPDATE users SET name = ? WHERE id = ?", params![n, id])?;
             tx.execute("UPDATE profiles SET name = ? WHERE user_id = ?", params![n, id])?;
@@ -1097,8 +1160,11 @@ pub async fn edit_user(State(app): State<Arc<App>>, m: Manager, Path(id): Path<i
             tx.execute("DELETE FROM account_tokens WHERE user_id = ?", [id])?;
             tx.execute("DELETE FROM sessions WHERE user_id = ? AND local = 0", [id])?;
         }
-        Ok(())
+        Ok(false)
     })?;
+    if name_conflict {
+        return Err(ApiError::new(StatusCode::CONFLICT, "name_taken", "Это имя уже используется"));
+    }
     ok()
 }
 

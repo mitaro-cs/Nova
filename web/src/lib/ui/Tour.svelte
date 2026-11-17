@@ -38,7 +38,7 @@
   let token = 0;
   const last = $derived(step === STEPS.length - 1);
   const s = $derived(STEPS[step]);
-  const d = $derived(motionOn() ? 300 : 0);
+  const d = $derived(motionOn() && !window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 300 : 0);
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
   const pathOf = (href: string) => (href === ME ? `/people/${session.me?.user.profile?.id ?? ''}` : href);
 
@@ -62,7 +62,9 @@
     void (async () => {
       if (now.href) {
         const want = pathOf(now.href);
-        if (location.pathname !== want) await goto(want);
+        if (location.pathname !== want) {
+          try { await goto(want); } catch { return; }
+        }
       }
       if (!now.target || mine !== token) return;
       let el: HTMLElement | null = null;
@@ -73,14 +75,20 @@
         await sleep(100);
       }
       if (!el || mine !== token) return;
-      el.scrollIntoView({ block: 'center', behavior: motionOn() ? 'smooth' : 'auto' });
+      el.scrollIntoView({ block: 'center', behavior: d ? 'smooth' : 'auto' });
+      let frame = 0;
+      let previous: { x: number; y: number; w: number; h: number } | null = null;
       const follow = () => {
         if (mine !== token || !open || !el) return;
         const r = el.getBoundingClientRect();
-        rect = { x: r.left, y: r.top, w: r.width, h: r.height };
-        requestAnimationFrame(follow);
+        if (!previous || previous.x !== r.left || previous.y !== r.top || previous.w !== r.width || previous.h !== r.height) {
+          previous = { x: r.left, y: r.top, w: r.width, h: r.height };
+          rect = previous;
+        }
+        frame = requestAnimationFrame(follow);
       };
       follow();
+      if (mine !== token) cancelAnimationFrame(frame);
     })();
     return () => {
       token++;
@@ -194,6 +202,8 @@
     background: #17171a;
     color: #fff;
     box-shadow: 0 30px 90px -20px #000;
+    max-height: calc(100dvh - 36px);
+    overflow-y: auto;
   }
   .card.floating {
     position: fixed;
@@ -268,6 +278,10 @@
   :global(.no-motion) .badge {
     animation: none;
     transition: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spot, .badge { animation: none; transition: none; }
+    .bar i { transition: none; }
   }
   @keyframes pulse {
     50% {

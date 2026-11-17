@@ -387,6 +387,7 @@ export interface ExtDetail {
 
 /** Видео по ссылке: Rutube, VK, YouTube (их плеер) или прямой файл (наш). */
 export interface VideoLink {
+  catalogDomain?: string | null;
   preferred?: boolean;
   season?: number | null;
   episode?: number | null;
@@ -408,7 +409,7 @@ export interface VideoLink {
 
 /** Найденное на Rutube/VK - ещё не сохранено. */
 export interface FoundVideo {
-    site: 'rutube' | 'vk' | 'dailymotion' | 'archive' | 'peertube' | 'commons' | 'lordfilm';
+    site: 'rutube' | 'vk' | 'dailymotion' | 'archive' | 'peertube' | 'commons' | 'lordfilm' | 'own';
   url: string;
   label: string;
   thumb: string | null;

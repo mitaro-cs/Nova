@@ -253,7 +253,7 @@ pub async fn install(app: &AppHandle) {
 /// Сколько копий базы хранить: старые удаляются.
 const BACKUPS: usize = 3;
 
-/// Копия `fsfy.db` (сайт уже выключен, база закрыта) в `backups/fsfy-<время>-<версия>.db`.
+/// Согласованная копия SQLite, включая изменения из WAL, даже если фоновые задачи ещё работают.
 fn backup_db(app: &AppHandle) -> std::io::Result<()> {
     let data = app.path().app_data_dir().map_err(std::io::Error::other)?;
     let db = data.join("fsfy.db");
@@ -264,16 +264,17 @@ fn backup_db(app: &AppHandle) -> std::io::Result<()> {
     std::fs::create_dir_all(&dir)?;
     // Время первым: имена сортируются по времени (у версий «0.10» < «0.9» как у строк).
     let name = format!("fsfy-{}-{}.db", fsfy::util::now_ms(), app.package_info().version);
-    std::fs::copy(&db, dir.join(&name))?;
-    // Обычно журнал при закрытии уже влит в базу; если нет - копируем и его.
-    let wal = data.join("fsfy.db-wal");
-    if wal.metadata().is_ok_and(|m| m.len() > 0) {
-        std::fs::copy(&wal, dir.join(format!("{name}-wal")))?;
-    }
+    let conn = rusqlite::Connection::open(&db).map_err(std::io::Error::other)?;
+    conn.busy_timeout(std::time::Duration::from_secs(10)).map_err(std::io::Error::other)?;
+    conn.execute("VACUUM INTO ?1", [dir.join(&name).to_string_lossy().as_ref()]).map_err(std::io::Error::other)?;
     let mut old: Vec<_> = std::fs::read_dir(&dir)?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "db"))
+        .filter(|p| {
+            p.extension().is_some_and(|x| x == "db")
+                && p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("fsfy-"))
+                && !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("fsfy-manual-"))
+        })
         .collect();
     old.sort();
     for p in old.iter().rev().skip(BACKUPS) {

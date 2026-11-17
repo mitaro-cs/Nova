@@ -31,11 +31,11 @@
   let flying = $state<{ key: number; emoji: string; x: number; who: string }[]>([]);
   let feed = $state<HTMLElement>();
   // Видео по ссылке (фильм из Обзора): поток через сервер - узнаём один раз.
-  let linkSrc = $state<{ url: string; hls: boolean; title: string; linkId: number; start: number } | null>(null);
+  let linkSrc = $state<{ url: string; hls: boolean; dash?: boolean; title: string; linkId: number; start: number } | null>(null);
   $effect(() => {
     const l = room?.linkId;
     if (!l || linkSrc?.linkId === l) return;
-    Promise.all([api<{ url: string; hls: boolean }>(`/api/links/${l}/stream/source`), api<{ label: string }>(`/api/links/${l}`)]).then(
+    Promise.all([api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${l}/stream/source`), api<{ label: string }>(`/api/links/${l}`)]).then(
       ([s, link]) => (linkSrc = { ...s, title: link.label, linkId: l, start: room ? expected(room).position : 0 }),
       (x) => (error = errorText(x)),
     );

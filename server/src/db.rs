@@ -673,6 +673,37 @@ ALTER TABLE profiles ADD COLUMN vis_stats TEXT NOT NULL DEFAULT 'all';
 ALTER TABLE profiles ADD COLUMN vis_watched TEXT NOT NULL DEFAULT 'all';
 ALTER TABLE profiles ADD COLUMN vis_reviews TEXT NOT NULL DEFAULT 'all';
 "#,
+    // 31: принадлежность импортированных вариантов видео подключаемому каталогу.
+    r#"
+CREATE TABLE catalog_links (
+  link_id INTEGER PRIMARY KEY REFERENCES links(id) ON DELETE CASCADE,
+  domain TEXT NOT NULL,
+  item_key TEXT NOT NULL,
+  stream_key TEXT NOT NULL,
+  UNIQUE(domain, item_key, stream_key)
+);
+CREATE INDEX catalog_links_domain ON catalog_links(domain);
+"#,
+    // 32: возобновляемый импорт сайтов, очередь тайтлов и явные ошибки каждого этапа.
+    r#"
+CREATE TABLE site_import_jobs (
+ domain TEXT PRIMARY KEY, state TEXT NOT NULL, next_url TEXT,
+ pages INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL
+);
+CREATE TABLE site_import_entries (
+ domain TEXT NOT NULL, url TEXT NOT NULL, metadata TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending', message TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL,
+ PRIMARY KEY(domain,url)
+);
+CREATE INDEX site_import_pending ON site_import_entries(domain,state);
+"#,
+    // 33: очередь страниц и разделов сайта, чтобы обход главной не считался полным каталогом.
+    r#"
+CREATE TABLE site_import_pages (
+ domain TEXT NOT NULL, url TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
+ PRIMARY KEY(domain,url)
+);
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

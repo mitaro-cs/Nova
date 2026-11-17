@@ -6,8 +6,8 @@ export function hue(s: string): number {
 }
 
 export function placeholder(title: string): string {
-  const shade = 4 + hue(title) % 7;
-  return `linear-gradient(160deg, rgb(${shade} ${shade} ${shade}), #000)`;
+  const color = hue(title);
+  return `linear-gradient(155deg, hsl(${color} 24% 25%), hsl(${color} 18% 9%) 68%, #09090b)`;
 }
 
 const ART = '/api/discover/art?';

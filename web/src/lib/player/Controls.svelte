@@ -3,6 +3,7 @@
   import type { Trickplay } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
   import Seekbar from './Seekbar.svelte';
+  import { playbackTitle } from './title';
 
   // Органы управления - вариант C: сверху название, по центру крупные «назад 10 с», пауза и «вперёд 10 с»,
   // снизу тонкая полоса перемотки, время слева и значки справа. Всё скрывается без движения.
@@ -90,14 +91,13 @@
   let topH = $state(80);
   let bottomH = $state(120);
   $effect(() => onheight(topH, bottomH));
-  const rateText = $derived(`×${String(rate).replace('.', ',')}`);
 </script>
 
 <div class="top" class:hide={!shown} bind:clientHeight={topH}>
   <button class="ibtn" aria-label="Назад" onclick={onback}><Icon name="back" size={24} /></button>
   {#if title}
     <div class="name">
-      <b>{title}</b>
+      <b>{playbackTitle(title)}</b>
       {#if episode}<span>{episode}</span>{/if}
     </div>
   {/if}
@@ -130,17 +130,13 @@
       <button class="ibtn" aria-label={muted ? 'Включить звук' : 'Выключить звук'} onclick={() => onvolume(muted ? -1 : 0)}>
         <Icon name={muted || volume === 0 ? 'mute' : 'volume'} size={22} />
       </button>
-      <input type="range" min="0" max="1" step="0.02" value={muted ? 0 : volume} oninput={(e) => onvolume(Number((e.target as HTMLInputElement).value))} aria-label="Громкость" />
+      <input type="range" min="0" max="2" step="0.02" value={muted ? 0 : volume} oninput={(e) => onvolume(Number((e.target as HTMLInputElement).value))} aria-label="Громкость" aria-valuetext={`${Math.round(volume*100)}%`} />
+      <span class="volume-label">{Math.round((muted?0:volume)*100)}%</span>
     </div>
-    {#if showEpisodes}<button class="ibtn" class:on={panel === 'episodes'} aria-label="Сезоны и серии" title="Сезоны и серии" onclick={() => onpanel('episodes')}><Icon name="tv" size={22} /></button>{/if}
     {#if showAudio}<button class="ibtn" class:on={panel === 'audio'} aria-label="Озвучка" title="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
-    {#if showSubs}<button class="ibtn" class:on={panel === 'subs' || subsOn} aria-label="Субтитры" title="Субтитры" onclick={() => onpanel('subs')}><Icon name="captions" size={22} /></button>{/if}
     {#if showQuality}<button class="ibtn q" class:on={panel === 'quality'} aria-label="Качество" title="Качество" onclick={() => onpanel('quality')}>{qualityLabel}</button>{/if}
-    <button class="ibtn q" class:on={panel === 'speed' || rate !== 1} aria-label="Скорость" title="Скорость" onclick={() => onpanel('speed')}>{rateText}</button>
     <button class="ibtn" class:on={panel === 'settings'} aria-label="Настройки плеера" title="Настройки" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
-    {#if canNext}<button class="ibtn" aria-label="Следующая серия" title="Следующая серия (N)" onclick={onnext}><Icon name="next" size={22} /></button>{/if}
-    {#if pipOk}<button class="ibtn hide-sm" aria-label="Картинка в картинке" title="Картинка в картинке (P)" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
-    <button class="ibtn hide-sm" aria-label="Горячие клавиши" title="Горячие клавиши (?)" onclick={() => onpanel('keys')}><Icon name="info" size={20} /></button>
+    {#if pipOk}<button class="ibtn" aria-label="Картинка в картинке" title="Картинка в картинке (P)" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
     <button class="ibtn" aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
   </div>
 </div>
@@ -312,7 +308,7 @@
   .skip text {
     fill: #fff;
     stroke: none;
-    font-size: 8.4px;
+    font-size: 6.6px;
     font-weight: 700;
     font-family: inherit;
     text-anchor: middle;
@@ -322,6 +318,7 @@
     display: grid;
     animation: swap 0.18s ease-out;
   }
+  .volume-label { min-width:34px;font-size:11px;font-variant-numeric:tabular-nums;color:#ccc; }
   @keyframes swap {
     from {
       opacity: 0;
@@ -329,11 +326,16 @@
     }
   }
   @media (max-width: 700px) {
-    .hide-sm {
-      display: none;
-    }
+    .ibtn{min-width:32px;padding-inline:4px}.row{gap:2px}.volume-label{display:none}.time{font-size:11px}
     .vol input {
       display: none;
     }
+  }
+  @media (min-width: 1000px) {
+    .center { inset: auto 35% 13px; height: 44px; gap: 8px; z-index: 2; }
+    .cbig, .cbig.main { width: 42px; height: 42px; }
+    .cbig:not(.main) { background: transparent; }
+    .cbig.main :global(svg) { width: 22px; height: 22px; }
+    .skip { width: 24px; height: 24px; }
   }
 </style>

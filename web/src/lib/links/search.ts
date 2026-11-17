@@ -2,7 +2,7 @@ import { api } from '$lib/api';
 import type { FoundVideo } from '$lib/types';
 
 export const sourceName = (site: string) => ({lordfilm:'LordFilm',rutube:'Rutube',vk:'VK Видео',archive:'Internet Archive',peertube:'PeerTube',commons:'Wikimedia Commons',dailymotion:'Dailymotion',own:'Каталог хоста'}[site] ?? site);
-const sources = ['lordfilm','own','rutube','vk','archive','peertube','commons'];
+const sources = ['own'];
 
 /** Publish each provider independently: a slow server must not hide ready results. */
 export async function searchVideos(params: URLSearchParams, publish: (items: FoundVideo[]) => void, signal?: AbortSignal, otherSourcesOnly = false) {

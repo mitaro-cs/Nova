@@ -150,6 +150,9 @@ pub fn parse_with(raw: &str, sites: &[String]) -> Option<Parsed> {
         return Some(p);
     }
     let u = Url::parse(raw.trim()).ok()?;
+    if crate::site_sources::is_provider(&u) && crate::outbound::valid_url(&u) {
+        return Some(Parsed { kind: "site", url: u.to_string(), embed: None, id: None });
+    }
     if u.scheme() != "https" && u.scheme() != "http" {
         return None;
     }
@@ -185,7 +188,8 @@ async fn page_info(url: &str) -> (Option<String>, Option<String>) {
 
 const COLS: &str = "l.id, l.kind, l.url, l.embed, l.label, NULLIF(l.thumb, ''), l.duration, l.title_id, l.ext_id, \
     l.added_by, COALESCE(p.name, ''), l.added_at, lp.position, lp.duration, l.season, l.episode, \
-    EXISTS (SELECT 1 FROM settings pref WHERE pref.key = ('video.preferred.' || COALESCE('t' || l.title_id, 'e' || l.ext_id) || '.' || COALESCE(l.season, -1) || '.' || COALESCE(l.episode, -1)) AND pref.value = CAST(l.id AS TEXT))";
+    EXISTS (SELECT 1 FROM settings pref WHERE pref.key = ('video.preferred.' || COALESCE('t' || l.title_id, 'e' || l.ext_id) || '.' || COALESCE(l.season, -1) || '.' || COALESCE(l.episode, -1)) AND pref.value = CAST(l.id AS TEXT)), \
+    (SELECT domain FROM catalog_links WHERE link_id = l.id)";
 
 /// Ссылки с автором и местом, где остановился этот зритель (`?1` - его профиль).
 const FROM: &str = "links l LEFT JOIN profiles p ON p.id = l.added_by
@@ -200,6 +204,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "addedBy": r.get::<_, Option<i64>>(9)?, "author": r.get::<_, String>(10)?, "addedAt": r.get::<_, i64>(11)?,
         "progress": r.get::<_, Option<f64>>(12)?.map(|p| json!({"position": p, "duration": r.get::<_, Option<f64>>(13).ok().flatten().unwrap_or(0.0)})),
         "season": r.get::<_, Option<i64>>(14)?, "episode": r.get::<_, Option<i64>>(15)?, "preferred": r.get::<_, bool>(16)?,
+        "catalogDomain": r.get::<_, Option<String>>(17)?,
     }))
 }
 
@@ -207,13 +212,22 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
 pub fn of(app: &App, profile: i64, title: Option<i64>, ext: Option<&str>) -> ApiResult<Vec<Value>> {
     let sql = format!(
         "SELECT {COLS} FROM {FROM}
-         WHERE l.title_id IS ?2 AND l.ext_id IS ?3 ORDER BY lp.updated_at IS NULL, lp.updated_at DESC, l.added_at DESC LIMIT 2000"
+         WHERE l.title_id IS ?2 AND l.ext_id IS ?3 ORDER BY lp.updated_at IS NULL, lp.updated_at DESC, l.added_at DESC"
     );
-    Ok(app.db.with(|c| {
+    let mut items = app.db.with(|c| {
         let mut st = c.prepare(&sql)?;
         let r = st.query_map(params![profile, title, ext], row)?;
         r.collect::<rusqlite::Result<Vec<_>>>()
-    })?)
+    })?;
+    let domains = crate::own_sites::enabled_domains(app);
+    items.retain(|v| v["catalogDomain"].as_str().is_none_or(|d| domains.iter().any(|c| c == d)));
+    items.sort_by_key(|v| {
+        (
+            !v["preferred"].as_bool().unwrap_or(false),
+            v["catalogDomain"].as_str().and_then(|d| domains.iter().position(|c| c == d)).unwrap_or(usize::MAX),
+        )
+    });
+    Ok(items)
 }
 
 #[derive(Deserialize)]
@@ -291,6 +305,7 @@ pub async fn import_source(
 
 /// Источник выбирает только администратор; привязка общая для всех профилей.
 pub async fn prefer(State(app): State<Arc<App>>, _m: Manager, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+    crate::own_sites::link_enabled(&app, id)?;
     type LinkTarget = (Option<i64>, Option<String>, Option<i64>, Option<i64>);
     let target: Option<LinkTarget> = app.db.with(|c| {
         c.query_row("SELECT title_id, ext_id, season, episode FROM links WHERE id = ?", [id], |r| {
@@ -323,6 +338,7 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<ListQu
 }
 
 pub async fn one(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+    crate::own_sites::link_enabled(&app, id)?;
     let sql = format!("SELECT {COLS} FROM {FROM} WHERE l.id = ?2");
     Ok(Json(
         app.db
@@ -419,6 +435,7 @@ pub struct NewLink {
     duration: Option<i64>,
     season: Option<i64>,
     episode: Option<i64>,
+    source_domain: Option<String>,
 }
 
 /// Ссылка с сайта, которого нет в «Своих сайтах» хоста: отдельная ошибка с доменом (хосту окно предложит разрешить его).
@@ -512,6 +529,22 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
         return Err(ApiError::bad("bad_episode", "Укажите сезон и номер серии"));
     }
     let p = parse_with(&b.url, &extra_sites(&app)).ok_or_else(|| unknown_site_or_bad(&b.url))?;
+    let source_domain = if let Some(domain) = b.source_domain.as_deref() {
+        let normalized = site_domain(domain).ok_or_else(|| ApiError::bad("source", "Неверный адрес источника"))?;
+        if !crate::own_sites::enabled_domains(&app).contains(&normalized)
+            || (b.title_id.is_none() && b.ext_id.is_none())
+        {
+            return Err(ApiError::bad("source_disabled", "Источник не подключён или выключен"));
+        }
+        let url = Url::parse(&p.url).map_err(|_| ApiError::bad("source", "Неверный адрес видео"))?;
+        let same = url.host_str().is_some_and(|h| h == normalized || h.ends_with(&format!(".{normalized}")));
+        if !same && !crate::site_sources::is_provider(&url) {
+            return Err(ApiError::bad("source", "Видео не принадлежит источнику"));
+        }
+        Some(normalized)
+    } else {
+        None
+    };
     if let Some((season, episode)) = Url::parse(&p.url).ok().as_ref().and_then(crate::lordfilm::episode_target) {
         if b.season != Some(season) || b.episode != Some(episode) {
             return Err(ApiError::bad("bad_episode", "Серия в ссылке не совпадает с выбранной серией"));
@@ -531,12 +564,34 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
         params![p.url, b.title_id, b.ext_id, b.season, b.episode], |r| r.get(0),
     ).optional())?;
     if let Some(id) = existing {
+        if let Some(domain) = source_domain.as_deref() {
+            let item = b.ext_id.clone().unwrap_or_else(|| format!("t:{}", b.title_id.unwrap_or_default()));
+            let stream = format!(
+                "play:{}",
+                crate::util::sha256_hex(format!("{}:{:?}:{:?}", p.url, b.season, b.episode).as_bytes())
+            );
+            app.db.with(|c| {
+                c.execute(
+                    "INSERT OR IGNORE INTO catalog_links(link_id,domain,item_key,stream_key) VALUES(?1,?2,?3,?4)",
+                    params![id, domain, item, stream],
+                )
+            })?;
+        }
         return Ok(Json(json!({"id": id})));
     }
-    let n: i64 =
-        app.db.with(|c| c.query_row("SELECT COUNT(*) FROM links WHERE added_by = ?", [v.profile.id], |r| r.get(0)))?;
-    if n >= 500 {
-        return Err(ApiError::bad("too_many", "Не больше 500 своих ссылок"));
+    // Поиск при просмотре создаёт ссылку, привязанную к тайтлу. Импортированные эпизоды тоже
+    // принадлежат хосту, но не являются его отдельными ссылками: не ограничиваем ими просмотр.
+    if b.title_id.is_none() && b.ext_id.is_none() {
+        let n: i64 = app.db.with(|c| {
+            c.query_row(
+                "SELECT COUNT(*) FROM links l WHERE l.added_by = ? AND l.title_id IS NULL AND l.ext_id IS NULL AND NOT EXISTS (SELECT 1 FROM catalog_links cl WHERE cl.link_id = l.id)",
+                [v.profile.id],
+                |r| r.get(0),
+            )
+        })?;
+        if n >= 500 {
+            return Err(ApiError::bad("too_many", "Не больше 500 отдельных ссылок"));
+        }
     }
     let label = b
         .label
@@ -548,13 +603,19 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
         .take(200)
         .collect::<String>();
     let thumb: Option<String> = None;
-    let id = app.db.with(|c| {
+    let id = app.db.tx(|c| {
         c.execute(
             "INSERT INTO links (title_id, ext_id, kind, url, embed, label, thumb, duration, added_by, added_at, season, episode)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![b.title_id, b.ext_id, p.kind, p.url, p.embed, label, thumb, b.duration, v.profile.id, now_ms(), b.season, b.episode],
         )?;
-        Ok(c.last_insert_rowid())
+        let id=c.last_insert_rowid();
+        if let Some(domain)=source_domain.as_deref() {
+            let item=b.ext_id.clone().unwrap_or_else(||format!("t:{}",b.title_id.unwrap_or_default()));
+            let stream=format!("play:{}",crate::util::sha256_hex(format!("{}:{:?}:{:?}",p.url,b.season,b.episode).as_bytes()));
+            c.execute("INSERT INTO catalog_links(link_id,domain,item_key,stream_key) VALUES(?1,?2,?3,?4)",params![id,domain,item,stream])?;
+        }
+        Ok(id)
     })?;
     // Starting playback must never wait for a thumbnail or remote page metadata.
     let background = app.clone();

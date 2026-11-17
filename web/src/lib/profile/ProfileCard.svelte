@@ -14,7 +14,7 @@
   import Medal from './Medal.svelte';
   import type { ProfilePage } from './types';
 
-  // Боковая карточка человека (липкая): стена постеров, портрет, имя, «сейчас смотрит», цифры, значки, жанры,
+  // Карточка профиля: стена постеров, портрет, имя, «сейчас смотрит», цифры, значки, жанры,
   // кнопки по роли (я, друг, чужой) и быстрые разделы - у владельца. Закрытая статистика - без цифр и значков.
   let { p = $bindable() }: { p: ProfilePage } = $props();
 
@@ -52,11 +52,11 @@
     {#if p.decor.coverKind === 'image' && p.decor.cover}
       <img use:fadeIn src={p.decor.cover} alt="" decoding="async" />
     {:else}
-      <PosterWall posters={p.decor.ribbon} accent={p.decor.accent} />
+      <PosterWall posters={p.decor.ribbon} accent={p.decor.accent} prominent />
     {/if}
   </div>
 
-  <div class="who" style:--acc={p.decor.accent ?? '#4a4a53'}>
+    <div class="who" style:--acc={p.decor.accent ?? '#4a4a53'}>
     <div class="ring">
       <Avatar avatar={p.person.avatar} photo={p.person.photo} size={108} />
       {#if now}<i class="live" title="Сейчас смотрит"></i>{/if}
@@ -100,6 +100,13 @@
       {/if}
     </div>
 
+    {#if p.me}
+      <div class="social-actions" aria-label="Общение и просмотр">
+        <a class="btn" href="/chats"><Icon name="mail" size={15} /> Чаты</a>
+        <button class="btn" type="button" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={15} /> Смотреть вместе</button>
+      </div>
+    {/if}
+
     {#if s && names.length}
       <div class="meds">
         <span class="m">{#each names.slice(0, 5) as b, i (b.label)}<Medal icon={b.icon} tone={(i % 3) as 0 | 1 | 2} label={b.label} {i} />{/each}</span>
@@ -108,6 +115,7 @@
     {/if}
 
     {#if p.me}
+      <details class="shortcuts"><summary aria-label="Быстрые разделы"><Icon name="menu" size={20} /></summary>
       <nav class="quick" aria-label="Быстрые разделы">
         <a href="/chats"><span><Icon name="mail" size={17} /> Чаты</span>{#if unseen.unread}<em>{unseen.unread}</em>{/if}</a>
         <a href="/lists"><span><Icon name="list" size={17} /> Подборки</span><Icon name="right" size={16} /></a>
@@ -116,6 +124,7 @@
         <button type="button" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><span><Icon name="sparkle" size={17} /> Экскурсия по Nova</span><Icon name="right" size={16} /></button>
         {#if !session.me?.window}<button type="button" onclick={logout}><span><Icon name="logout" size={17} /> Выйти</span></button>{/if}
       </nav>
+      </details>
     {/if}
   </div>
 </aside>
@@ -127,12 +136,12 @@
     overflow: hidden;
     border: 1px solid var(--line);
     border-radius: 20px;
-    background: var(--surface);
+    background: #000;
     animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   .cover {
     position: relative;
-    height: 116px;
+    height: 164px;
     overflow: hidden;
     background: #101013;
   }
@@ -149,7 +158,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, #17171a00 10%, var(--surface) 100%);
+    background: linear-gradient(180deg, #0001 5%, #0006 60%, #000 100%);
   }
   .who {
     display: grid;
@@ -158,19 +167,17 @@
     padding: 0 18px 18px;
     text-align: center;
   }
-  /* Портрет: спокойный ободок цвета профиля, без движения. */
+  /* Белый неподвижный ободок из присланного макета. */
   .ring {
     position: relative;
     display: grid;
     place-items: center;
-    width: 108px;
-    height: 108px;
-    margin-top: -54px;
+    width: 116px;
+    height: 116px;
+    margin-top: -65px;
     border-radius: 50%;
     background: #d9d9df;
-    box-shadow:
-      0 0 0 4px var(--surface),
-      0 0 0 6px color-mix(in srgb, var(--acc) 55%, #fff);
+    box-shadow: 0 0 0 3px #000, 0 0 0 5px #fff;
   }
   .ring :global(.ava) {
     width: 100%;
@@ -186,7 +193,7 @@
     height: 20px;
     border-radius: 50%;
     background: var(--ok);
-    border: 4px solid var(--surface);
+    border: 4px solid #000;
   }
   h1 {
     margin: 14px 0 0;
@@ -232,8 +239,8 @@
     align-items: center;
     gap: 5px;
     padding: 4px 10px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 50%, #2a2a2e), #1c1c1f);
+    border-radius: 9px;
+    background: linear-gradient(135deg, #777, #272727);
     box-shadow: inset 0 0 0 1px #ffffff26;
     font-size: 11.5px;
     font-weight: 600;
@@ -329,6 +336,11 @@
     font-size: 12.5px;
     line-height: 1.3;
   }
+  .shortcuts { position:absolute;top:14px;right:14px;z-index:2;text-align:left; }
+  .shortcuts summary { display:grid;place-items:center;width:36px;height:36px;list-style:none;border:1px solid #ffffff30;border-radius:50%;background:#141414d9;cursor:pointer; }
+  .shortcuts summary::-webkit-details-marker { display:none; }
+  .shortcuts summary:focus-visible { outline:2px solid #fff;outline-offset:3px; }
+  .shortcuts[open] summary { margin-left:auto; }
   .sr {
     position: absolute;
     width: 1px;
@@ -338,8 +350,13 @@
   }
   .quick {
     display: grid;
-    width: 100%;
-    margin-top: 12px;
+    width: min(250px,calc(100vw - 60px));
+    margin-top: 8px;
+    padding:8px 14px;
+    background:#1c1c1c;
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:0 12px 32px #0008;
     text-align: left;
   }
   .quick a,
@@ -391,5 +408,66 @@
       position: relative;
       top: 0;
     }
+  }
+  @media (max-width: 600px) {
+    .shortcuts{top:max(52px,calc(env(safe-area-inset-top) + 12px));right:16px}.shortcuts summary{width:44px;height:44px}
+    .card { border: 0; border-radius: 0; background: #000; }
+    .cover { height: 250px; }
+    .who { padding: 0 16px 24px; }
+    .ring { width: 116px; height: 116px; margin-top: -106px; }
+    .live { width:20px;height:20px;right:0;bottom:7px; }
+    h1 { margin-top: 18px; font-size: 29px;letter-spacing:-.035em; }
+    .now { margin-top: 9px; font-size: 13px;justify-content:center;max-width:100%;line-height:1.5; }
+    .caps { margin-top: 12px;gap:6px; }
+    .caps li { padding: 7px 10px; font-size: 12px;background:transparent;box-shadow:inset 0 0 0 1px #ffffff26; }
+    .bdg { margin-top: 10px;gap:6px; }
+    .bdg li { padding: 6px 10px; font-size: 12px;box-shadow:inset 0 0 0 1px #ffffff40; }
+    .genres { margin-top: 11px;gap:5px; }
+    .genres a { padding: 7px 10px; font-size: 12px;background:#1b1b1b; }
+    .box { margin-top: 13px; padding: 16px 6px; border-radius: 19px;border-color:#ffffff26; }
+    .box b { font-size: 25px;line-height:1.2; }
+    .box small { display:block;margin-top:9px;color:#8f8f95;font-size:12px; }
+    .btns { margin-top: 12px;gap:8px; }
+    .btns > .btn { min-height: 44px;font-size:15px; }
+    .meds { margin-top:16px;gap:12px; }
+    .meds small { font-size:12px; }
+    .m { flex-wrap:nowrap;gap:0; }
+    .m :global(.medal) { width:36px;height:36px; }
+  }
+  @media(min-width:1001px){
+    .card{position:relative;top:0;border-radius:26px;border-color:#ffffff20;width:100%}
+    .cover{height:300px}.cover::after{background:linear-gradient(180deg,transparent 40%,#000)}
+    .who{grid-template-columns:160px minmax(0,1fr) 300px;justify-items:start;align-items:center;gap:10px 26px;padding:0 32px 30px;text-align:left}
+    .ring{grid-column:1;grid-row:1 / span 7;width:144px;height:144px;margin-top:-84px;align-self:start}
+    h1{grid-column:2;grid-row:1;font-size:36px;margin:0}.now{grid-column:2;grid-row:2;margin:0}
+    .caps,.bdg,.genres{grid-column:2;justify-content:flex-start;margin:0}.bio,.locked{grid-column:2;margin:0}
+    .box{grid-column:3;grid-row:1 / span 3;margin:0;padding:20px 6px;align-self:start}.box b{font-size:29px}
+    .btns{grid-column:3;grid-row:4 / span 3;margin:0;align-self:start}.btns>.btn{min-height:44px}
+    .meds{grid-column:2;margin:4px 0 0}.live{width:22px;height:22px}
+  }
+  .social-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;width:100%}
+  .social-actions .btn{border-radius:999px;min-height:42px}
+  @media(min-width:1001px){
+    .cover{height:270px}.cover::after{background:linear-gradient(180deg,transparent 30%,#000 100%)}
+    .who{grid-template-columns:110px minmax(0,1fr) auto;gap:9px 18px;padding:0 30px 28px}
+    .ring{grid-column:1;grid-row:1 / span 3;width:100px;height:100px;margin-top:-65px}
+    h1{grid-column:2;grid-row:1;font-size:27px}.now{grid-column:2;grid-row:2}
+    .caps{grid-column:2;grid-row:3}.bdg{grid-column:1 / -1;grid-row:4;margin-top:8px}
+    .genres{grid-column:1 / -1;grid-row:5;margin-top:3px}
+    .box{grid-column:1 / 3;grid-row:6;margin-top:14px;border:0;border-radius:0;padding:10px 0;text-align:left}
+    .box div+div{padding-left:22px}.box b{font-size:23px}
+    .btns{grid-column:3;grid-row:6;margin:0;align-self:center;width:auto}.btns>.btn{min-width:190px}
+    .social-actions{grid-column:1 / -1;grid-row:7;margin-top:3px}
+    .meds{grid-column:1 / -1;grid-row:8;margin-top:7px}.bio,.locked{grid-column:2}
+  }
+  @media(max-width:600px){
+    .card{border:1px solid #ffffff20;border-radius:26px;background:#080809}
+    .cover::after{background:linear-gradient(180deg,transparent 25%,#080809 100%)}
+    .who{justify-items:start;text-align:left;padding:0 20px 24px}
+    .ring{width:96px;height:96px;margin-top:-72px}
+    h1{margin-top:14px}.now{justify-content:flex-start}
+    .caps,.bdg,.genres{justify-content:flex-start}
+    .box{border:0;border-radius:0;padding:14px 0;text-align:left}
+    .box div+div{padding-left:16px}.box small{margin-top:5px}
   }
 </style>

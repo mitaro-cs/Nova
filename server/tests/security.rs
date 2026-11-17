@@ -264,3 +264,31 @@ fn genre_words_are_not_titles() {
     assert!(fsfy::discover::genre_query("фантастика").is_some());
     assert!(fsfy::discover::genre_query("гарри потеет").is_none());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn login_can_be_changed_once_and_is_unique() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, _host) = common::start(dir.path()).await;
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let mut anna = signup(&public, "anna").await;
+    let mut boris = signup(&public, "boris").await;
+
+    // Занятый логин - отказ, свой - проходит, старый перестаёт работать.
+    let r = anna.send("PATCH", "/api/me", json!({"login": "Boris"})).await;
+    assert_eq!(r.status(), 400, "логин без учёта регистра - тоже занят");
+    let r = anna.send("PATCH", "/api/me", json!({"login": "bad login!"})).await;
+    assert_eq!(r.status(), 400);
+    assert!(anna.send("PATCH", "/api/me", json!({"login": "anna_2"})).await.status().is_success());
+    assert_eq!(anna.json("/api/me").await["user"]["login"], "anna_2");
+    // Профиль (имя для чатов) не тронут, сессия жива.
+    assert_eq!(anna.json("/api/me").await["user"]["name"], "anna");
+    // Вход по новому логину работает, по старому - нет.
+    let mut phone = Client::new(public.clone());
+    let r = phone.send("POST", "/api/auth/login", json!({"login": "anna_2", "password": "пароль-12345"})).await;
+    assert!(r.status().is_success(), "вход по новому логину: {}", r.status());
+    let r = phone.send("POST", "/api/auth/login", json!({"login": "anna", "password": "пароль-12345"})).await;
+    assert_eq!(r.status(), 401, "старый логин больше не входит");
+    // Чужой аккаунт не может занять чужой логин даже в другом регистре.
+    assert!(boris.send("PATCH", "/api/me", json!({"login": "ANNA_2"})).await.status() == 400);
+    drop(running);
+}

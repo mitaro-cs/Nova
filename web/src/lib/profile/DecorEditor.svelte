@@ -19,6 +19,9 @@
   let bio = $state('');
   let suggest = $state<string[]>([]);
   let director = $state('');
+  let directorFocus=$state(false);
+  const popularDirectors=['Кристофер Нолан','Квентин Тарантино','Клинт Иствуд','Крис Коламбус','Дэвид Финчер','Дени Вильнёв','Стивен Спилберг','Мартин Скорсезе','Гай Ричи','Ридли Скотт','Андрей Тарковский','Хаяо Миядзаки','Акира Куросава','Такэси Китано'];
+  const directorOptions=$derived([...new Set([...suggest,...popularDirectors])].filter(n=>!decor?.directors.includes(n)&&(!director.trim()||n.toLocaleLowerCase('ru').includes(director.trim().toLocaleLowerCase('ru')))).slice(0,8));
   let busy = $state(false);
 
   const keyOf = (i: { card?: { id: number }; ext?: { id: string } }) => (i.card ? `t:${i.card.id}` : `x:${i.ext!.id}`);
@@ -53,7 +56,7 @@
     api<{ decor: ProfileDecor; stats: { directors: { name: string }[] } }>(`/api/members/${profileId}`).then((r) => {
       decor = r.decor;
       bio = r.decor.bio ?? '';
-      suggest = r.stats.directors.map((d) => d.name);
+      suggest = r.stats?.directors?.map((d) => d.name)??[];
     }, () => {});
     api<{ want: MarkItem[]; watched: MarkItem[] }>('/api/me/marks').then((m) => {
       const seen = new Set<string>();
@@ -184,7 +187,8 @@
         </div>
       {/if}
       <form class="line" onsubmit={addDirector}>
-        <input class="input" bind:value={director} maxlength="80" placeholder="Имя режиссёра" aria-label="Режиссёр" />
+        <div class="director-search"><input class="input" bind:value={director} maxlength="80" placeholder="Имя режиссёра" aria-label="Режиссёр" role="combobox" aria-autocomplete="list" aria-expanded={directorFocus&&directorOptions.length>0} aria-controls="director-options" onfocus={()=>directorFocus=true} onblur={e=>{if(!(e.relatedTarget instanceof Node)||!e.currentTarget.parentElement?.contains(e.relatedTarget))directorFocus=false;}} onkeydown={e=>{if(e.key==='Escape')directorFocus=false;if(e.key==='ArrowDown'&&directorOptions.length){e.preventDefault();document.querySelector<HTMLButtonElement>('#director-options button')?.focus();}}} />
+        {#if directorFocus&&directorOptions.length}<div id="director-options" class="director-options" role="listbox" aria-label="Варианты режиссёров">{#each directorOptions as name(name)}<button type="button" role="option" aria-selected="false" onpointerdown={e=>e.preventDefault()} onclick={()=>{director=name;directorFocus=false;}}>{name}</button>{/each}</div>{/if}</div>
         <button class="btn" disabled={!director.trim() || decor.directors.length >= MAX_D}>Добавить</button>
       </form>
       {#if suggest.filter((n) => !decor!.directors.includes(n)).length}
@@ -246,6 +250,7 @@
 </section>
 
 <style>
+  .director-search{position:relative;flex:1;min-width:0}.director-search>.input{width:100%}.director-options{position:absolute;inset:calc(100% + 6px) 0 auto;z-index:20;display:grid;max-height:280px;overflow:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 30px #0006;padding:6px}.director-options button{text-align:left;padding:11px 12px;background:none;border:0;color:var(--text);font:inherit;border-radius:9px;cursor:pointer}.director-options button:hover,.director-options button:focus-visible{background:var(--surface-3)}
   .pane {
     display: grid;
     gap: 18px;

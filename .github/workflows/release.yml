@@ -1,5 +1,5 @@
 name: Release
-# Выпуск с установщиками: .dmg (Apple Silicon и Intel) и .exe для Windows. Собирается сам:
+# Выпуск с установщиками: .dmg (Apple Silicon и Intel), .exe для Windows, .deb и .AppImage для Linux. Собирается сам:
 # в `miaro` пришла новая версия (`version` в tauri.conf.json, тега v<версия> ещё нет) — тег и
 # выпуск появляются после сборки. Тег v1.2.3, отправленный вручную, тоже собирает выпуск.
 on:
@@ -48,7 +48,7 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" \
             --title "Nova $TAG" \
-            --notes "Установщики: .dmg - Mac (Apple Silicon - aarch64, Intel - x64), .exe - Windows. Что нового - в CHANGELOG.md."
+            --notes "Установщики: .dmg — Mac (Apple Silicon и Intel), .exe — Windows, .deb и .AppImage — Linux. Что нового — в CHANGELOG.md."
           # Не «предварительный» даже у 0.x-alpha: автообновление берёт latest.json последнего обычного
           # выпуска (releases/latest), предварительные GitHub туда не отдаёт.
 
@@ -68,6 +68,9 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ffmpeg: windows
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ffmpeg: ''
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -76,10 +79,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: "${{ matrix.target }}" }
       - uses: Swatinem/rust-cache@v2
+      - name: Зависимости Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential curl wget file libssl-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
       - name: Интерфейс
         working-directory: web
         run: npm ci && npm run build
       - name: ffmpeg в установщик
+        if: matrix.ffmpeg != ''
         shell: bash
         run: scripts/fetch-ffmpeg.sh ${{ matrix.ffmpeg }}
       - name: Зависимости оболочки
@@ -111,7 +118,7 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseName: "Nova ${{ needs.version.outputs.tag }}"
           releaseCommitish: ${{ github.sha }}
-          releaseBody: "Установщики: .dmg — Mac (Apple Silicon — aarch64, Intel — x64), .exe — Windows. Что нового — в CHANGELOG.md."
+          releaseBody: "Установщики: .dmg — Mac (Apple Silicon — aarch64, Intel — x64), .exe — Windows, .deb и .AppImage — Linux. Что нового — в CHANGELOG.md."
           releaseDraft: false
           prerelease: false
       # Mac: подпись бандла цела — иначе «приложение повреждено» (0.3.0). Шаг после выгрузки:

@@ -489,10 +489,23 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
     // Каталоги хоста («Управление → Настройки → Каталоги»): ищем на каждом их собственным поиском, фильмы и сериалы
     // целиком (по серии такой поиск не работает - у каждого сайта своя вёрстка серий).
     let own = async {
-        if !enabled("own") || q.mode.as_deref() == Some("trailer") || q.season.is_some() || q.episode.is_some() {
+        if !enabled("own") || q.mode.as_deref() == Some("trailer") {
             return None;
         }
-        let catalogs: Vec<_> = crate::own_sites::load(app).into_iter().filter(|c| c.search.is_some()).collect();
+        let catalogs: Vec<_> = crate::own_sites::load(app)
+            .into_iter()
+            .filter_map(|mut c| {
+                if !c.enabled {
+                    return None;
+                }
+                if c.search.is_none()
+                    && matches!(c.domain.as_str(), "mg.lordfilm.md" | "sr.lordfilm5.pro" | "lordserials.fan")
+                {
+                    c.search = Some(format!("https://{}/index.php?do=search&subaction=search&story={{q}}", c.domain));
+                }
+                (c.search.is_some() || c.domain == "old.yummyani.me").then_some(c)
+            })
+            .collect();
         if catalogs.is_empty() {
             return None;
         }
@@ -506,10 +519,20 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
             async move {
                 let site = format!("own:{}", c.domain);
                 tracked(&site, async {
-                    tokio::time::timeout(Duration::from_secs(10), crate::own_sites::search(c, names, year))
-                        .await
-                        .ok()
-                        .flatten()
+                    tokio::time::timeout(Duration::from_secs(20), async {
+                        if c.domain == "old.yummyani.me" {
+                            crate::site_sources::yummy_find(names, year, q.season, q.episode).await
+                        } else if let (Some(season), Some(episode)) = (q.season, q.episode) {
+                            crate::own_sites::search_episode(app, c, names, year, season, episode).await
+                        } else if q.season.is_some() || q.episode.is_some() {
+                            Some(vec![])
+                        } else {
+                            crate::own_sites::search(c, names, year).await
+                        }
+                    })
+                    .await
+                    .ok()
+                    .flatten()
                 })
                 .await
             }
@@ -570,8 +593,14 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
     }
     let mut seen = std::collections::HashSet::new();
     out.retain(|i| seen.insert(i["url"].as_str().unwrap_or("").to_string()));
+    let catalog_order = crate::own_sites::load(app);
     out.sort_by_key(|i| {
         (
+            if i["site"] == "own" {
+                catalog_order.iter().position(|c| Some(c.domain.as_str()) == i["author"].as_str()).unwrap_or(usize::MAX)
+            } else {
+                usize::MAX
+            },
             std::cmp::Reverse(crate::api::links::quality_hint(i["label"].as_str().unwrap_or(""))),
             if i["site"] == "archive" {
                 0

@@ -16,6 +16,7 @@
   let picked = $state<Art | null>(null);
   let width = $state(1000);
   let busy = $state('');
+  let mode=$state<'upload'|'imdb'>('upload');
 
   const QUALITY = [
     { w: 500, label: 'Обычное', note: 'быстро, до 500 px' },
@@ -26,7 +27,7 @@
   const real = $derived(picked ? Math.min(width, picked.width) : 0);
 
   $effect(() => {
-    if (!open || items) return;
+    if (!open || mode!=='imdb' || items) return;
     let live = true;
     error = '';
     api<{ items: Art[] }>(`${base}/imdb-art`).then(
@@ -59,10 +60,26 @@
     }
   }
   const thumb = (a: Art) => `/api/admin/imdb-art/preview?u=${encodeURIComponent(a.url)}&w=${a.kind === 'poster' ? 342 : 640}`;
+  async function upload(which:'poster'|'backdrop',file?:File) {
+    if(!file||busy)return;
+    busy=which;
+    try {
+      if(file.size>15*1024*1024)throw new Error('Картинка больше 15 МБ');
+      const result=await api<{url:string}>(`${base}/image/${which}`,{method:'PUT',body:file,headers:{'Content-Type':file.type||'application/octet-stream'}});
+      onpicked(which,result.url);toast(which==='poster'?'Постер загружен':'Фон загружен');open=false;
+    } catch(e){toast(e instanceof Error?e.message:errorText(e));}finally{busy='';}
+  }
 </script>
 
-<Modal bind:open title="Картинки с IMDb" wide>
+<Modal bind:open title="Постер и фон" wide>
   <div class="art">
+    <div class="bar" role="tablist" aria-label="Источник картинки"><button class="btn" role="tab" aria-selected={mode==='upload'} onclick={()=>mode='upload'}>С устройства</button><button class="btn" role="tab" aria-selected={mode==='imdb'} onclick={()=>mode='imdb'}>Картинки IMDb</button></div>
+    {#if mode==='upload'}
+    <div class="uploads"><div><b>Своя картинка</b><p class="muted small">Выберите изображение с устройства, до 15 МБ.</p></div>
+      <label class="btn upload"><Icon name="image" size={16} />Загрузить постер<input aria-label="Загрузить постер" type="file" accept="image/*" disabled={!!busy} onchange={e=>{void upload('poster',e.currentTarget.files?.[0]);e.currentTarget.value='';}} /></label>
+      <label class="btn upload"><Icon name="image" size={16} />Загрузить фон<input aria-label="Загрузить фон" type="file" accept="image/*" disabled={!!busy} onchange={e=>{void upload('backdrop',e.currentTarget.files?.[0]);e.currentTarget.value='';}} /></label>
+    </div>
+    {:else}
     {#if error}
       <p class="error" role="alert">{error}</p>
     {:else if items === null}
@@ -97,10 +114,12 @@
         <button class="btn primary" disabled={!picked || !!busy} onclick={() => apply('backdrop')}><Icon name="image" size={16} /> {busy === 'backdrop' ? 'Загружаем…' : 'Фоном'}</button>
       </div>
     {/if}
+    {/if}
   </div>
 </Modal>
 
 <style>
+  .uploads{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--line)}.uploads>div{flex:1 1 220px}.uploads p{margin:6px 0 0}.upload{position:relative;overflow:hidden}.upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.upload:focus-within{outline:2px solid var(--text);outline-offset:3px}
   .art {
     display: grid;
     gap: 16px;

@@ -10,7 +10,7 @@
   import Modal from '$lib/ui/Modal.svelte';
   import { untrack } from 'svelte';
   import { progressSync } from '$lib/progressSync.svelte';
-  import { searchLordfilm, searchVideos, isLordfilm, sourceName } from '$lib/links/search';
+  import { searchVideos, isLordfilm, sourceName } from '$lib/links/search';
   import { rankFound } from '$lib/links/best';
   import SourceStatus from '$lib/links/SourceStatus.svelte';
   import { localized } from '$lib/localized.svelte';
@@ -220,7 +220,7 @@
   let retryKey = $state(0);
   $effect(() => {
     void retryKey;
-    const saved = episodeLinks.some(l => l.preferred || isLordfilm(l.url));
+    const saved = episodeLinks.some(l => l.preferred || l.catalogDomain || isLordfilm(l.url));
     // Серии ещё грузятся - ждём; не нашлось ни одной - ищем сериал по названию (иначе кнопка «горела» вечно).
     if (!d || c?.local || (isSeries && !selected && !epsSettled) || saved) {
       episodeFinding = false;
@@ -240,21 +240,21 @@
     // LordFilm - первым; не нашёл или не ответил - сразу остальные источники параллельно, без нажатия.
     const runtimeSec = (d.runtime ?? 0) * 60;
     void (async () => {
-      const first = await searchLordfilm(params, controller.signal).catch(() => null);
-      if (controller.signal.aborted) return;
-      if (first?.length) { online = rankFound(first, runtimeSec); return; }
       const others = new URLSearchParams(params);
       others.set('min', String(isSeries ? 15 * 60 : 40 * 60));
       const found = await searchVideos(others, (items) => {
         if (controller.signal.aborted || !items.length) return;
         online = rankFound(items, runtimeSec);
         episodeFinding = false;
-      }, controller.signal, true).catch(() => null);
+      }, controller.signal).catch(() => null);
       if (controller.signal.aborted) return;
       online = found ? rankFound(found, runtimeSec) : [];
       // Ошибка - только если не ответил ни один источник.
-      sourceError = first === null && found === null;
-    })().finally(() => { if (!controller.signal.aborted) episodeFinding = false; });
+      sourceError = found === null;
+    })().finally(() => {
+      clearTimeout(timer);
+      if (!controller.signal.aborted) episodeFinding = false;
+    });
     // Источник молчит - не держим кнопку заблокированной: даём искать вручную.
     const timer = setTimeout(() => {
       if (controller.signal.aborted) return;
@@ -341,6 +341,7 @@
         label: f.label,
         thumb: f.thumbUrl,
         duration: f.duration,
+        sourceDomain: f.site === 'own' ? f.author : undefined,
         season: isSeries ? selected?.season : undefined,
         episode: isSeries ? selected?.episode : undefined,
       });
@@ -353,7 +354,7 @@
   // «Хочу на Nova» - только когда фильма нет ни у нас, ни по ссылкам, ни на Rutube/VK.
   const canWish = $derived(!!d && !d.card.local && !d.links.length && online !== null && !online.length);
   // Главная кнопка под постером: у нас - «Смотреть на Nova», иначе - первое видео онлайн.
-  const first = $derived(episodeLinks.find(l => l.preferred) ?? episodeLinks.find(l => isLordfilm(l.url)) ?? null);
+  const first = $derived(episodeLinks.find(l => l.preferred) ?? episodeLinks.find(l => l.catalogDomain) ?? episodeLinks.find(l => isLordfilm(l.url)) ?? episodeLinks[0] ?? null);
   // Начали смотреть по ссылке - «Продолжить просмотр» и сколько осталось.
   const resumeAt = $derived(first?.progress && first.progress.position > 5 && first.progress.position < first.progress.duration * 0.95 ? first.progress : null);
 
@@ -366,7 +367,7 @@
       let linkId = first?.id ?? null;
       if (!linkId && firstFound) {
         const f = firstFound;
-        linkId = (await post<{ id: number }>('/api/links', { url: f.url, extId: d.card.id, label: f.label, thumb: f.thumbUrl, duration: f.duration,
+        linkId = (await post<{ id: number }>('/api/links', { url: f.url, extId: d.card.id, label: f.label, thumb: f.thumbUrl, duration: f.duration, sourceDomain: f.site === 'own' ? f.author : undefined,
           season: isSeries ? selected?.season : undefined, episode: isSeries ? selected?.episode : undefined })).id;
       }
       if (!linkId) {
@@ -534,7 +535,7 @@
       <button class="btn want" class:on={c?.mark === 'want'} aria-pressed={c?.mark === 'want'} disabled={!d} onclick={() => mark('want')}>
         <Icon name={c?.mark === 'want' ? 'check' : 'plus'} size={16} /> Буду смотреть
       </button>
-      <div class="iconbar">
+      <details class="series-more"><summary class="ib"><Icon name="menu" size={16} /> Ещё</summary><div class="iconbar">
         <button class="ib" class:on={c?.mark === 'watching'} aria-pressed={c?.mark === 'watching'} aria-label="Смотрю" title="Смотрю" disabled={!d} onclick={() => mark('watching')}><Icon name="tv" size={16} /><span>Смотрю</span></button>
         <button class="ib" class:on={c?.mark === 'dropped'} aria-pressed={c?.mark === 'dropped'} disabled={!d} onclick={() => mark('dropped')}><Icon name="close" size={16} /><span>Забросил</span></button>
         <button class="ib" class:on={c?.mark === 'watched'} aria-pressed={c?.mark === 'watched'} aria-label="Просмотрел" title="Просмотрел" disabled={!d} onclick={() => mark('watched')}><Icon name="check" size={16} /><span>Просмотрел</span></button>
@@ -544,11 +545,11 @@
         {/if}
         <button class="ib" aria-label="В список" title="В список" aria-expanded={lists} disabled={!d} onclick={() => (lists = !lists)}><Icon name="list" size={16} /><span>В список</span></button>
         <button class="ib" aria-label="Смотреть вместе" title="Смотреть вместе" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={16} /><span>Вместе</span></button>
-        <a class="ib" href="https://www.imdb.com/title/{c?.id}/" target="_blank" rel="noopener noreferrer" aria-label="Открыть на IMDb" title="IMDb"><b class="imdb-s">IMDb</b></a>
+        {#if c?.id.startsWith('tt')}<a class="ib" href="https://www.imdb.com/title/{c.id}/" target="_blank" rel="noopener noreferrer" aria-label="Открыть на IMDb" title="IMDb"><b class="imdb-s">IMDb</b></a>{/if}
         {#if session.me?.manage}
           <button class="ib" aria-label="Картинки с IMDb" title="Обложка и фон с IMDb" onclick={() => (imdbArt = true)}><Icon name="image" size={16} /><span>Картинки</span></button>
         {/if}
-      </div>
+      </div></details>
     {/snippet}
     {#snippet extra()}
       {#if lists && d}
@@ -575,6 +576,7 @@
       <StarInput value={mine?.stars ?? null} onchange={setStars} size={24} label="Ваша оценка" />
       <button class="btn block" onclick={() => { moreOpen = false; lists = true; }}>В список</button>
       <button class="btn block" onclick={() => { moreOpen = false; writeReview(); }}>Написать отзыв</button>
+      {#if session.me?.manage}<button class="btn block" onclick={()=>{moreOpen=false;imdbArt=true;}}><Icon name="image" size={16} /> Постер и фон</button>{/if}
       <button class="btn block" onclick={() => (moreOpen = false)}>Готово</button>
     </div>
   </Modal>
@@ -619,7 +621,7 @@
           </div>
         {/if}
         {#if !c.local}<button class="btn block" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={15} /> Смотреть вместе</button>{/if}
-        <a class="btn block" href="https://www.imdb.com/title/{c.id}/" target="_blank" rel="noopener noreferrer"><b class="imdb">IMDb</b> Открыть</a>
+        {#if c.id.startsWith('tt')}<a class="btn block" href="https://www.imdb.com/title/{c.id}/" target="_blank" rel="noopener noreferrer"><b class="imdb">IMDb</b> Открыть</a>{/if}
   {/snippet}
   {#if !phone.current}
   <MobileHero
@@ -648,6 +650,7 @@
       title={c.title}
       art={d?.backdrop ?? d?.posterLarge ?? c.poster}
       poster={d?.posterLarge ?? c.poster}
+      fallbackPoster={c.poster}
       tall={!d?.backdrop}
       meta={[notOut ? 'Скоро' : '', c.year ? String(c.year) : '', d?.runtime ? runtime(d.runtime) : ''].filter(Boolean)}
       age={d?.age ?? null}
@@ -878,6 +881,7 @@
 {/if}
 
 <style>
+  .series-more summary{list-style:none;cursor:pointer}.series-more summary::-webkit-details-marker{display:none}.series-more[open]{flex-basis:100%}.series-more .iconbar{padding:12px 0}.series-more{min-width:0}@media(max-width:640px){.series-more{display:none}}
   .retry { display: flex; flex-wrap: wrap; gap: 8px; }
   .cinema-stage { height: clamp(260px,60svh,680px); position: relative; margin: 0 calc(-1 * var(--gutter)) 32px; }
   .cinema-stage img { position:absolute; inset:0; width:100%; max-width:none; height:100%; object-fit:cover; object-position:center 30%; }
