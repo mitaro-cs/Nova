@@ -58,7 +58,7 @@
     `messages` (только друзьям, `title_id` — фильм карточкой, лимит 30/мин). Фото профиля —
     `profiles.photo` (квадрат 256, `probe::square_image`). Регистрация по умолчанию открытая
     (`account::REGISTRATION_DEFAULT`, `signup_limit` 5 за 10 мин с адреса).
-  - Фронт: `lib/social/` (отзывы, звёзды, дружба, чаты, значки — опрос `/api/badges` раз в 30 с),
+  - Фронт: `lib/social/` (отзывы, звёзды, дружба, чаты, значки — опрос `/api/badges` раз в 5 с),
     страницы `/people`, `/people/[id]`, `/chats`, `/chats/[id]` (опрос `?after=` раз в 3 с).
   - Совместные списки (0.5, `api/lists.rs`): `lists`, `list_members`, `list_items` (миграция 5),
     звать — только друзей, менять — всем участникам, удаляет создатель (участник — выходит).
@@ -69,7 +69,7 @@
     `chartTitles`, раз в 12 ч, `ext_titles` + `ext_charts`, постеры — к себе), поиск по IMDb
     (`/api/discover/search`), отметки `ext_marks` (want|watched), просьбы хосту `wishes`
     (`/api/admin/wishes`, значок `badges.wishes`; уходят сами, когда фильм с тем же `imdb_id`
-    появился). Фронт — `/discover`, `discover/Poster` (и для фильмов с сервиса: `local`),
+    появился). Фронт — `/discover`, `lib/discover/Poster` (и для фильмов с сервиса: `local`; там же `PosterRow`),
     `PosterRow`, страница `/ext/[id]` (с 0.6.4 вместо окна; `remember(card)` — показать сразу,
     `extSheet.version` — перезагрузить списки).
   - Ссылки (0.6, `api/links.rs`): `links` у фильма (`title_id` или `ext_id`), `parse` —
@@ -111,7 +111,7 @@
     localhost.
   - Режиссёры (1.0, миграция 12): `directors.rs` — id IMDb из описаний (`Person.id`, «nm…») или
     `mainSearch`, фото и фильмография (`credits` director) раз в неделю (`ext_people`,
-    `ext_people_names`), `GET /api/directors?name=`; страница `/director?name=`. Любимые — по пять
+    `ext_people_names`), `GET /api/people/imdb?name=&role=`; страница `/person?name=`. Любимые — по пять
     фильмов и сериалов (`profile::check_favorites`).
   - Франшизы (1.0, миграция 14, `franchise.rs`): Викиданные SPARQL (P179 «часть серии», P1545 номер,
     P577 дата) по id IMDb → `franchises` на 30 дней; недостающие фильмы — IMDb `titles(ids:)`.
@@ -173,7 +173,7 @@
   `auth::manage_here`: `Manager` - только окно хоста, из интернета - если `security.manage_remote` и у
   аккаунта есть второй шаг. Картинки людей - `images::strip_metadata` (EXIF) + `-map_metadata -1`.
   Сообщения - и с фильмом ленты (`messages.ext_id`). Поиск-жанр - `discover::genre_query` (+ заголовок
-  `x-nova-genre`), `genre_search` по числу оценок. Кадр баннера - `still_frame` около 16:9 (`DETAILED` 5),
+  `x-nova-genre`), `genre_search` по числу оценок. Кадр баннера - `still_frame` около 16:9 (`DETAILED` 6),
   русские постеры ленты - `tmdb::poster_ru` при ключе TMDB (upsert их не затирает). `body` -
   `user-select: none`, выделяемое - `input`, `textarea`, `.selectable`. Зрителям - «администрация/сервер
   Nova», не «хост».
@@ -260,7 +260,16 @@
   `--target` уходил в cargo, а упаковщик искал программу в `target/release` (0.1.1 так упал).
 - Mac: бандл подписывается ad-hoc (`bundle.macOS.signingIdentity: "-"`), ffmpeg — `codesign -s -`
   в `fetch-ffmpeg.sh`; без подписи Apple Silicon пишет «приложение повреждено» (0.3.0).
-- hls.js — только `hls.js/light` и только лениво из плеера (это ~120 КБ gzip).
+- hls.js — только `hls.js/light` и только лениво из плеера (это ~120 КБ gzip). `dashjs` (`player/engine/dash.ts`) —
+  тоже только лениво, для DASH из каталогов сайтов.
+- Каталоги сайтов (Beta 0.1+, миграции 31-33): `site_sources` (реестр `SOURCES`, списки, плейлисты, `resolve_player`),
+  `own_sites` (каталоги хоста, `{q}`), `lordfilm`, `video_search` (подбор и ранжирование), `video_health` (3 ошибки - источник
+  выключен на 10 минут), `video_sources` (Commons, PeerTube), `dash_proxy` (MPD через сервер), `outbound` (только публичные IP),
+  `catalog_search` (IMDb + ru-Википедия + Викиданные), `media_meta` (TVMaze, картинки), `api/site_import` и `api/catalog_import`
+  (импорт каталогов, `catalog_links`, очередь обхода), `api/mail` (почта, восстановление пароля, `account_emails`). Подробности и
+  ограничения источников - `docs/catalog-sources.md`, `docs/superpowers/PROGRESS.md`.
+- Тесты `server/tests` без ffmpeg не падают, а молча пропускаются (`flow`, `inbox`, `netflix`, `social`, `speed`, `tickets`) -
+  перед выводом «тесты прошли» проверить, что ffmpeg есть.
 - Внешних запросов из фронта нет (шрифты системные, иконки свои); картинки IMDb/TMDB сервер
   скачивает к себе (`images/<sha256>.ext`).
 - Коммиты — Conventional Commits (`feat:`, `fix:`, …).
