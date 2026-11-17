@@ -359,12 +359,14 @@
 - Инструменты (0.6.4): SvelteKit 3 + Vite 8 + Vitest 5 + TypeScript 6. Настройки Kit — в
   `vite.config.ts` (`sveltekit({...})`, `svelte.config.js` больше нет); `$lib` — свой `alias`
   (в Kit 3 по умолчанию только `#lib`); `goto`: `replace: true` вместо `replaceState`, `reset: false`
-  вместо `noScroll`/`keepFocus`; `page.url.searchParams` — только чтение. CI: Node 24, actions v7;
+  вместо `noScroll`/`keepFocus`; `page.url.searchParams` — только чтение. CI: Node 26 (LTS), actions v7;
   `tauri-action` — v0 (в v1 не проверены имена файлов выпуска, по ним ищет `release.rs`).
-  Сервер: reqwest 0.13 (`rustls`, `query`), rusqlite 0.41 (без `usize` в SQL), argon2 0.6 (старые
-  хеши подходят — тест `passwords`), rand 0.10 (`rand::fill`), zip 9. `cargo audit`: остаётся `zip` 4
-  внутри `tauri-plugin-updater` (распаковывает только подписанное нашим ключом) и
-  неподдерживаемые крейты Linux-сборки Tauri.
+  Сервер: reqwest 0.13 (`rustls`, `query`), rusqlite 0.43 (без `usize` в SQL), argon2 0.6 (старые
+  хеши подходят — тест `passwords`), rand 0.10 (`rand::fill`), zip 9 (после обновления 17.11.2026 `zip` 4
+  в `Cargo.lock` больше нет; `cargo audit` остаются неподдерживаемые крейты Linux-сборки Tauri).
+- Версии на 17.11.2026: Rust 1.100 (`rust-version` = 1.100), Node 26 LTS, TypeScript **6.0.3** — не 7: у
+  `svelte-check` 4.7.8 peer-зависимость `typescript ^5 || ^6`, с 7 `npm install` падает; поднимать, когда
+  `svelte-check` его разрешит. clippy 1.100 требует `as_chunks` вместо `chunks_exact(<константа>)`.
 - Слежение за папками: после установки слежения — один скан (за 5 с до него в новую папку могли
   что-то положить); чтения (`Access`, кроме «дописан») — не повод сканировать.
 - База от более новой версии (0.6.5): `db::OLDEST` — сколько миграций должна знать версия, чтобы

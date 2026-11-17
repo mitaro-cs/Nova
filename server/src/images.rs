@@ -199,7 +199,7 @@ pub fn accent(rgb: &[u8]) -> String {
     const BUCKETS: usize = 12;
     let mut sum = [[0.0f64; 4]; BUCKETS];
     let mut grey = [0.0f64; 4];
-    for px in rgb.chunks_exact(3) {
+    for px in rgb.as_chunks::<3>().0 {
         let (r, g, b) = (px[0] as f64 / 255.0, px[1] as f64 / 255.0, px[2] as f64 / 255.0);
         let max = r.max(g).max(b);
         let min = r.min(g).min(b);
