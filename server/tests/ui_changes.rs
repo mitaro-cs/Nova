@@ -46,6 +46,24 @@ async fn names_and_logins_report_conflicts_and_do_not_replace_accounts() {
     running.shutdown().await;
 }
 
+/// Диагностика цепочки в «Обзоре»: понятные шаги даже когда ссылка не распознана.
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_diagnose_reports_every_step_without_external_requests() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let r = host.send("POST", "/api/stream/diagnose", json!({"url": "http://127.0.0.1/evil"})).await;
+    assert!(r.status().is_success(), "status {}", r.status());
+    let v: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(v["ok"], false);
+    let steps = v["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 5);
+    assert_eq!(steps[0]["status"], "fail");
+    assert_eq!(steps[0]["key"], "parse");
+    assert!(steps[1..].iter().all(|s| s["status"] == "skip"));
+    assert!(v["verdict"].as_str().unwrap().contains("Непонятная"));
+    running.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn custom_images_are_stored_as_persistent_choices_and_require_manager() {
     let dir = tempfile::tempdir().unwrap();

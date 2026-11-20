@@ -5,6 +5,7 @@ use crate::db::Db;
 use crate::util::now_ms;
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 /// Транслитерация - временная: через сутки её заменяет перевод из Викиданных, если он появился.
 pub const RETRY_MS: i64 = 86_400_000;
@@ -161,6 +162,49 @@ pub fn due(c: &Cached, now: i64) -> bool {
 pub async fn localize(app: &crate::App, people: &mut [crate::meta::Person]) {
     let endpoint = app.db.setting("names.wikidata.sparql").unwrap_or_else(|| WIKIDATA.to_string());
     localize_with(&app.db, &app.http, &endpoint, people).await;
+}
+
+/// Подготовить имена для немедленного ответа из кэша/транслитерации и обновить кэш в фоне.
+/// Возвращает true, пока для кого-либо ещё ожидается перевод из Викиданных.
+pub fn localize_fast(app: &std::sync::Arc<crate::App>, people: &mut [crate::meta::Person]) -> bool {
+    let originals = people.to_vec();
+    let ids: Vec<String> = people
+        .iter()
+        .filter_map(|p| p.id.as_ref().filter(|id| valid_id(id)).cloned())
+        .collect();
+    let known = cached(&app.db, &ids);
+    let now = now_ms();
+    let mut pending = false;
+    for p in people.iter_mut() {
+        if has_latin(&p.name) {
+            if let Some(id) = p.id.as_ref().filter(|id| valid_id(id)) {
+                match known.get(id) {
+                    Some(c) => {
+                        pending |= due(c, now);
+                        if p.name != c.ru { p.orig = Some(std::mem::replace(&mut p.name, c.ru.clone())); }
+                    }
+                    None => { pending = true; p.orig = Some(p.name.clone()); p.name = translit(&p.name); }
+                }
+            } else {
+                p.name = translit(&p.name);
+            }
+        }
+        if let Some(role) = p.role.as_mut().filter(|r| has_latin(r)) { *role = translit(role); }
+    }
+    if pending {
+        static JOBS: OnceLock<parking_lot::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+        let key = ids.join(",");
+        let jobs = JOBS.get_or_init(Default::default);
+        if jobs.lock().insert(key.clone()) {
+            let app = app.clone();
+            let mut people = originals;
+            tokio::spawn(async move {
+                localize(&app, &mut people).await;
+                jobs.lock().remove(&key);
+            });
+        }
+    }
+    pending
 }
 
 /// Имя человека - из кэша или Викиданных (один запрос на всех, до 3 с), иначе транслитерация; роль -

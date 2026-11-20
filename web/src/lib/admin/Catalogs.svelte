@@ -4,6 +4,7 @@
   import Icon from '$lib/ui/Icon.svelte';
   import Select from '$lib/ui/Select.svelte';
   import SiteSources from './SiteSources.svelte';
+  import HostTitleSource from './HostTitleSource.svelte';
   import { extSheet } from '$lib/discover/sheet.svelte';
 
   // Каталоги: сайты, где много фильмов, серий-франшиз и сериалов. Хост добавляет сайт - Nova сама находит
@@ -112,7 +113,10 @@
     Добавьте сайт для поиска или импортируйте JSON-каталог с фильмами, сериями и вариантами видео.
     Источники выше в списке открываются первыми. Выбор администратора имеет приоритет.
   </p>
-  {#if host}<SiteSources onchanged={load} />{/if}
+  {#if host}
+    <SiteSources onchanged={load} />
+    <HostTitleSource />
+  {/if}
   {#if items === null}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   {:else}

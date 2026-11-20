@@ -5,7 +5,9 @@
   import AccessControlLab from './AccessControlLab.svelte';
   let {onchanged}: {onchanged?:()=>void} = $props();
   type Source={source:{id:string;name:string;url:string;kind:string};domain:string;configured:boolean;enabled:boolean;running:boolean;state:string;pages:number;message:string;verificationAvailable:boolean;sessionAllowed:boolean;counts:{found:number;imported:number;failed:number;pending:number};problems:{url:string;title:string;state:string;message:string}[]};
+  type Health={state:string;status?:number;latencyMs?:number;contentType?:string;message:string;nextSteps?:string[]};
   let items=$state<Source[]>([]),error=$state(''),busy=$state('');
+  let health=$state<Record<string,Health>>({});
   const connected=$derived(items.filter(s=>s.configured&&s.enabled).length);
   const imported=$derived(items.reduce((n,s)=>n+s.counts.imported,0));
   const running=$derived(items.filter(s=>s.running).length);
@@ -32,12 +34,13 @@
     catch(e){error=errorText(e)}finally{busy=''}
   }
   async function verify(id:string,command:string){busy=id;error='';try{await post(`/api/admin/site-sources/${id}/verify`,{action:command});await reload();}catch(e){error=errorText(e)}finally{busy=''}}
+  async function checkHealth(id:string){busy=id;error='';try{health[id]=await api<Health>(`/api/admin/site-sources/${id}/health`);}catch(e){error=errorText(e)}finally{busy=''}}
 </script>
 
 <section aria-label="Источники из вашего списка" class="presets">
   <div class="intro">
     <div><span class="eyebrow">ВАША МЕДИАТЕКА · ВНЕШНИЕ ИСТОЧНИКИ</span><h4>Больше историй.<br />В одном кинотеатре.</h4><p class="muted small">Подключите источник и запустите импорт. Фильмы, сезоны и озвучки появятся в каталоге Nova.</p></div>
-    <div class="overview" aria-label="Сводка источников"><div><b>{connected}<small> / {items.length}</small></b><span>подключено</span></div><div><b>{imported}</b><span>импортировано</span></div><div><b>{running}</b><span>в работе</span></div></div>
+    <div class="overview" aria-label="Сводка источников"><div><b>{connected}<small> / {items.length}</small></b><span>включено</span></div><div><b>{imported}</b><span>карточек в каталоге</span></div><div><b>{running}</b><span>импортируется</span></div></div>
   </div>
   <div class="section-title"><h5>Источники из вашего списка</h5><span class="muted small">{items.length} источников</span></div>
   <div class="sources">
@@ -49,6 +52,7 @@
         <div class="numbers"><div><b>{s.counts.found}</b><span>найдено</span></div><div><b>{s.counts.imported}</b><span>в каталоге</span></div></div>
         {#if s.counts.failed||s.pages}<p class="muted small">Страниц: {s.pages}{#if s.counts.failed} · Требуют внимания: {s.counts.failed}{/if}</p>{/if}
         <div class="actions">
+          <button class="btn sm" disabled={!!busy} onclick={()=>checkHealth(s.source.id)}><Icon name="globe" size={14} />{busy===s.source.id?'Проверяем…':'Проверить сайт'}</button>
           {#if !s.configured || !s.enabled}
             <button class="btn sm primary" disabled={!!busy} onclick={()=>action(s.source.id,'connect')}><Icon name="plus" size={15} />{s.configured?'Включить':'Подключить'}</button>
           {:else if s.running}
@@ -58,6 +62,7 @@
           {/if}
           {#if busy===s.source.id}<span class="muted small">Применяем…</span>{/if}
         </div>
+        {#if health[s.source.id]}{@const h=health[s.source.id]}<div class="health" class:good={h.state==='available'} class:bad={h.state!=='available'} role="status"><p><b>{h.state==='available'?'Сайт отвечает':h.state==='restricted'?'Ограничил запрос':h.state==='timeout'?'Нет ответа':'Ошибка соединения'}</b>{#if h.status} · HTTP {h.status}{/if}{#if h.latencyMs!==undefined} · {h.latencyMs} мс{/if}<span>{h.message}</span></p>{#if h.nextSteps?.length}<ul>{#each h.nextSteps as step}<li>{step}</li>{/each}</ul>{/if}</div>{/if}
         {#if s.message}<p class="muted small" role="status">{s.message}</p>{/if}
         {#if s.verificationAvailable}
           <details><summary>Проверка человека и доступ к сайту</summary>
@@ -93,7 +98,7 @@
   .source-state{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);min-height:28px}.source-state i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;opacity:.55}.source-state.working{color:var(--text)}.source-state.attention{color:var(--error,#e49aab)}
   .numbers{display:grid;grid-template-columns:1fr 1fr;width:100%;padding:14px 0;border-top:1px solid var(--line);gap:12px}.numbers b{font-size:24px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
   .actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}article>.actions{margin-top:auto;padding-top:4px}
-  .problem{display:grid;gap:8px;padding:12px 0;border-top:1px solid var(--line)}.problem input{flex:1 1 140px;min-width:0}
+  .problem{display:grid;gap:8px;padding:12px 0;border-top:1px solid var(--line)}.problem input{flex:1 1 140px;min-width:0}.health{display:grid;gap:5px;font-size:11px;line-height:1.5}.health p{display:grid;gap:5px}.health.good b{color:#54ce91}.health.bad b{color:var(--error,#e49aab)}.health span,.health li{color:var(--muted)}.health ul{display:grid;gap:4px;margin:2px 0 0;padding-left:18px}
   details{min-width:0;width:100%;font-size:12px}summary{cursor:pointer;padding:6px 0}a{overflow-wrap:anywhere;font-size:11px}.footnote{display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.6;color:var(--muted);max-width:740px}
   @media(max-width:760px){.intro{grid-template-columns:1fr;padding:22px;gap:24px}.overview{justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding-top:20px}.overview b{font-size:26px}.sources{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}article{padding:20px}.section-title>span{display:none}}
 </style>

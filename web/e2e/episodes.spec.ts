@@ -20,8 +20,7 @@ test('будущая серия показывает год выхода без 
   await expect(episodes.locator('img[src*="old-frame"]')).toHaveCount(0);
 });
 
-test('фильм: другие источники запрашиваются сами, но только после пустого LordFilm', async ({page}) => {
-  test.fixme(true, 'ожидания устарели: список источников и подписи кнопок изменились (own перед lordfilm) - переписать под текущий поиск');
+test('фильм: при пустом LordFilm ищутся другие источники и остаётся ручной поиск', async ({page}) => {
   const id='tt7654322';
   const card={id,kind:'movie',title:'Тестовый фильм',original:null,year:2024,rating:8,poster:null,genres:[],local:null,mark:null,wished:false};
   const backdrop='/api/discover/art?url=https%3A%2F%2Fm.media-amazon.com%2Fimages%2Fbanner.jpg';
@@ -33,13 +32,10 @@ test('фильм: другие источники запрашиваются с�
   await page.route('**/api/discover/art?*',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#222"/></svg>'}));
   await page.route('**/api/franchise?*',route=>route.fulfill({json:[]}));
   const providers:string[]=[];
-  let finish!:()=>void;
-  const pending=new Promise<void>(resolve=>{finish=resolve});
   await page.route('**/api/links/search?*',async route=>{
     const q=new URL(route.request().url()).searchParams;
     if(q.get('mode')==='trailer') return route.fulfill({json:[]});
     providers.push(q.get('provider')??'');
-    if(q.get('provider')==='lordfilm') await pending;
     return route.fulfill({json:[]});
   });
   await page.goto(url(`/ext/${id}`));
@@ -49,21 +45,15 @@ test('фильм: другие источники запрашиваются с�
     expect((await info.boundingBox())?.width).toBeGreaterThan(350);
     await expect(page.locator('.rwh .poster')).toBeVisible();
   }
-  await expect.poll(()=>providers).toEqual(['lordfilm']);
-  // Пока LordFilm не ответил, других источников не трогаем и ручной кнопки ещё нет.
-  await expect(page.getByRole('button',{name:'Найти на другом источнике',exact:true})).toHaveCount(0);
+  await expect.poll(()=>providers.includes('lordfilm')).toBe(true);
+  await expect.poll(()=>providers.includes('own')).toBe(true);
   await expect(page.locator('img[src*="media-amazon.com"]').first()).toBeAttached();
-  finish();
-  // LordFilm пуст - остальные источники запрашиваются сами, без нажатия.
-  await expect.poll(()=>providers.includes('rutube')).toBe(true);
-  expect(providers.filter(p=>p==='lordfilm')).toHaveLength(1);
-  // Нигде не нашлось - остаётся ручная кнопка.
   const fallback=page.getByRole('button',{name:'Найти на другом источнике',exact:true}).filter({visible:true}).first();
   await expect(fallback).toBeVisible();
+  await expect(page.getByRole('region',{name:'Другие источники'})).toBeVisible();
 });
 
 test('автопоиск серии не сохраняет источник предыдущего эпизода', async ({page}) => {
-  test.fixme(true, 'ожидания устарели: список источников и подписи кнопок изменились (own перед lordfilm) - переписать под текущий поиск');
   const id='tt7654321';
   const card={id,kind:'series',title:'Тестовый сериал',original:null,year:2024,rating:8,poster:null,genres:[],local:null,mark:null,wished:false};
   const detail={card,overview:'Проверка выбора серии.',runtime:45,votes:100,backdrop:null,posterLarge:null,tagline:null,age:'16+',releaseDate:null,countries:[],languages:[],aka:[],people:[],gallery:[],similar:[],localCard:null,lists:[],seasons:[1],friends:[],links:[]};
@@ -78,7 +68,8 @@ test('автопоиск серии не сохраняет источник п�
   const providers: string[] = [];
   await page.route('**/api/links/search?*', async route=>{
     const q=new URL(route.request().url()).searchParams;
-    if(q.has('episode')) providers.push(q.get('provider') ?? '');
+    if(q.get('mode')==='trailer') return route.fulfill({json:[]});
+    if(q.has('episode')) providers.push(`${q.get('provider') ?? ''}:${q.get('episode') ?? ''}`);
     if(q.get('provider')!=='lordfilm' || !q.has('episode')) return route.fulfill({json:[]});
     const episode=Number(q.get('episode'));
     if(episode===2) await secondReady;
@@ -93,16 +84,18 @@ test('автопоиск серии не сохраняет источник п�
   await page.goto(url(`/ext/${id}`));
   const play=page.getByRole('button',{name:'Смотреть',exact:true}).filter({visible:true}).first();
   await expect(play).toBeVisible();
-  expect(providers).toEqual(['lordfilm']);
+  await expect.poll(()=>providers.some(p=>p==='lordfilm:1')).toBe(true);
   await expect(page.getByRole('button',{name:'Найти на другом источнике',exact:true})).toHaveCount(0);
+  const before=providers.length;
   await page.getByRole('button',{name:'2 серия: История 2',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Смотреть',exact:true}).filter({visible:true})).toHaveCount(0);
+  await expect.poll(()=>providers.length).toBeGreaterThan(before);
   releaseSecond();
   await expect(play).toBeVisible();
   await play.click();
   await expect.poll(()=>saved).toMatchObject({extId:id,season:1,episode:2,url:'https://sd.lordfilm5.pro/serialy/1.html#nova-season=1&episode=2'});
-  expect(providers.every(p=>p==='lordfilm')).toBe(true);
+  await expect.poll(()=>providers.some(p=>p==='lordfilm:2')).toBe(true);
+  await expect(page.getByRole('button',{name:'Найти на другом источнике',exact:true})).toHaveCount(0);
 });
 
 test('английские названия из старого кеша не появляются в русском режиме',async({page},info)=>{
@@ -128,7 +121,6 @@ test('английские названия из старого кеша не п
 });
 
 test('серии: отдельные источники, превью и длинное название в одну строку', async ({ page }, info) => {
-  test.fixme(true, 'ожидания устарели: список источников и подписи кнопок изменились (own перед lordfilm) - переписать под текущий поиск');
   const id = 'tt1234567';
   const card = { id, kind: 'series', title: 'Сверхъестественное', original: 'Supernatural', year: 2005,
     rating: 8.4, poster: null, genres: ['Драма'], local: null, mark: null, wished: false };
@@ -166,12 +158,8 @@ test('серии: отдельные источники, превью и дли�
     expect(still!.x + still!.width).toBeLessThanOrEqual(body!.x + 1);
   }
   await page.getByRole('button', { name: '2 серия: История 2', exact: true }).click();
-  await page.getByRole('button',{name:'Найти на другом источнике',exact:true}).filter({visible:true}).first().click();
-  const modal = page.getByRole('dialog', { name: '1 сезон · 2 серия' });
-  await expect(modal.getByRole('link', { name: 'Продолжить · Источник серии 2' })).toHaveAttribute('href', '/watch/link/2');
-  await expect(modal.getByText('Источник серии 1')).toHaveCount(0);
-  await page.keyboard.press('Escape');
-  await expect(modal).toBeHidden();
+  const play = page.getByRole('link', { name: /Продолжить( просмотр)?|Смотреть/ }).filter({ visible: true }).first();
+  await expect(play).toHaveAttribute('href', '/watch/link/2');
   await expect(page.getByRole('heading', { name: 'Смотреть онлайн', exact: true })).toHaveCount(0);
   await expectClean(page, 'сериал из Обзора');
   await page.screenshot({ path: `test-results/series-${info.project.name}.png` });

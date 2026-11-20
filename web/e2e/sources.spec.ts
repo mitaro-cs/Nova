@@ -31,6 +31,7 @@ test('нет источника: видно, что искали, кто не о
   await expect(block.getByText('Искали: «Редкий фильм», «Rare Film» (2024).')).toBeVisible();
   await expect(block.getByText('LordFilm - не отвечает, проверим позже')).toBeVisible();
   await expect(block.getByText('Rutube - отвечает')).toBeVisible();
+  await expect(block.getByRole('button', { name: 'Найти на другом источнике', exact: true })).toBeVisible();
   const before = searches;
   await block.getByRole('button', { name: 'Повторить' }).click();
   await expect.poll(() => searches).toBeGreaterThan(before);

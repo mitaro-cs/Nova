@@ -32,7 +32,9 @@ fn decode(s: &str) -> String {
 }
 
 fn valid_hls(s: &str) -> bool {
-    Url::parse(s).is_ok_and(|u| crate::outbound::valid_url(&u) && u.path().ends_with(".m3u8"))
+    Url::parse(s).is_ok_and(|u| {
+        crate::outbound::valid_url(&u) && (u.path().ends_with(".m3u8") || u.path().ends_with(".mpd"))
+    })
 }
 
 fn number(v: &Value) -> Option<i64> {
@@ -78,7 +80,7 @@ fn subs(v: Option<&Value>) -> Vec<(String, String)> {
 }
 
 fn media_of(v: &Value) -> Option<Media> {
-    let hls = v["hls"].as_str().filter(|u| valid_hls(u))?;
+    let hls = v["hls"].as_str().or_else(|| v["dash"].as_str()).filter(|u| valid_hls(u))?;
     Some(Media {
         hls: hls.to_string(),
         audio: audio_names(v.get("audio")),

@@ -13,9 +13,12 @@ export function rankFound(found: FoundVideo[], runtimeSec: number): FoundVideo[]
   for (const item of found) if (item.site === 'own' && !catalogOrder.has(item.author)) catalogOrder.set(item.author, catalogOrder.size);
   const score = (f: FoundVideo) => {
     const span = runtimeSec && f.duration ? Math.min(1, Math.abs(f.duration - runtimeSec) / runtimeSec) * 10 : 3;
-    return span - quality(f.label) - (f.site === 'lordfilm' ? 0.5 : 0);
+    return span - quality(f.label);
   };
   return [...found].sort((a, b) => {
+    // LordFilm — основной источник: предпочитаем его, если он нашёл воспроизводимый вариант.
+    const lord = (a.site === 'lordfilm' ? 0 : 1) - (b.site === 'lordfilm' ? 0 : 1);
+    if (lord) return lord;
     if (a.site === 'own' && b.site === 'own') {
       const priority = (catalogOrder.get(a.author) ?? 0) - (catalogOrder.get(b.author) ?? 0);
       if (priority) return priority;

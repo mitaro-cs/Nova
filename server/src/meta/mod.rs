@@ -484,7 +484,7 @@ pub async fn worker(app: Arc<App>) {
             .db
             .with(|c| {
                 let mut st = c.prepare(
-                    "SELECT id FROM titles WHERE meta_status = 'pending' AND locked = 0 ORDER BY added_at DESC LIMIT 200",
+                    "SELECT id FROM titles WHERE meta_status = 'pending' AND locked = 0 ORDER BY added_at DESC LIMIT 50",
                 )?;
                 let r = st.query_map([], |r| r.get(0))?;
                 r.collect()
@@ -516,8 +516,9 @@ pub async fn worker(app: Arc<App>) {
                 continue;
             }
         }
-        // Нет работы или сеть недоступна: ждём новых файлов, смены настроек или 10 минут.
-        let wait = if failed { 60 } else { 3600 };
+        // Нет работы или сеть недоступна: ждём новых файлов, смены настроек или дешёвой проверки очереди.
+        // Большие интервалы здесь опасны: несколько `notify_one` сливаются в одно пробуждение.
+        let wait = if failed { 60 } else { 300 };
         let _ = tokio::time::timeout(Duration::from_secs(wait), app.meta_kick.notified()).await;
     }
 }

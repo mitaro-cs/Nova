@@ -64,6 +64,50 @@ pub async fn list(State(app): State<Arc<App>>, m: Manager) -> ApiResult<Json<Val
     Ok(Json(json!({"items":out})))
 }
 
+/// Быстрая проверка доступности домена без импорта каталога или извлечения видеопотока.
+pub async fn health(
+    State(app): State<Arc<App>>,
+    m: Manager,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    host(&m)?;
+    let s = source(&id)?;
+    let started = std::time::Instant::now();
+    let response = tokio::time::timeout(
+        Duration::from_secs(6),
+        app.http
+            .get(s.url)
+            .header(reqwest::header::RANGE, "bytes=0-0")
+            .send(),
+    )
+    .await;
+    let elapsed = started.elapsed().as_millis();
+    let result = match response {
+        Ok(Ok(r)) => {
+            let status = r.status();
+            let content_type = r.headers().get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("");
+            let (state, message, next_steps) = if status.is_success() || status.as_u16() == 206 {
+                ("available", "Сайт отвечает. Эта проверка не гарантирует доступность конкретного видео.", Vec::<&str>::new())
+            } else if status.as_u16() == 401 || status.as_u16() == 403 || status.as_u16() == 429 {
+                ("restricted", "Сайт отказал серверному запросу. Nova не обходит ограничение.", vec![
+                    "Запросить у владельца документированный API или разрешённый адрес встраивания.",
+                    "Если доступ должен быть серверным — попросить владельца разрешить исходящий IP хоста Nova и указать требуемый способ авторизации.",
+                    "Проверить условия использования и повторить эту проверку после официального разрешения.",
+                ])
+            } else {
+                ("error", "Сайт ответил ошибкой. Подробности доступны по коду ответа.", vec![
+                    "Проверьте адрес источника и повторите проверку позже.",
+                    "Если ошибка сохраняется, запросите у владельца сайта документацию интеграции.",
+                ])
+            };
+            json!({"state":state,"status":status.as_u16(),"latencyMs":elapsed,"contentType":content_type,"message":message,"nextSteps":next_steps})
+        }
+        Ok(Err(e)) => json!({"state":"error","latencyMs":elapsed,"message":format!("Не удалось связаться с сайтом: {}", e),"nextSteps":["Проверьте DNS, TLS и сетевой доступ хоста Nova.","Если проблема сохраняется, запросите у владельца документацию интеграции."]}),
+        Err(_) => json!({"state":"timeout","latencyMs":elapsed,"message":"Сайт не ответил за 6 секунд. Проверьте соединение и повторите попытку.","nextSteps":["Проверьте сетевой маршрут и доступность сайта с хоста Nova.","Уточните у владельца сайта ограничения по времени ответа и официальную точку интеграции."]}),
+    };
+    Ok(Json(result))
+}
+
 pub async fn connect(State(app): State<Arc<App>>, m: Manager, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     host(&m)?;
     let s = source(&id)?;
@@ -340,5 +384,8 @@ fn save_variants(
             }
         }Ok(())
     })?;
+    // Карточка и варианты сразу попадают в очередь постеров и русских названий,
+    // иначе новая запись ждёт следующего пробуждения воркера (до часа).
+    app.kick_ext();
     Ok(())
 }

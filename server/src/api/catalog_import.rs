@@ -198,5 +198,7 @@ pub async fn import(State(app): State<Arc<App>>, m: Manager, Json(b): Json<Impor
         }
         Ok(())
     })?;
+    // Импортированные карточки должны сразу получить постеры и русские названия.
+    app.kick_ext();
     Ok(Json(json!({"titles":manifest.items.len(),"added":added,"updated":updated})))
 }

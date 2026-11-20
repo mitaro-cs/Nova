@@ -3,7 +3,7 @@ use crate::{App, api::stream_link, outbound, util};
 use parking_lot::Mutex;
 
 pub const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -150,13 +150,28 @@ pub fn metadata(url: &str) -> Option<Media> {
     cache().lock().get(url).map(|(_, m)| m.clone())
 }
 
+/// Позиционные имена дорожек (`rus0`, `eng2`, `audio1`) не都是为了 человека: их можно заменить
+/// на подпись из структурированного плейлиста. «Русский» или «1080p» трогать нельзя.
+fn positional_audio_name(name: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    if n.is_empty() || n.chars().all(|c| c.is_ascii_digit()) {
+        return true;
+    }
+    let letters: String = n.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+    let rest: String = n.chars().skip(letters.len()).collect();
+    matches!(letters.as_str(), "rus" | "eng" | "ru" | "en" | "ua" | "uk" | "audio" | "track" | "a" | "s")
+        && !rest.is_empty()
+        && rest.chars().all(|c| c.is_ascii_digit())
+}
+
 pub fn hls_manifest(text: &str, media: &Media, id: i64) -> String {
     let group = regex::Regex::new(r#"GROUP-ID="([^"]+)""#).unwrap();
     let name = regex::Regex::new(r#"NAME="[^"]*""#).unwrap();
-    let track_index = regex::Regex::new(r#"NAME="[^"0-9]*(\d+)""#).unwrap();
+    let name_val = regex::Regex::new(r#"NAME="([^"]*)""#).unwrap();
     let stream_group = regex::Regex::new(r#"SUBTITLES="([^"]+)""#).unwrap();
     let clean = |s: &str| s.replace(['\r', '\n', '"'], " ");
     let mut audio_counts: HashMap<String, usize> = HashMap::new();
+    let mut used_names: HashMap<String, usize> = HashMap::new();
     let mut subtitle_groups = HashSet::new();
     for line in text.lines() {
         if line.starts_with("#EXT-X-MEDIA:TYPE=SUBTITLES")
@@ -176,11 +191,29 @@ pub fn hls_manifest(text: &str, media: &Media, id: i64) -> String {
         let mut line = line.to_string();
         if line.starts_with("#EXT-X-MEDIA:TYPE=AUDIO") {
             let key = group.captures(&line).map(|c| c[1].to_string()).unwrap_or_default();
+            // `media.audio` уже развёрнут по номерам дорожек с учётом `order` провайдера.
+            // NAME в плейлисте бывает «Русский», а не «rus0»: брать цифры из NAME нельзя,
+            // иначе при пропусках в `order` подпись приклеивается не к той дорожке.
             let n = audio_counts.entry(key).or_default();
-            let index = track_index.captures(&line).and_then(|c| c[1].parse::<usize>().ok()).unwrap_or(*n);
-            if let Some(label) = media.audio.get(index).filter(|s| !s.is_empty()) {
-                line = name.replace(&line, format!("NAME=\"{}\"", clean(label))).into_owned();
-            }
+            let index = *n;
+            let original = name_val.captures(&line).map(|c| c[1].to_string()).unwrap_or_default();
+            // Название озвучки из самого плейлиста источника - самое точное. Подменяем только
+            // позиционные псевдонимы вида `rus0`/`eng2`, у которых нет человеческого смысла.
+            let label = if positional_audio_name(&original) {
+                // `rus0`/`audio2` несут номер дорожки в самом имени: он точнее порядкового счётчика,
+                // особенно когда провайдер пропустил позиции в `order`.
+                let embedded = original.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>();
+                let at = embedded.parse::<usize>().ok().unwrap_or(index);
+                media.audio.get(at).filter(|s| !s.is_empty()).cloned().unwrap_or(original)
+            } else {
+                original
+            };
+            let label = clean(&label);
+            let label = if label.is_empty() { format!("Дорожка {}", index + 1) } else { label };
+            let seen = used_names.entry(label.clone()).or_default();
+            *seen += 1;
+            let label = if *seen == 1 { label } else { format!("{label} {}", *seen) };
+            line = name.replace(&line, format!("NAME=\"{label}\"")).into_owned();
             *n += 1;
         }
         if !media.subtitles.is_empty() && line.starts_with("#EXT-X-STREAM-INF:") && !stream_group.is_match(&line) {
@@ -201,7 +234,9 @@ pub fn hls_manifest(text: &str, media: &Media, id: i64) -> String {
 fn remember(media: Media) -> Media {
     let now = util::now_ms();
     let mut c = cache().lock();
-    c.retain(|_, (at, _)| now - *at < 15 * 60_000);
+    // Дольше, чем кэшresolved-адреса в stream_link (20 минут): иначе в окне между ними
+    // подписи озвучек из импорта теряются и плеер показывает «Дорожка 1/2».
+    c.retain(|_, (at, _)| now - *at < 30 * 60_000);
     if c.len() >= 3000 {
         c.clear();
     }
@@ -227,6 +262,10 @@ pub fn check_page(html: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
         !h.contains("подтвердите, что вы человек") && !h.contains("cf-chl-") && !h.contains("captcha-container"),
         "Сайт требует проверку человека; импорт остановлен"
+    );
+    anyhow::ensure!(
+        !h.contains("недоступен в вашем регионе") && !h.contains("content unavailable in your region"),
+        "Плеер недоступен из этой сети (регион). Подключитесь из России или смените сеть"
     );
     anyhow::ensure!(
         !h.contains("<title>404 not found") && !h.contains("sorry, your request has been denied"),
@@ -290,7 +329,7 @@ fn movie_objects(html: &str) -> Vec<Value> {
         let Some(end) = end else { continue };
         let body = &html[start..end];
         let mut value = serde_json::Map::new();
-        for key in ["hls", "audio", "cc", "duration"] {
+        for key in ["hls", "dash", "audio", "cc", "duration"] {
             let field = regex::Regex::new(&format!(r#"(?:\b{}|"{}")\s*:\s*"#, key, key)).unwrap();
             if let Some(m) = field.find(body)
                 && let Some(Ok(v)) = serde_json::Deserializer::from_str(&body[m.end()..]).into_iter::<Value>().next()
@@ -303,8 +342,13 @@ fn movie_objects(html: &str) -> Vec<Value> {
     values
 }
 fn media_value(v: &Value) -> Option<Media> {
-    let url = v["hls"].as_str()?;
-    if !Url::parse(url).ok().is_some_and(|u| outbound::valid_url(&u) && u.path().ends_with(".m3u8")) {
+    // DASH тоже поддерживается плеером (dash.js грузится лениво): источник с одним .mpd
+    // раньше вообще не попадал в каталог.
+    let url = v["hls"].as_str().or_else(|| v["dash"].as_str())?;
+    if !Url::parse(url)
+        .ok()
+        .is_some_and(|u| outbound::valid_url(&u) && (u.path().ends_with(".m3u8") || u.path().ends_with(".mpd")))
+    {
         return None;
     }
     let names: Vec<String> =
@@ -355,7 +399,8 @@ pub fn structured(html: &str, base: &Url) -> Vec<(Variant, Media)> {
                 let mut parts: Vec<(String, String)> =
                     url::form_urlencoded::parse(base.fragment().unwrap_or("").as_bytes())
                         .into_owned()
-                        .filter(|(k, _)| k == "nova-origin")
+                        // Имя озвучки Dooplay живёт во фрагменте: терять его нельзя.
+                        .filter(|(k, _)| k == "nova-origin" || k == "nova-voice")
                         .collect();
                 parts.push(("nova-season".into(), season.to_string()));
                 parts.push(("episode".into(), episode.to_string()));
@@ -400,7 +445,8 @@ pub fn structured(html: &str, base: &Url) -> Vec<(Variant, Media)> {
 }
 
 pub fn is_provider(u: &Url) -> bool {
-    matches!(u.host_str(), Some("api.namy.ws" | "api.nextembed.ws" | "player.aksor.tv"))
+    // plplayer.online отдаёт плейлист своей страницей (Dooplay: Сопрано, Друзья, Сверхъестественное).
+    matches!(u.host_str(), Some("api.namy.ws" | "api.nextembed.ws" | "player.aksor.tv" | "plplayer.online"))
         || (u.host_str() == Some("ru.yummyani.me") && u.path() == "/iframeCVH.html")
 }
 
@@ -474,10 +520,12 @@ pub async fn resolve_player(url: &Url) -> anyhow::Result<Option<Media>> {
     let season = fragment.get("nova-season").and_then(|n| n.parse::<i64>().ok());
     let episode = fragment.get("episode").and_then(|n| n.parse::<i64>().ok());
     let selected = found
-        .into_iter()
+        .iter()
         .find(|(v, _)| v.season == season && v.episode == episode)
+        // У плееров вроде plplayer.online вся серия одним плейлистом, без сезона/серии внутри.
+        .or_else(|| (found.len() == 1).then(|| &found[0]))
         .ok_or_else(|| anyhow::anyhow!("Выбранная серия не найдена в плейлисте источника"))?;
-    Ok(Some(remember(selected.1)))
+    Ok(Some(remember(selected.1.clone())))
 }
 
 pub fn listing(html: &str, base: &Url, source: &Source) -> Vec<Entry> {
@@ -585,7 +633,8 @@ fn episode_links(html: &str, base: &Url, source: &Source) -> Vec<String> {
 }
 
 pub fn episode_entries(html: &str, base: &Url, source: &Source) -> Vec<Entry> {
-    let episode = regex::Regex::new(r"/episodes/(\d+)-sezon-(\d+)-seri[^/]*").unwrap();
+    let episode =
+        regex::Regex::new(r"/episodes/(\d+)-(?:sezon|season)[a-z]*-(\d+)-(?:seri|seria|episode|epizod)[a-z]*").unwrap();
     let title = regex::Regex::new(r"(?is)<(?:h1|title)\b[^>]*>(.*?)</(?:h1|title)>").unwrap();
     let numbers = regex::Regex::new(r"(?i)(\d+)\s*сезон.*?(\d+)\s*сери").unwrap();
     let mut urls = episode_links(html, base, source);
@@ -772,6 +821,72 @@ pub async fn list(
     Ok((entries, next))
 }
 
+/// Варианты плеера темы Dooplay: страница серии сама не содержит iframe, его возвращает AJAX.
+/// Имена_option («Гоблин», «Украинский», «Плеер 2») сохраняем в адресе, чтобы не потерять озвучку.
+fn dooplay_options(html: &str) -> Vec<(String, String, String, String)> {
+    let tag = regex::Regex::new(r"(?is)<li\b[^>]*\bdooplay_player_option\b[^>]*>").unwrap();
+    let attr = |text: &str, name: &str| {
+        // В regex-crate нет backreference: две отдельные ветки для ' и ".
+        let re = regex::Regex::new(&format!(r#"(?is)\bdata-{name}\s*=\s*(?:'([^']*)'|"([^"]*)")"#)).ok()?;
+        let c = re.captures(text)?;
+        c.get(1).or_else(|| c.get(2)).map(|m| decode(m.as_str()))
+    };
+    tag.captures_iter(html)
+        .filter_map(|c| {
+            let text = &c[0];
+            Some((
+                attr(text, "post")?,
+                attr(text, "nume")?,
+                attr(text, "type")?,
+                attr(text, "name").unwrap_or_default(),
+            ))
+        })
+        .collect()
+}
+
+fn with_voice(mut url: Url, voice: &str) -> Url {
+    if voice.is_empty() {
+        return url;
+    }
+    let mut pairs: Vec<(String, String)> = url::form_urlencoded::parse(url.fragment().unwrap_or("").as_bytes())
+        .into_owned()
+        .filter(|(k, _)| k != "nova-voice")
+        .collect();
+    pairs.push(("nova-voice".into(), voice.into()));
+    let value = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish();
+    url.set_fragment(Some(&value));
+    url
+}
+
+fn frame_voice(url: &Url) -> Option<String> {
+    url::form_urlencoded::parse(url.fragment().unwrap_or("").as_bytes())
+        .find(|(k, _)| k == "nova-voice")
+        .map(|(_, v)| v.into_owned())
+        .filter(|v: &String| !v.is_empty())
+}
+
+async fn dooplay_frames(app: Option<&App>, base: &Url, html: &str) -> (Vec<Url>, Vec<String>) {
+    let options = dooplay_options(html);
+    let mut out = Vec::new();
+    let mut notes = Vec::new();
+    if options.is_empty() || base.host_str().and_then(by_domain).is_none() {
+        return (out, notes);
+    }
+    let Ok(endpoint) = base.join("/wp-admin/admin-ajax.php") else { return (out, notes) };
+    for (post, nume, kind, name) in options {
+        let pairs: Vec<(&str, &str)> =
+            vec![("action", "doo_player_ajax"), ("post", &post), ("nume", &nume), ("type", &kind)];
+        let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish();
+        match stream_link::ajax(app, &endpoint, base, &body).await {
+            Ok(answer) => {
+                out.extend(stream_link::find_iframes(&answer, base).into_iter().map(|frame| with_voice(frame, &name)))
+            }
+            Err(e) => notes.push(format!("{name}: {e}")),
+        }
+    }
+    (out, notes)
+}
+
 pub async fn variants(entry: &Entry, app: Option<&App>) -> anyhow::Result<(Vec<Variant>, Vec<String>)> {
     if let Some(id) = entry.remote_id {
         use futures_util::StreamExt;
@@ -812,7 +927,9 @@ pub async fn variants(entry: &Entry, app: Option<&App>) -> anyhow::Result<(Vec<V
     }
     let (base, html) = stream_link::page_for(app, &entry.url).await?;
     check_page(&html)?;
-    let mut frames = stream_link::find_iframes(&html, &base);
+    let (dooplay, mut notes) = dooplay_frames(app, &base, &html).await;
+    let mut frames = dooplay;
+    frames.extend(stream_link::find_iframes(&html, &base));
     if is_provider(&base) {
         frames = vec![base.clone()]
     }
@@ -821,7 +938,6 @@ pub async fn variants(entry: &Entry, app: Option<&App>) -> anyhow::Result<(Vec<V
         remember(m);
         variants.push(v);
     }
-    let mut notes = Vec::new();
     let mut seen = HashSet::new();
     for frame in frames {
         let frame = with_origin(frame, &base);
@@ -831,33 +947,58 @@ pub async fn variants(entry: &Entry, app: Option<&App>) -> anyhow::Result<(Vec<V
         if frame.host_str().is_some_and(|h| h.contains("youtube") || h == "vk.com") {
             continue;
         }
+        let voice = frame_voice(&frame);
+        // У каталогов (Lordserials) номер серы живет в адресе плеера, а не в карточке.
+        // Сохраняем его, чтобы поиск серии нашёл вариант даже если отсюда плеер не открыть.
+        let frame_season = frame.query_pairs().find(|(k, _)| k == "season").and_then(|(_, v)| v.parse::<i64>().ok());
+        let frame_episode = frame.query_pairs().find(|(k, _)| k == "episode").and_then(|(_, v)| v.parse::<i64>().ok());
+        let season = entry.season.or(frame_season);
+        let episode = entry.episode.or(frame_episode);
+        // Плеер может быть недоступен отсюда (регион, защита), но доступен с хоста зрителя.
+        // Поэтому вариант с именем озвучки или известной серией сохраняем даже без потока.
+        let fallback = || Variant {
+            id: util::sha256_hex(frame.as_str().as_bytes()),
+            url: frame.to_string(),
+            label: voice.clone().unwrap_or_else(|| "Плеер источника".into()),
+            season,
+            episode,
+        };
+        let keep_unconfirmed =
+            voice.is_some() || is_provider(&frame) || (frame_season.is_some() && frame_episode.is_some());
         match stream_link::page(frame.as_str()).await {
             Ok(html) => {
                 if let Err(e) = check_page(&html) {
                     notes.push(format!("{}: {e}", frame.host_str().unwrap_or("плеер")));
+                    if keep_unconfirmed {
+                        variants.push(fallback());
+                    }
                     continue;
                 }
                 let found = structured(&html, &frame);
                 if found.is_empty() {
                     if entry.kind == "movie" || entry.episode.is_some() {
-                        variants.push(Variant {
-                            id: util::sha256_hex(frame.as_str().as_bytes()),
-                            url: frame.to_string(),
-                            label: "Плеер источника - поток не подтверждён".into(),
-                            season: entry.season,
-                            episode: entry.episode,
-                        });
+                        variants.push(fallback());
                     }
                     notes
                         .push(format!("{}: структурированный плейлист не найден", frame.host_str().unwrap_or("плеер")));
                 } else {
-                    for (v, m) in found {
+                    for (mut v, m) in found {
                         remember(m);
+                        v.season = v.season.or(season);
+                        v.episode = v.episode.or(episode);
+                        if let Some(ref voice) = voice {
+                            v.label = format!("{voice} · {}", v.label);
+                        }
                         variants.push(v);
                     }
                 }
             }
-            Err(e) => notes.push(format!("{}: {e}", frame.host_str().unwrap_or("плеер"))),
+            Err(e) => {
+                notes.push(format!("{}: {e}", frame.host_str().unwrap_or("плеер")));
+                if keep_unconfirmed {
+                    variants.push(fallback());
+                }
+            }
         }
     }
     if variants.is_empty()
@@ -960,16 +1101,17 @@ async fn expand_yummy(entry: &Entry, v: &Value, specials: &[String]) -> anyhow::
 
 fn cvh_formats() -> &'static [(&'static str, &'static str)] {
     &[
-        ("hlsUrl", "Все качества HLS"),
-        ("mpegTinyUrl", "Минимальное"),
-        ("mpegLowestUrl", "Низкое"),
-        ("mpegLowUrl", "Ниже среднего"),
-        ("mpegMediumUrl", "Среднее"),
-        ("mpegHighUrl", "Высокое"),
-        ("mpegFullHdUrl", "Full HD"),
-        ("mpegQhdUrl", "QHD"),
-        ("mpeg2kUrl", "2K"),
-        ("mpeg4kUrl", "4K"),
+        // HLS первым: в нём все качества сразу, плеер показывает «Авто» и 1080/720/480 без копий.
+        ("hlsUrl", "Все качества HLS (до 1080p)"),
+        ("mpegFullHdUrl", "Оригинал Full HD"),
+        ("mpegHighUrl", "Оригинал High"),
+        ("mpegMediumUrl", "Оригинал Medium"),
+        ("mpegLowUrl", "Оригинал Low"),
+        ("mpegLowestUrl", "Оригинал Lowest"),
+        ("mpegTinyUrl", "Оригинал Tiny"),
+        ("mpegQhdUrl", "Оригинал QHD"),
+        ("mpeg2kUrl", "Оригинал 2K"),
+        ("mpeg4kUrl", "Оригинал 4K"),
     ]
 }
 
@@ -1062,4 +1204,17 @@ pub async fn match_imdb(app: &App, entry: &Entry) -> anyhow::Result<String> {
         matches.next().ok_or_else(|| anyhow::anyhow!("Нет точного совпадения IMDb - назначьте тайтл вручную"))?;
     anyhow::ensure!(matches.next().is_none(), "Несколько совпадений IMDb - назначьте тайтл вручную");
     Ok(first.id)
+}
+
+#[cfg(test)]
+mod dooplay_tests {
+    use super::dooplay_options;
+
+    #[test]
+    fn разбирает_варианты_плеера_dooplay() {
+        let html = "<li id='player-option-1' class='dooplay_player_option' data-type='tv' data-post='6476' data-nume='1' data-name='Гоблин'>";
+        let options = dooplay_options(html);
+        assert_eq!(options.len(), 1, "{options:?}");
+        assert_eq!(options[0], ("6476".into(), "1".into(), "tv".into(), "Гоблин".into()));
+    }
 }

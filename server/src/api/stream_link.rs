@@ -16,14 +16,17 @@ use base64::Engine;
 use parking_lot::Mutex;
 use reqwest::Url;
 use rusqlite::OptionalExtension;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-/// Как обычный браузер: иначе сайты отдают страницу-заглушку.
+/// Как обычный браузер: иначе сайты отдают страницу-заглушку. Один UA без `Accept` и
+/// `Sec-Fetch-*` уже не проходит - одни и те же каталоги отвечают 403 даже на страницу проверки.
 const UA: &str = crate::site_sources::USER_AGENT;
+pub(crate) const ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+pub(crate) const ACCEPT_LANGUAGE: &str = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7";
 /// Ссылки на поток у сайтов живут несколько часов - помним 20 минут.
 const KEEP_MS: i64 = 20 * 60_000;
 
@@ -65,6 +68,18 @@ fn client() -> reqwest::Client {
     .clone()
 }
 
+/// Заголовки обычного перехода по ссылке. Без них антибот и часть каталогов отвечают 403
+/// ещё до выдачи страницы проверки.
+pub(crate) fn browser_document(req: reqwest::RequestBuilder, same_origin: bool) -> reqwest::RequestBuilder {
+    req.header(header::ACCEPT, ACCEPT)
+        .header(header::ACCEPT_LANGUAGE, ACCEPT_LANGUAGE)
+        .header("Upgrade-Insecure-Requests", "1")
+        .header("Sec-Fetch-Dest", "document")
+        .header("Sec-Fetch-Mode", "navigate")
+        .header("Sec-Fetch-Site", if same_origin { "same-origin" } else { "none" })
+        .header("Sec-Fetch-User", "?1")
+}
+
 /// GET с переходами и куками (VK по дороге ставит куки и переадресует к себе же).
 pub async fn page(url: &str) -> anyhow::Result<String> {
     Ok(page_with_url(url).await?.1)
@@ -96,6 +111,11 @@ async fn page_with_cookies(
     parent: Option<&Url>,
 ) -> anyhow::Result<(Url, String)> {
     let mut url = Url::parse(url)?;
+    if let Some(host) = url.host_str() {
+        for (k, v) in crate::antibot::saved(host) {
+            cookies.entry(k).or_insert(v);
+        }
+    }
     let referer = parent
         .filter(|u| crate::outbound::valid_url(u))
         .and_then(|u| Url::parse(&format!("{}/", u.origin().ascii_serialization())).ok())
@@ -110,10 +130,13 @@ async fn page_with_cookies(
                         && u.host_str().and_then(crate::site_sources::by_domain).is_some()
                 })
         });
+    let mut solved = false;
     for _ in 0..10 {
         anyhow::ensure!(crate::outbound::valid_url(&url), "внутренний адрес запрещён");
         let jar = cookies.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ");
-        let mut request = client().get(url.clone()).header(header::COOKIE, jar).timeout(Duration::from_secs(12));
+        let mut request = browser_document(client().get(url.clone()), referer.is_some())
+            .header(header::COOKIE, jar)
+            .timeout(Duration::from_secs(12));
         if let Some(ref origin) = referer {
             request = request.header(header::REFERER, origin.as_str());
         }
@@ -134,10 +157,65 @@ async fn page_with_cookies(
             url = next;
             continue;
         }
-        anyhow::ensure!(r.status().is_success(), "сайт ответил {}", r.status().as_u16());
-        return Ok((url, String::from_utf8_lossy(&crate::outbound::limited(r, 4 * 1024 * 1024).await?).into_owned()));
+        let status = r.status();
+        let text = String::from_utf8_lossy(&crate::outbound::limited(r, 4 * 1024 * 1024).await?).into_owned();
+        if !solved
+            && crate::antibot::is_challenge(&text)
+            && let Ok(pairs) = crate::antibot::solve(&client(), &url, &text, &cookies).await
+        {
+            for (k, v) in pairs {
+                cookies.insert(k, v);
+            }
+            if let Some(host) = url.host_str() {
+                // Браузер шлёт и исходную `antibot=…` из Set-Cookie, и cookie из ответа проверки.
+                // Только второй значения мало: страница открывается, но AJAX плеера молчит.
+                let all: Vec<_> = cookies.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                crate::antibot::remember(host, &all);
+            }
+            solved = true;
+            continue;
+        }
+        anyhow::ensure!(status.is_success(), "сайт ответил {}", status.as_u16());
+        return Ok((url, text));
     }
     anyhow::bail!("слишком много переадресаций")
+}
+
+/// POST к AJAX-плееру страницы (Dooplay и похожие темы). Сессия и куки антибота те же,
+/// что у самой страницы, иначе сайт отдаёт пустой ответ или снова 403.
+pub async fn ajax(app: Option<&App>, endpoint: &Url, referer: &Url, body: &str) -> anyhow::Result<String> {
+    anyhow::ensure!(crate::outbound::valid_url(endpoint), "внутренний адрес запрещён");
+    let mut cookies = HashMap::new();
+    if let (Some(app), Some(source)) = (app, endpoint.host_str().and_then(crate::site_sources::by_domain))
+        && endpoint.origin() == Url::parse(source.url)?.origin()
+    {
+        for (k, v) in app.source_sessions.lock().get(source.id).cloned().unwrap_or_default() {
+            if !k.contains([';', '\r', '\n']) && !v.contains([';', '\r', '\n']) {
+                cookies.insert(k, v);
+            }
+        }
+    }
+    if let Some(host) = endpoint.host_str() {
+        for (k, v) in crate::antibot::saved(host) {
+            cookies.entry(k).or_insert(v);
+        }
+    }
+    let jar = cookies.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ");
+    let response = browser_document(
+        client()
+            .post(endpoint.clone())
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded;")
+            .header(header::ORIGIN, referer.origin().ascii_serialization())
+            .header(header::REFERER, referer.as_str())
+            .header(header::COOKIE, jar),
+        true,
+    )
+    .body(body.to_string())
+    .timeout(Duration::from_secs(12))
+    .send()
+    .await?;
+    anyhow::ensure!(response.status().is_success(), "плеер ответил {}", response.status().as_u16());
+    Ok(String::from_utf8_lossy(&crate::outbound::limited(response, 1024 * 1024).await?).into_owned())
 }
 
 /// Строка JSON из страницы: `"key":"…"` → значение (с разбором `\/` и `&`).
@@ -652,6 +730,306 @@ pub async fn part(
     resp.body(Body::from_stream(r.bytes_stream())).map_err(ApiError::internal)
 }
 
+/// Диагностика цепочки для «Обзора»: пользователь видит, где именно видео ломается.
+/// Адреса CDN наружу не отдаём - только понятные шаги, время и host'ы.
+#[derive(Deserialize)]
+pub struct DiagnoseBody {
+    pub url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagStep {
+    key: &'static str,
+    title: &'static str,
+    note: &'static str,
+    status: &'static str,
+    ms: u64,
+    detail: String,
+}
+
+const DIAG_STEPS: &[(&str, &str, &str)] = &[
+    ("parse", "Ссылка", "Узнаём сайт и вид видео по адресу"),
+    ("public", "Публичный адрес", "Пускаем только внешние сайты, не внутренние"),
+    ("master", "Поток сайта", "Спрашиваем у сайта настоящий адрес видео"),
+    ("playlist", "Плейлист", "Читаем плейлист или первые байты файла"),
+    ("segment", "Кусок видео", "Берём первый кусок, чтобы убедиться в байтах"),
+];
+
+fn diag_step(key: &'static str, status: &'static str, ms: u64, detail: String) -> DiagStep {
+    let (_, title, note) = DIAG_STEPS.iter().find(|(k, _, _)| *k == key).expect("diagnostic step");
+    DiagStep { key, title, note, status, ms, detail }
+}
+
+fn diag_skip(steps: &mut Vec<DiagStep>, from: usize) {
+    for (key, _, _) in DIAG_STEPS.iter().skip(from) {
+        steps.push(diag_step(key, "skip", 0, "Не проверялось: выше была ошибка".into()));
+    }
+}
+
+fn diag_result(steps: Vec<DiagStep>, ok: bool, verdict: &str, host: Option<&str>) -> Json<Value> {
+    Json(json!({ "ok": ok, "verdict": verdict, "host": host, "steps": steps }))
+}
+
+fn diag_error(e: impl std::fmt::Display) -> String {
+    e.to_string().chars().take(300).collect()
+}
+
+fn diag_media_line(text: &str) -> Option<&str> {
+    text.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with('#'))
+}
+
+/// Что выбрано в адресе: сезон, серия, озвучка (для сериалов из каталогов).
+fn diag_choice(url: &Url) -> String {
+    let Some(fragment) = url.fragment() else { return String::new() };
+    let pairs: HashMap<&str, &str> = fragment.split('&').filter_map(|p| p.split_once('=')).collect();
+    let mut out = String::new();
+    if let Some(s) = pairs.get("nova-season") {
+        out.push_str(&format!(", сезон {}", s));
+    }
+    if let Some(e) = pairs.get("episode") {
+        out.push_str(&format!(", серия {}", e));
+    }
+    if let Some(v) = pairs.get("nova-voice") {
+        out.push_str(&format!(", озвучка {}", v));
+    }
+    out
+}
+
+fn diag_base_url<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
+    let i = text.find(&format!("<{tag}"))?;
+    let from = text[i..].find('>')? + i + 1;
+    let to = text[from..].find("</")? + from;
+    Some(text[from..to].trim())
+}
+
+/// Живая проверка цепочки: поиск адреса → сайт → плейлист → первый кусок.
+pub async fn diagnose(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Json(body): Json<DiagnoseBody>,
+) -> ApiResult<Json<Value>> {
+    let key = format!("streamdiag:{}", v.profile.id);
+    if app.diag_limit.blocked(&key) {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "Слишком много проверок. Подождите минуту.",
+        ));
+    }
+    app.diag_limit.fail(&key);
+
+    let mut steps = Vec::with_capacity(DIAG_STEPS.len());
+
+    let t = std::time::Instant::now();
+    let Some(parsed) = super::links::parse_with(body.url.trim(), &super::links::extra_sites(&app)) else {
+        steps.push(diag_step(
+            "parse",
+            "fail",
+            t.elapsed().as_millis() as u64,
+            "Непонятная ссылка. Нужен адрес видео или поддерживаемого сайта".into(),
+        ));
+        diag_skip(&mut steps, 1);
+        return Ok(diag_result(steps, false, "Непонятная ссылка", None));
+    };
+    let parsed_url = Url::parse(&parsed.url).ok();
+    let choice = parsed_url.as_ref().map(diag_choice).unwrap_or_default();
+    let site_host = parsed_url.as_ref().and_then(|u| u.host_str()).unwrap_or("неизвестно");
+    steps.push(diag_step(
+        "parse",
+        "ok",
+        t.elapsed().as_millis() as u64,
+        format!("Вид: {}, сайт: {}{}", parsed.kind, site_host, choice),
+    ));
+
+    let t = std::time::Instant::now();
+    let Ok(site) = Url::parse(&parsed.url) else {
+        steps.push(diag_step("public", "fail", t.elapsed().as_millis() as u64, "Неверный адрес сайта".into()));
+        diag_skip(&mut steps, 2);
+        return Ok(diag_result(steps, false, "Неверный адрес сайта", None));
+    };
+    if !crate::outbound::valid_url(&site) {
+        steps.push(diag_step("public", "fail", t.elapsed().as_millis() as u64, "Внутренний адрес запрещён".into()));
+        diag_skip(&mut steps, 2);
+        return Ok(diag_result(steps, false, "Внутренний адрес запрещён", None));
+    }
+    let host: Option<String> = site.host_str().map(str::to_lowercase);
+    steps.push(diag_step(
+        "public",
+        "ok",
+        t.elapsed().as_millis() as u64,
+        format!("Публичный адрес: {}", host.as_deref().unwrap_or("сайт")),
+    ));
+
+    let t = std::time::Instant::now();
+    let (media, extra) =
+        match master(parsed.kind, parsed.id.as_deref().unwrap_or_default(), &parsed.url, parsed.embed.as_deref()).await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                steps.push(diag_step("master", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+                diag_skip(&mut steps, 3);
+                return Ok(diag_result(steps, false, "Сайт не отдал поток", host.as_deref()));
+            }
+        };
+    let Ok(media_url) = Url::parse(&media) else {
+        steps.push(diag_step(
+            "master",
+            "fail",
+            t.elapsed().as_millis() as u64,
+            "Сайт вернул неверный адрес видео".into(),
+        ));
+        diag_skip(&mut steps, 3);
+        return Ok(diag_result(steps, false, "Сайт вернул неверный адрес видео", host.as_deref()));
+    };
+    let path = media_url.path().to_lowercase();
+    let m3u8 = path.ends_with(".m3u8");
+    let mpd = path.ends_with(".mpd");
+    let manifest = m3u8 || mpd;
+    steps.push(diag_step(
+        "master",
+        "ok",
+        t.elapsed().as_millis() as u64,
+        format!(
+            "Поток: {}, вид: {}",
+            media_url.host_str().unwrap_or("сайт"),
+            if m3u8 {
+                "HLS"
+            } else if mpd {
+                "DASH"
+            } else {
+                "файл"
+            }
+        ),
+    ));
+
+    let t = std::time::Instant::now();
+    let range = (!manifest).then(|| axum::http::HeaderValue::from_static("bytes=0-1023"));
+    let (base, response) = match fetch_media(parsed.kind, media_url, &extra, range.as_ref()).await {
+        Ok(v) => v,
+        Err(e) => {
+            steps.push(diag_step("playlist", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+            diag_skip(&mut steps, 4);
+            return Ok(diag_result(steps, false, "Плейлист не открылся", host.as_deref()));
+        }
+    };
+    let status = response.status().as_u16();
+    let data = match crate::outbound::limited(response, 2 * 1024 * 1024).await {
+        Ok(v) => v,
+        Err(e) => {
+            steps.push(diag_step("playlist", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+            diag_skip(&mut steps, 4);
+            return Ok(diag_result(steps, false, "Плейлист слишком большой", host.as_deref()));
+        }
+    };
+    if data.is_empty() {
+        steps.push(diag_step("playlist", "fail", t.elapsed().as_millis() as u64, "Сайт вернул пустой ответ".into()));
+        diag_skip(&mut steps, 4);
+        return Ok(diag_result(steps, false, "Плейлист пуст", host.as_deref()));
+    }
+    let mut text = String::from_utf8_lossy(&data).into_owned();
+    if m3u8 && !text.trim_start().starts_with("#EXTM3U") {
+        steps.push(diag_step(
+            "playlist",
+            "fail",
+            t.elapsed().as_millis() as u64,
+            "Ответ не похож на HLS-плейлист".into(),
+        ));
+        diag_skip(&mut steps, 4);
+        return Ok(diag_result(steps, false, "Плейлист не похож на HLS", host.as_deref()));
+    }
+    if mpd && !text.contains("<MPD") {
+        steps.push(diag_step(
+            "playlist",
+            "fail",
+            t.elapsed().as_millis() as u64,
+            "Ответ не похож на DASH-манифест".into(),
+        ));
+        diag_skip(&mut steps, 4);
+        return Ok(diag_result(steps, false, "Манифест не похож на DASH", host.as_deref()));
+    }
+    let detail = if manifest {
+        format!("{}: {} байт, ответ {}", if m3u8 { "HLS" } else { "DASH" }, data.len(), status)
+    } else {
+        format!("Файл: {} байт по Range, ответ {}", data.len(), status)
+    };
+    steps.push(diag_step("playlist", "ok", t.elapsed().as_millis() as u64, detail));
+
+    let t = std::time::Instant::now();
+    if !manifest {
+        steps.push(diag_step(
+            "segment",
+            "ok",
+            t.elapsed().as_millis() as u64,
+            "Оригинал: первые байты уже получены Range-запросом".into(),
+        ));
+        return Ok(diag_result(steps, true, "Видео доступно: файл отдаёт байты", host.as_deref()));
+    }
+
+    let mut next = base;
+    let mut target = None;
+    if m3u8 {
+        for _ in 0..3 {
+            let Some(line) = diag_media_line(&text) else { break };
+            let Ok(u) = next.join(line) else { break };
+            if u.path().to_lowercase().ends_with(".m3u8") {
+                match fetch_media(parsed.kind, u, &extra, None).await {
+                    Ok((b, r)) => match crate::outbound::limited(r, 2 * 1024 * 1024).await {
+                        Ok(v) => {
+                            text = String::from_utf8_lossy(&v).into_owned();
+                            next = b;
+                        }
+                        Err(e) => {
+                            steps.push(diag_step("segment", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+                            return Ok(diag_result(steps, false, "Вложенный плейлист не открылся", host.as_deref()));
+                        }
+                    },
+                    Err(e) => {
+                        steps.push(diag_step("segment", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+                        return Ok(diag_result(steps, false, "Вложенный плейлист не открылся", host.as_deref()));
+                    }
+                }
+            } else {
+                target = Some(u);
+                break;
+            }
+        }
+    } else if let Some(url) = diag_base_url(&text, "BaseURL").and_then(|v| next.join(v).ok()) {
+        target = Some(url);
+    }
+    let Some(target) = target else {
+        let why = if m3u8 {
+            "В плейлисте нет адреса куска"
+        } else {
+            "В манифесте DASH нет BaseURL"
+        };
+        steps.push(diag_step("segment", "fail", t.elapsed().as_millis() as u64, why.into()));
+        return Ok(diag_result(steps, false, why, host.as_deref()));
+    };
+    let seg_range = axum::http::HeaderValue::from_static("bytes=0-1023");
+    match fetch_media(parsed.kind, target, &extra, Some(&seg_range)).await {
+        Ok((_, r)) => match crate::outbound::limited(r, 4 * 1024 * 1024).await {
+            Ok(v) => {
+                steps.push(diag_step(
+                    "segment",
+                    "ok",
+                    t.elapsed().as_millis() as u64,
+                    format!("Первый кусок: {} байт", v.len()),
+                ));
+                Ok(diag_result(steps, true, "Видео доступно: плейлист и первый кусок отдают данные", host.as_deref()))
+            }
+            Err(e) => {
+                steps.push(diag_step("segment", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+                Ok(diag_result(steps, false, "Кусок видео не прочитался", host.as_deref()))
+            }
+        },
+        Err(e) => {
+            steps.push(diag_step("segment", "fail", t.elapsed().as_millis() as u64, diag_error(e)));
+            Ok(diag_result(steps, false, "Кусок видео не открылся", host.as_deref()))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -731,7 +1109,7 @@ mod tests {
     #[ignore = "requires the live external source and CDN"]
     async fn lordfilm_live_movie_playlist_and_segment() {
         tokio::time::timeout(Duration::from_secs(55), async {
-            let found = crate::lordfilm::search("Дюна", Some(2021)).await.expect("source search");
+            let found = crate::lordfilm::search_names(&["Дюна"], Some(2021)).await.expect("source search");
             let url = found.first().expect("matching movie")["url"].as_str().unwrap();
             assert_eq!(super::super::links::parse(url).unwrap().kind, "site");
             let (stream, extra) = master("site", "", url, None).await.expect("native stream");

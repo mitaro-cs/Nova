@@ -12,6 +12,14 @@
 /desktop/src-tauri/resources/ffmpeg*
 /desktop/src-tauri/resources/ffprobe*
 /target-win
+/security-lab/target
+/security-lab/backup-helper/target
+/dist
+/artifacts/Nova-project-archive
+/desktop/ui/*
+!/desktop/ui/index.html
+/.zcode
+/System.IO.__ConsoleStream
 /logs
 
 # Локально (не в репозиторий): JDK и SDK, сборка Java preview, логи проверок, скриншоты отчётов.

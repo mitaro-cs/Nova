@@ -4,6 +4,7 @@ import type { Engine } from '../session.svelte';
 import type { Step } from '../plan';
 import { qualityTier } from '../quality-label';
 import { abrEstimate } from '../speed';
+import { distinctNames, sourceTrackName } from '../tracks';
 import { streamUrl } from '../urls';
 
 export interface Level {
@@ -132,11 +133,15 @@ export function createHlsEngine(ctx: HlsCtx): HlsEngine {
           .filter((l) => ctx.source || (l.height && !seen.has(l.label) && seen.add(l.label)))
           .sort((a, b) => b.height - a.height);
         levelsCb?.(current);
-        if (ctx.source) tracksCb?.((h.audioTracks ?? []).map((t, index) => ({ index, label: t.name || t.lang || `Дорожка ${index + 1}`, lang: t.lang || null, default: !!t.default })));
+        if (ctx.source) {
+          const names = distinctNames((h.audioTracks ?? []).map((t, index) => ({ index, label: sourceTrackName(t.name, t.lang, index) })));
+          tracksCb?.(names.map((t, index) => ({ ...t, lang: h.audioTracks?.[index]?.lang || null, default: !!h.audioTracks?.[index]?.default })));
+        }
         if (ctx.source) subtitlesCb?.((h.subtitleTracks ?? []).map((t,index) => ({id:`hls:${index}`,label:t.name || t.lang || `Субтитры ${index+1}`,lang:t.lang || null,forced:!!t.forced})));
       }) as never);
       if (ctx.source && Hls.Events.AUDIO_TRACKS_UPDATED) h.on(Hls.Events.AUDIO_TRACKS_UPDATED, (() => {
-        tracksCb?.((h.audioTracks ?? []).map((t,index) => ({index,label:t.name || t.lang || `Дорожка ${index+1}`,lang:t.lang || null,default:!!t.default})));
+        const names=distinctNames((h.audioTracks ?? []).map((t,index)=>({index,label:sourceTrackName(t.name,t.lang,index)})));
+        tracksCb?.(names.map((t,index)=>({...t,lang:h.audioTracks?.[index]?.lang||null,default:!!h.audioTracks?.[index]?.default})));
       }) as never);
       if (ctx.source && Hls.Events.SUBTITLE_TRACKS_UPDATED) h.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (() => {
         subtitlesCb?.((h.subtitleTracks ?? []).map((t,index) => ({id:`hls:${index}`,label:t.name || t.lang || `Субтитры ${index+1}`,lang:t.lang || null,forced:!!t.forced})));

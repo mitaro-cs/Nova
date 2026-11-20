@@ -3,6 +3,7 @@
 use super::probe;
 use super::scan::{ScanStats, scan_with};
 use crate::App;
+use futures_util::future::join_all;
 use rusqlite::{OptionalExtension, params};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -51,8 +52,7 @@ pub async fn scan_worker(app: Arc<App>) {
                 Err(e) => st.error = Some(e.to_string()),
             }
         }
-        app.meta_kick.notify_one();
-        app.kick_probe();
+        app.kick_material();
         let _ = tokio::time::timeout(Duration::from_secs(600), app.scan_kick.notified()).await;
     }
 }
@@ -61,7 +61,7 @@ pub async fn scan_worker(app: Arc<App>) {
 pub async fn probe_worker(app: Arc<App>) {
     loop {
         let tools = app.tools.read().clone();
-        if let Some(ffprobe) = tools.ffprobe {
+        if let Some(ffprobe) = &tools.ffprobe {
             let batch: Vec<(i64, String, Option<String>)> = app
                 .db
                 .with(|c| {
@@ -72,26 +72,13 @@ pub async fn probe_worker(app: Arc<App>) {
                 })
                 .unwrap_or_default();
             if !batch.is_empty() {
-                for (id, path, still) in batch {
-                    let path = PathBuf::from(path);
-                    let p = probe::probe(&ffprobe, &path).await.unwrap_or_default();
-                    let mut frame = None;
-                    if still.is_none()
-                        && p.video.is_some()
-                        && let Some(ffmpeg) = &tools.ffmpeg
-                    {
-                        let at = p.duration.map(|d| (d * 0.15).min(600.0)).unwrap_or(30.0);
-                        if let Ok(jpg) = probe::frame(ffmpeg, &path, at, 640).await {
-                            frame = app.images.save(&jpg).ok();
-                        }
-                    }
-                    let json = serde_json::to_string(&p).unwrap_or_else(|_| "{}".into());
-                    let _ = app.db.with(|c| {
-                        c.execute(
-                            "UPDATE files SET probe = ?, duration = COALESCE(?, duration), still = COALESCE(still, ?) WHERE id = ?",
-                            params![json, p.duration, frame, id],
-                        )
-                    });
+                // Три файла одновременно: один ffprobe + один кадр на файл всё ещё идут с низким
+                // приоритетом (nice 19 / IDLE), но большая пачка разбирается заметно быстрее.
+                for chunk in batch.chunks(3) {
+                    let jobs = chunk
+                        .iter()
+                        .map(|(id, path, still)| probe_one(&app, &tools, ffprobe, *id, path.clone(), still.clone()));
+                    join_all(jobs).await;
                 }
                 continue;
             }
@@ -104,6 +91,35 @@ pub async fn probe_worker(app: Arc<App>) {
         }
         let _ = tokio::time::timeout(Duration::from_secs(900), app.probe_kick.notified()).await;
     }
+}
+
+async fn probe_one(
+    app: &Arc<App>,
+    tools: &probe::Tools,
+    ffprobe: &std::path::Path,
+    id: i64,
+    path: String,
+    still: Option<String>,
+) {
+    let file = PathBuf::from(path);
+    let p = probe::probe(ffprobe, &file).await.unwrap_or_default();
+    let mut frame = None;
+    if still.is_none()
+        && p.video.is_some()
+        && let Some(ffmpeg) = &tools.ffmpeg
+    {
+        let at = p.duration.map(|d| (d * 0.15).min(600.0)).unwrap_or(30.0);
+        if let Ok(jpg) = probe::frame(ffmpeg, &file, at, 640).await {
+            frame = app.images.save(&jpg).ok();
+        }
+    }
+    let json = serde_json::to_string(&p).unwrap_or_else(|_| "{}".into());
+    let _ = app.db.with(|c| {
+        c.execute(
+            "UPDATE files SET probe = ?, duration = COALESCE(?, duration), still = COALESCE(still, ?) WHERE id = ?",
+            params![json, p.duration, frame, id],
+        )
+    });
 }
 
 /// Уменьшенные постеры (342 px) и цвет карточки по постеру. true - что-то сделано.
@@ -158,7 +174,7 @@ async fn backdrops(app: &Arc<App>, ffmpeg: &std::path::Path) -> bool {
     backdrops_md(app, ffmpeg).await || !todo.is_empty()
 }
 
-/// Большой кадр (1920 px, JPEG) для героя и страницы фильма - вместо оригинала, который бывает 4K.
+/// Большой кадр (до 2560 px по ширине) для героя и страницы фильма - вместо оригинала, который бывает 4K.
 async fn backdrops_md(app: &Arc<App>, ffmpeg: &std::path::Path) -> bool {
     let todo: Vec<(i64, String)> = app
         .db

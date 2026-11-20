@@ -204,6 +204,34 @@ fn parses_real_provider_shapes_without_executing_javascript() {
 }
 
 #[test]
+fn dash_only_and_audio_labels_without_numeric_names() {
+    let dash = r#"new Player({source:{dash:"https://cdn.example.com/manifest.mpd",audio:{"names":["Русский","English"],"order":[0,2]},duration:5400}})"#;
+    let found = site_sources::structured(dash, &Url::parse("https://player.example.com/embed/1").unwrap());
+    assert_eq!(found.len(), 1, "источник только с DASH должен попадать в каталог");
+    assert_eq!(found[0].1.url, "https://cdn.example.com/manifest.mpd");
+    let master = "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"Русский\",URI=\"a0.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"Original\",URI=\"a1.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"English\",URI=\"a2.m3u8\"\n#EXT-X-STREAM-INF:RESOLUTION=1280x720,AUDIO=\"a\"\n720.m3u8";
+    let enriched = site_sources::hls_manifest(master, &found[0].1, 9);
+    assert!(enriched.contains("NAME=\"Русский\""), "первая дорожка: {enriched}");
+    assert!(enriched.contains("NAME=\"Original\""), "вторая дорожка без подписи не трогается: {enriched}");
+    assert!(enriched.contains("NAME=\"English\""), "третья дорожка: {enriched}");
+}
+
+#[test]
+fn original_audio_names_survive_and_repeats_get_numbers() {
+    let master = "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"Русский (Studio)\",URI=\"a0.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"Русский (Studio)\",URI=\"a1.m3u8\"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"rus0\",URI=\"a2.m3u8\"\n#EXT-X-STREAM-INF:RESOLUTION=1280x720,AUDIO=\"a\"\n720.m3u8";
+    let media = site_sources::Media {
+        url: "https://cdn.example.com/master.m3u8".into(),
+        audio: vec!["Голос".into()],
+        subtitles: vec![],
+        duration: 0.0,
+    };
+    let enriched = site_sources::hls_manifest(master, &media, 11);
+    assert!(enriched.contains("NAME=\"Русский (Studio)\""), "название озвучки из источника: {enriched}");
+    assert!(enriched.contains("NAME=\"Русский (Studio) 2\""), "повтор должен отличаться: {enriched}");
+    assert!(enriched.contains("NAME=\"Голос\""), "позиционный псевдоним заменяется: {enriched}");
+}
+
+#[test]
 fn catalog_pages_stay_on_source_and_preserve_all_entries() {
     let source = site_sources::by_id("lordfilm").unwrap();
     let base = Url::parse(source.url).unwrap();
@@ -226,13 +254,18 @@ async fn sources_require_host_opt_in_and_do_not_expose_cookies() {
     let dir = tempfile::tempdir().unwrap();
     let (running, mut host) = common::start(dir.path()).await;
     let sources = host.json("/api/admin/site-sources").await;
-    assert_eq!(sources["items"].as_array().unwrap().len(), 9);
-    assert!(sources["items"].as_array().unwrap().iter().all(|s| s["configured"] == false));
+    let items = sources["items"].as_array().unwrap();
+    assert_eq!(items.len(), 9);
+    // Каталоги из миграции 35 включены при установке. «bear» среди них нет - именно его
+    // подключение по запросу хоста и проверяем. Остальные источники остались без сеансов.
+    let bear = items.iter().find(|s| s["source"]["id"] == "bear").unwrap();
+    assert_eq!(bear["configured"], false);
+    assert_eq!(items.iter().filter(|s| s["configured"] == true).count(), 6);
     assert_eq!(host.send("POST", "/api/admin/site-sources/bear/import", json!({})).await.status(), 400);
     assert!(host.send("POST", "/api/admin/site-sources/bear/connect", json!({})).await.status().is_success());
     assert!(host.send("POST", "/api/admin/site-sources/bear/connect", json!({})).await.status().is_success());
     let catalogs = host.json("/api/admin/catalogs").await;
-    assert_eq!(catalogs["items"].as_array().unwrap().len(), 1);
+    assert_eq!(catalogs["items"].as_array().unwrap().len(), 8);
     running.app.source_sessions.lock().insert("bear".into(), vec![("antibot".into(), "opaque-secret-value".into())]);
     let sources = host.json("/api/admin/site-sources").await;
     assert!(!sources.to_string().contains("opaque-secret-value"));
@@ -559,5 +592,179 @@ async fn live_cvh_runs_through_nova_proxy() {
         .unwrap();
     assert!(response.status().is_success(), "{}", response.status());
     assert!(response.bytes().await.unwrap().len() > 16);
+    running.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "Живая проверка всех приложенных сайтов через поиск Nova"]
+async fn live_all_attached_sites() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO ext_titles(id,kind,title,year,updated_at) VALUES('tt9458304','series','Дороро',2019,0)",
+                [],
+            )
+        })
+        .unwrap();
+    let cases = [
+        (
+            "sx.lordfilm5.pro",
+            "Матрица",
+            "https://sx.lordfilm5.pro/index.php?do=search&subaction=search&story={q}",
+            "movie",
+            None,
+        ),
+        (
+            "lordserials.fan",
+            "Друзья",
+            "https://lordserials.fan/index.php?do=search&subaction=search&story={q}",
+            "series",
+            Some((1, 1)),
+        ),
+        (
+            "watch-the-sopranos-online.net",
+            "Клан Сопрано",
+            "https://www.watch-the-sopranos-online.net/?s={q}",
+            "series",
+            Some((1, 1)),
+        ),
+        ("serialfriends.org", "Друзья", "https://serialfriends.org/?s={q}", "series", Some((1, 1))),
+        ("supernatural-spn.net", "Сверхъестественное", "https://supernatural-spn.net/?s={q}", "series", Some((1, 1))),
+        ("old.yummyani.me", "Дороро", "", "anime", Some((1, 1))),
+    ];
+    for (domain, name, search, kind, episode) in cases {
+        let response = host
+            .send(
+                "PUT",
+                "/api/admin/catalogs",
+                json!({"items":[{"domain":domain,"name":name,"kind":kind,"enabled":true,"search":if search.is_empty(){serde_json::Value::Null}else{json!(search)} }]}),
+            )
+            .await;
+        assert!(response.status().is_success(), "{domain}: {}", response.status());
+        let q: String = url::form_urlencoded::byte_serialize(name.as_bytes()).collect();
+        let mut path = format!("/api/links/search?q={q}&provider=own");
+        if let Some((season, ep)) = episode {
+            path.push_str(&format!("&season={season}&episode={ep}"));
+        }
+        let response = host.get(&path).await;
+        let status = response.status();
+        let text = response.text().await.unwrap();
+        let found: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let count = found.as_array().map(Vec::len).unwrap_or(0);
+        println!("{domain}: {status}, найдено {count}, первый {:?}", found[0]["url"]);
+        assert!(status.is_success(), "{domain}: {text}");
+        assert!(count > 0, "{domain}: пустой поиск ({text})");
+        if domain == "old.yummyani.me" {
+            let first = &found[0];
+            let link = host
+                .send(
+                    "POST",
+                    "/api/links",
+                    json!({"url":first["url"],"label":first["label"],"extId":"tt9458304","season":1,"episode":1,"sourceDomain":domain}),
+                )
+                .await;
+            assert!(link.status().is_success(), "{}", link.status());
+            let id = link.json::<serde_json::Value>().await.unwrap()["id"].as_i64().unwrap();
+            let source = host.get(&format!("/api/links/{id}/stream/source")).await;
+            let status = source.status();
+            let text = source.text().await.unwrap();
+            println!("Дороро stream/source: {status} {text}");
+            assert!(status.is_success(), "{text}");
+        }
+    }
+    running.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "Живая проверка полной цепочки Сопрано через API Nova"]
+async fn live_sopranos_full_api_chain() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO ext_titles(id,kind,title,year,updated_at) VALUES('tt0141842','series','Клан Сопрано',1999,0)",
+                [],
+            )
+        })
+        .unwrap();
+    let response = host
+        .send(
+            "PUT",
+            "/api/admin/catalogs",
+            json!({"items":[{"domain":"watch-the-sopranos-online.net","name":"Клан Сопрано", "kind":"series","enabled":true,"search":"https://www.watch-the-sopranos-online.net/?s={q}"}]}),
+        )
+        .await;
+    assert!(response.status().is_success(), "{}", response.status());
+    let q: String = url::form_urlencoded::byte_serialize("Клан Сопрано".as_bytes()).collect();
+    let response = host.get(&format!("/api/links/search?q={q}&extId=tt0141842&provider=own&season=1&episode=1")).await;
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    println!("поиск: {status} {text}");
+    assert!(status.is_success());
+    let results: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let items = results.as_array().expect("массив результатов");
+    let playable = items
+        .iter()
+        .find(|v| v["label"].as_str().is_some_and(|l| l.contains("Гоблин")))
+        .or_else(|| items.first())
+        .expect("вариант первой серии");
+    let link = host
+        .send(
+            "POST",
+            "/api/links",
+            json!({"url":playable["url"],"label":playable["label"],"extId":"tt0141842","season":1,"episode":1,"sourceDomain":"watch-the-sopranos-online.net"}),
+        )
+        .await;
+    assert!(link.status().is_success(), "{}", link.status());
+    let id = link.json::<serde_json::Value>().await.unwrap()["id"].as_i64().unwrap();
+    let source = host.get(&format!("/api/links/{id}/stream/source")).await;
+    println!("stream/source: {}", source.status());
+    println!("{}", source.text().await.unwrap());
+    running.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "Живая проверка обхода антибота, серий и озвучек Сопрано/Друзей/Сверхъестественного"]
+async fn live_dooplay_series_pages_and_variants() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, _) = common::start(dir.path()).await;
+    for id in ["sopranos", "friends", "supernatural"] {
+        let source = site_sources::by_id(id).unwrap();
+        let (entries, _) = site_sources::list(source, None, Some(&running.app)).await.unwrap();
+        assert!(!entries.is_empty(), "{id}: список серий пуст");
+        assert!(entries.iter().any(|e| e.season == Some(1) && e.episode == Some(1)), "{id}: нет первой серии");
+        let first = entries.iter().find(|e| e.season == Some(1) && e.episode == Some(1)).unwrap();
+        let (variants, notes) = site_sources::variants(first, Some(&running.app)).await.unwrap();
+        assert!(!variants.is_empty(), "{id}: не найдены варианты плеера: {notes:?}");
+        let labels = variants.iter().map(|v| v.label.as_str()).collect::<Vec<_>>().join(" | ");
+        let urls = variants.iter().map(|v| v.url.as_str()).collect::<Vec<_>>().join(" | ");
+        assert!(urls.contains("plplayer.online") || urls.contains("online-serial.com"), "{id}: {urls}");
+        if id == "sopranos" {
+            assert!(labels.contains("Гоблин"), "{labels}");
+            assert!(labels.contains("Украинский"), "{labels}");
+        }
+        println!("{id}: серий {}, вариантов {}, озвучки {}", entries.len(), variants.len(), labels);
+    }
+    let dororo = site_sources::Entry {
+        url: "https://old.yummyani.me/catalog/item/dororo-2026-11-06".into(),
+        title: "Дороро".into(),
+        kind: "series".into(),
+        year: Some(2026),
+        imdb: None,
+        remote_id: Some(258),
+        season: None,
+        episode: None,
+    };
+    let (variants, notes) = site_sources::variants(&dororo, Some(&running.app)).await.unwrap();
+    assert!(!variants.is_empty(), "Дороро: варианты не найдены: {notes:?}");
+    assert!(variants.iter().all(|v| v.season == Some(1) && v.episode.is_some_and(|e| e > 0)));
+    println!("Дороро: вариантов {}", variants.len());
     running.shutdown().await;
 }

@@ -15,12 +15,12 @@ use std::{
 };
 type SearchResult = Result<Vec<Value>, String>;
 type Cache = Mutex<HashMap<String, (i64, SearchResult)>>;
-/// Сколько хранить ответ поиска: находки - час, пустой ответ - полчаса (на сайтах появляются новые
+/// Сколько хранить ответ поиска: находки - час, пустой ответ - 5 минут (на сайтах появляются новые
 /// выпуски), ошибка - несколько секунд (не считается «не нашли»).
 fn ttl(result: &SearchResult) -> i64 {
     match result {
         Ok(items) if !items.is_empty() => 3_600_000,
-        Ok(_) => 1_800_000,
+        Ok(_) => 300_000,
         Err(_) => 5_000,
     }
 }
@@ -46,6 +46,12 @@ fn remember(key: String, result: SearchResult) {
 fn cache() -> &'static Cache {
     static CACHE: OnceLock<Cache> = OnceLock::new();
     CACHE.get_or_init(Mutex::default)
+}
+
+/// Новый материал (файл, external title или ссылка) делает прежние «нигде нет» и старые подсказки
+/// неактуальными: выбросить кэш поиска, чтобы следующий запрос сразу нашёл свежий результат.
+pub fn forget_cache() {
+    cache().lock().clear();
 }
 fn search_lock(key: &str) -> Arc<tokio::sync::Mutex<()>> {
     static LOCKS: OnceLock<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>> = OnceLock::new();
@@ -301,6 +307,12 @@ async fn tracked(site: &str, work: impl std::future::Future<Output = Option<Vec<
 }
 
 /// Подпись подходит, если совпало любое из названий (русское, оригинальное, прокатные).
+/// Год из базы не отбрасывает карточку каталога хоста, если сайт не печатает год в подписи
+/// (обычно так у LordFilm). Другие источники и карточки с годом проверяем как раньше.
+pub(crate) fn accepted_year(site: &str, label: &str, year: Option<i64>) -> Option<i64> {
+    if site == "own" && year.is_some() && !years().is_match(label) { None } else { year }
+}
+
 pub fn any_name_matches(
     label: &str,
     names: &[&str],
@@ -473,18 +485,33 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         if q.mode.as_deref() == Some("trailer") || q.season.is_some() != q.episode.is_some() {
             return Some(vec![]);
         }
-        let (name, year) = expected.as_ref().map(|(name, _, year)| (name.as_str(), *year)).unwrap_or((query, None));
+        let year = expected.as_ref().and_then(|(_, _, year)| *year);
+        let mut names: Vec<&str> = expected
+            .as_ref()
+            .map(|(name, original, _)| {
+                std::iter::once(name.as_str())
+                    .chain(original.as_deref())
+                    .chain(aka.iter().map(String::as_str))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !names.iter().any(|n| crate::util::norm(n) == crate::util::norm(query)) {
+            names.push(query);
+        }
         tracked("lordfilm", async {
             if let (Some(season), Some(episode)) = (q.season, q.episode) {
                 return tokio::time::timeout(
                     Duration::from_secs(15),
-                    crate::lordfilm::search_episode(name, year, season, episode),
+                    crate::lordfilm::search_episode_names(&names, year, season, episode),
                 )
                 .await
                 .ok()
                 .flatten();
             }
-            tokio::time::timeout(Duration::from_secs(10), crate::lordfilm::search(name, year)).await.ok().flatten()
+            tokio::time::timeout(Duration::from_secs(10), crate::lordfilm::search_names(&names, year))
+                .await
+                .ok()
+                .flatten()
         })
         .await
     };
@@ -501,7 +528,10 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
                     return None;
                 }
                 if c.search.is_none()
-                    && matches!(c.domain.as_str(), "mg.lordfilm.md" | "sr.lordfilm5.pro" | "lordserials.fan")
+                    && matches!(
+                        c.domain.as_str(),
+                        "mg.lordfilm.md" | "sr.lordfilm5.pro" | "sx.lordfilm5.pro" | "lordserials.fan"
+                    )
                 {
                     c.search = Some(format!("https://{}/index.php?do=search&subaction=search&story={{q}}", c.domain));
                 }
@@ -572,12 +602,18 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
         })
         .filter(|i| {
             let label = i["label"].as_str().unwrap_or("");
+            // LordFilm проверяет название, год и серию в своём парсере; пост-фильтр по подписи
+            // (особенно требование года в тексте у однословных названий) может отбросить верную находку.
+            if i["site"] == "lordfilm" {
+                return true;
+            }
             if let Some((title, original, year)) = &expected {
                 let names: Vec<&str> = std::iter::once(title.as_str())
                     .chain(original.as_deref())
                     .chain(aka.iter().map(String::as_str))
                     .collect();
-                any_name_matches(label, &names, q.season, q.episode, *year, q.mode.as_deref() == Some("trailer"))
+                let own_year = accepted_year(i["site"].as_str().unwrap_or(""), label, *year);
+                any_name_matches(label, &names, q.season, q.episode, own_year, q.mode.as_deref() == Some("trailer"))
             } else {
                 q.mode.as_deref() != Some("trailer")
             }
@@ -597,16 +633,24 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
     out.retain(|i| seen.insert(i["url"].as_str().unwrap_or("").to_string()));
     let catalog_order = crate::own_sites::load(app);
     out.sort_by_key(|i| {
+        let site = i["site"].as_str().unwrap_or("");
+        // LordFilm — основной источник автоматического воспроизведения; каталоги хоста — следом.
+        let tier = if site == "lordfilm" {
+            0usize
+        } else if site == "own" {
+            1 + catalog_order
+                .iter()
+                .position(|c| Some(c.domain.as_str()) == i["author"].as_str())
+                .unwrap_or(usize::MAX / 2)
+        } else {
+            usize::MAX
+        };
         (
-            if i["site"] == "own" {
-                catalog_order.iter().position(|c| Some(c.domain.as_str()) == i["author"].as_str()).unwrap_or(usize::MAX)
-            } else {
-                usize::MAX
-            },
+            tier,
             std::cmp::Reverse(crate::api::links::quality_hint(i["label"].as_str().unwrap_or(""))),
-            if i["site"] == "archive" {
-                0
-            } else if i["site"] == "vk" {
+            if site == "archive" {
+                0u8
+            } else if site == "vk" {
                 1
             } else {
                 2
@@ -628,6 +672,14 @@ pub async fn find(app: &Arc<App>, q: &SearchQuery) -> anyhow::Result<Vec<Value>>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn own_catalog_keeps_cards_without_year_in_label() {
+        assert_eq!(accepted_year("own", "Матрица смотреть онлайн", Some(1999)), None);
+        assert_eq!(accepted_year("own", "Матрица (1999)", Some(1999)), Some(1999));
+        assert_eq!(accepted_year("vk", "Матрица", Some(1999)), Some(1999));
+    }
+
     #[tokio::test]
     async fn fifty_waiters_share_failure_and_retry_after_cooldown() {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -713,7 +765,7 @@ mod tests {
     #[test]
     fn cache_ttl_by_result() {
         assert_eq!(ttl(&Ok(vec![json!({"url": "x"})])), 3_600_000, "находки - час");
-        assert_eq!(ttl(&Ok(vec![])), 1_800_000, "пусто - полчаса");
+        assert_eq!(ttl(&Ok(vec![])), 300_000, "пусто - пять минут");
         assert_eq!(ttl(&Err("x".into())), 5_000, "ошибка - коротко");
     }
 

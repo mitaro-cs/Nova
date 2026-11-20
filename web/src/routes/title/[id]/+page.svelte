@@ -69,7 +69,7 @@
 
   const id = $derived(Number(page.params.id));
 
-  // Фильм и отзывы - вместе: если отзывы придут позже, разделы под ними сдвинутся (CLS).
+  // Основная карточка не ждёт медленных отзывов и списка ссылок: их данные подгружаются отдельно.
   $effect(() => {
     const want = id;
     t = null;
@@ -77,25 +77,21 @@
     rv = null;
     error = '';
     const empty: ReviewsData = { average: null, votes: 0, total: 0, items: [], canWrite: false };
-    Promise.all([
-      api<TitleDetail>(`/api/titles/${want}`),
-      api<ReviewsData>(`/api/titles/${want}/reviews`).catch(() => empty),
-      api<VideoLink[]>(`/api/links?titleId=${want}`).catch(() => [] as VideoLink[]),
-    ]).then(
-      ([d, r, l]) => {
+    api<TitleDetail>(`/api/titles/${want}`).then(
+      (d) => {
         if (want !== id) return;
-        rv = r;
-        links = l;
         t = d;
         if (page.url.searchParams.get('play') && d.next) goto(`/watch/${d.next.fileId}`, { replace: true });
       },
-      (e) => (error = errorText(e)),
+      (e) => { if (want === id) error = errorText(e); },
     );
+    api<ReviewsData>(`/api/titles/${want}/reviews`).then((r) => { if (want === id) rv = r; }, () => { if (want === id) rv = empty; });
+    api<VideoLink[]>(`/api/links?titleId=${want}`).then((l) => { if (want === id) links = l; }, () => { if (want === id) links = []; });
   });
 
   // Смотрели на другом устройстве - тихо обновить место («Продолжить», серии), без заглушки.
   $effect(() => {
-    if (!t?.metadataPending) return;
+    if (!t?.metadataPending && !t?.peoplePending) return;
     const want = id;
     const controller = new AbortController();
     let busy = false;
@@ -107,7 +103,7 @@
         if (!controller.signal.aborted && want === id) t = detail;
       } catch { /* Keep the already visible card during a network interruption. */ }
       finally { busy = false; }
-    }, 5000);
+    }, 1500);
     return () => { clearInterval(timer); controller.abort(); };
   });
 

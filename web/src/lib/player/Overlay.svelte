@@ -86,7 +86,7 @@
   <div class="banner" role="status">
     <span>Похоже, это другое видео: <b>{clock(mismatch.duration)}</b> вместо <b>{clock(mismatch.expect)}</b></span>
     {#if mismatch.canReport}<button class="go" onclick={onwrong}>Не тот фильм</button>{/if}
-    <button class="x" aria-label="Это он, смотреть" onclick={ondismissmismatch}><Icon name="close" size={16} /></button>
+    <button class="go" aria-label="Продолжить просмотр" onclick={ondismissmismatch}>Продолжить</button>
   </div>
 {/if}
 {#if elsewhere !== null}

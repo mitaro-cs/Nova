@@ -12,6 +12,7 @@
 
   const names = $derived([title, original].filter((n, i, all): n is string => !!n && all.indexOf(n) === i));
   const stateText = (s: Source['state']) => (s === 'ok' ? 'отвечает' : s === 'down' ? 'не отвечает, проверим позже' : 'ещё не проверялся');
+  const lordfilmDown = $derived(sources.some((s) => s.site === 'lordfilm' && s.state === 'down'));
 </script>
 
 <p class="muted small searched">
@@ -23,6 +24,12 @@
       <li class={s.state}><b>{s.label}</b> - {stateText(s.state)}</li>
     {/each}
   </ul>
+{/if}
+
+{#if lordfilmDown}
+  <p class="muted small">LordFilm сейчас не отвечает - попробуйте повторить чуть позже.</p>
+{:else}
+  <p class="muted small">Если на LordFilm ничего не нашлось, можно попробовать другой источник или вставьте ссылку вручную.</p>
 {/if}
 
 <style>

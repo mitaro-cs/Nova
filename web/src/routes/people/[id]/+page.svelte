@@ -271,14 +271,14 @@
                 <ul class="posters">
                   {#each p.watched as c, i (c.id)}
                     <li class="rise" style:--i={i}>
-                      <a href="/title/{c.id}" title={c.title} style:background={c.poster ? undefined : placeholder(c.title)}>
-                        {#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" decoding="async" width="342" height="513" />{:else}<span>{c.title}</span>{/if}
+                      <a href="/title/{c.id}" title={c.title} style:background={placeholder(c.title)}>
+                        <span>{c.title}</span>{#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" decoding="async" width="342" height="513" onerror={(e)=>((e.currentTarget as HTMLImageElement).style.display='none')} />{/if}
                       </a>
                     </li>
                   {/each}
                   {#each externalWatched as c (c.id)}
-                    <li><a href="/ext/{c.id}" title={c.title} style:background={c.poster ? undefined : placeholder(c.title)}>
-                      {#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" width="342" height="513" />{:else}<span>{c.title}</span>{/if}
+                    <li><a href="/ext/{c.id}" title={c.title} style:background={placeholder(c.title)}>
+                      <span>{c.title}</span>{#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" width="342" height="513" onerror={(e)=>((e.currentTarget as HTMLImageElement).style.display='none')} />{/if}
                     </a></li>
                   {/each}
                 </ul>
@@ -296,8 +296,8 @@
                 {#each p.reviews as r, i (r.id)}
                   {@const t = what(r)}
                   <li class="rv rise" style:--i={i}>
-                    <a class="mini" href={link(r)} style:background={t.poster ? undefined : placeholder(t.title)}>
-                      {#if t.poster}<img use:fadeIn src={t.poster} alt="" loading="lazy" decoding="async" width="56" height="84" />{/if}
+                    <a class="mini" href={link(r)} style:background={placeholder(t.title)}>
+                      {#if t.poster}<img use:fadeIn src={t.poster} alt="" loading="lazy" decoding="async" width="56" height="84" onerror={(e)=>((e.currentTarget as HTMLImageElement).style.display='none')} />{/if}
                     </a>
                     <div class="body">
                       <a href={link(r)}><b>{t.title}</b>{#if t.year} <span class="faint">{t.year}</span>{/if}</a>
@@ -338,11 +338,12 @@
   .gl { display: flex; justify-content: space-between; margin-bottom: 7px; font-size: 14px; font-weight: 600; }
   .gt { height: 8px; border-radius: 999px; background: #ffffff14; overflow: hidden; }
   .gt i { display: block; height: 100%; border-radius: 999px; background: #fff; }
-  .stat-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 26px; }
-  .st { min-width: 0; padding: 18px 20px; border: 1px solid #ffffff1a; border-radius: 26px; background: #101012; }
+  .stat-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-bottom: 26px; padding:16px 0; border-block:1px solid #ffffff20; }
+  .st { min-width: 0; padding: 4px 20px; }
+  .st + .st { border-left:1px solid #ffffff20; }
   .st b { display: block; font-size: clamp(26px, 3vw, 44px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
   .st small { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
-  @media (max-width: 600px) { .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 600px) { .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr));row-gap:14px; } .st:nth-child(3){border-left:0}.st:nth-child(n+3){padding-top:12px;border-top:1px solid #ffffff20} }
   .pf {
     display: grid;
     grid-template-columns: 360px minmax(0, 1fr);
@@ -575,6 +576,7 @@
     gap: 12px;
   }
   .posters a {
+    position: relative;
     display: grid;
     align-items: end;
     aspect-ratio: 2 / 3;
@@ -586,12 +588,13 @@
     transform: translateY(-4px) scale(1.02);
   }
   .posters img {
+    position:absolute;inset:0;z-index:1;
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
   .posters span {
-    padding: 8px;
+    position:absolute;inset:0;display:grid;place-items:center;padding:12px;text-align:center;overflow:hidden;text-wrap:balance;
     font-size: 12px;
     font-weight: 700;
   }
