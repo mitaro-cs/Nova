@@ -168,7 +168,7 @@ pub async fn import(State(app): State<Arc<App>>, m: Manager, Json(b): Json<Impor
                 if item.streams[0].season.is_some() { "series" } else { "movie" }
             } else { &item.kind };
             c.execute("INSERT INTO ext_titles(id,kind,title,year,genres,updated_at) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO NOTHING",
-                params![item.imdb_id, kind, item.title.trim(), item.year, if item.kind == "anime" { "[\"Аниме\"]" } else { "[]" }, now_ms()])?;
+                params![item.imdb_id, kind, item.title.trim(), Option::<i64>::None, if item.kind == "anime" { "[\"Аниме\"]" } else { "[]" }, now_ms()])?;
             let local: Option<i64> = c.query_row("SELECT id FROM titles WHERE imdb_id = ? LIMIT 1", [&item.imdb_id], |r| r.get(0)).optional()?;
             for stream in &item.streams {
                 if let (Some(season), Some(episode)) = (stream.season, stream.episode) {

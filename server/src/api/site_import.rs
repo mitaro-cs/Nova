@@ -295,23 +295,24 @@ async fn run(app: &Arc<App>, s: &'static Source, profile: i64) -> anyhow::Result
         if let Some((url, raw)) = pending {
             let entry: Entry = serde_json::from_str(&raw)?;
             let matched = site_sources::match_imdb(app, &entry).await;
-            let (target, unmatched) = match matched {
-                Ok(id) => (id, None),
-                Err(e) => (
-                    format!("nv{}", crate::util::sha256_hex(format!("{d}:{}", entry.url).as_bytes())),
-                    Some(e.to_string()),
-                ),
+            // В базе - только фильмы с IMDb: что не нашлось на IMDb, не добавляется (источник нужен лишь для просмотра).
+            let target = match matched {
+                Ok(id) => id,
+                Err(e) => {
+                    app.db.with(|c| {
+                        c.execute(
+                            "UPDATE site_import_entries SET state='unmatched',message=?1,updated_at=?2 WHERE domain=?3 AND url=?4",
+                            params![format!("Не найден на IMDb, в базу не добавлен: {e}"), now_ms(), d, url],
+                        )
+                    })?;
+                    continue;
+                }
             };
             let (state, message) =
                 match tokio::time::timeout(Duration::from_secs(180), site_sources::variants(&entry, Some(app))).await {
-                    Ok(Ok((variants, mut notes))) => {
+                    Ok(Ok((variants, notes))) => {
                         save_variants(app, &d, s, &entry, &target, &variants, profile)?;
-                        if let Some(reason) = unmatched {
-                            notes.push(format!("Создана отдельная карточка источника: {reason}"));
-                            ("unmatched", notes.join("; "))
-                        } else {
-                            (if notes.is_empty() { "imported" } else { "partial" }, notes.join("; "))
-                        }
+                        (if notes.is_empty() { "imported" } else { "partial" }, notes.join("; "))
                     }
                     Ok(Err(e)) => ("error", e.to_string()),
                     Err(_) => ("error", "Истёк срок получения списка вариантов; можно повторить импорт".into()),
@@ -372,7 +373,7 @@ fn save_variants(
     profile: i64,
 ) -> anyhow::Result<()> {
     app.db.tx(|c|{
-        c.execute("INSERT INTO ext_titles(id,kind,title,year,genres,updated_at,detailed) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO NOTHING",params![imdb,entry.kind,entry.title,entry.year,if source.kind=="anime"{"[\"Аниме\"]"}else{"[]"},now_ms(),if imdb.starts_with("nv"){crate::discover::DETAILED}else{0}])?;
+        c.execute("INSERT INTO ext_titles(id,kind,title,year,genres,updated_at,detailed) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO NOTHING",params![imdb,entry.kind,entry.title,Option::<i64>::None,if source.kind=="anime"{"[\"Аниме\"]"}else{"[]"},now_ms(),0])?;
         if entry.title.chars().any(|ch| matches!(ch,'А'..='я'|'Ё'|'ё')) {
             c.execute("INSERT INTO title_localizations(id,title,data,at) VALUES(?1,?2,'{}',?3) ON CONFLICT(id) DO UPDATE SET title=excluded.title,at=excluded.at",params![imdb,entry.title,now_ms()])?;
         }
