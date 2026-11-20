@@ -449,6 +449,16 @@ pub fn translit(name: &str) -> String {
     out
 }
 
+/// Название для показа: латиница без русского варианта - русской записью (последнее средство после перевода из Викиданных).
+pub fn ru_title(s: &str) -> String {
+    if crate::ruwiki::has_cyrillic(s) || !has_latin(s) { s.to_string() } else { translit(s) }
+}
+
+/// Описание для показа: только русский текст (английский не показываем).
+pub fn ru_text(s: Option<String>) -> Option<String> {
+    s.filter(|t| crate::ruwiki::has_cyrillic(t))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -604,5 +614,19 @@ mod tests {
         ] {
             assert!(!has_latin(&translit(s)), "{s} -> {}", translit(s));
         }
+    }
+}
+
+#[cfg(test)]
+mod ru_tests {
+    use super::*;
+
+    #[test]
+    fn titles_and_descriptions_are_shown_in_russian_only() {
+        assert_eq!(ru_title("Тьма"), "Тьма");
+        assert_eq!(ru_title("2012"), "2012");
+        assert!(!has_latin(&ru_title("Dune")));
+        assert_eq!(ru_text(Some("Plot in English".into())), None);
+        assert_eq!(ru_text(Some("Сюжет".into())).as_deref(), Some("Сюжет"));
     }
 }

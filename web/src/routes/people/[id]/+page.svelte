@@ -148,7 +148,7 @@
   const topGenres = $derived.by(() => {
     const g = (p?.stats?.genres ?? []).slice(0, 5);
     const max = Math.max(1, ...g.map((x) => x.count));
-    return hidden.stats ? [] : g.map((x) => ({ name: x.genre, pct: Math.round((x.count / max) * 100) }));
+    return hidden.stats ? [] : g.map((x) => ({ name: x.genre, count: x.count, pct: Math.round((x.count / max) * 100) }));
   });
   const empty = $derived(!!p && !p.watching.length && !p.decor.favorites.length && !p.decor.directors.length && !(p.decor.actors?.length) && !(p.decor.likedPeople?.length));
 </script>
@@ -163,9 +163,10 @@
       <aside class="side" aria-label="Любимые жанры">
         <section class="tile">
           <h2>Любимые жанры</h2>
+          <p class="gnote">Сколько просмотренного в каждом жанре</p>
           <ul class="gbars">
             {#each topGenres as g (g.name)}
-              <li><div class="gl"><span>{g.name}</span><span class="faint">{g.pct}%</span></div><div class="gt"><i style:width="{g.pct}%"></i></div></li>
+              <li><div class="gl"><span>{g.name}</span><span class="faint">{g.count}</span></div><div class="gt"><i style:width="{g.pct}%"></i></div></li>
             {/each}
           </ul>
         </section>
@@ -334,6 +335,7 @@
   }
   .tile { padding: 22px; border: 1px solid #ffffff1a; border-radius: 28px; background: #101012; }
   .tile h2 { margin: 0 0 18px; font-size: 17px; font-weight: 700; }
+  .gnote { margin: -10px 0 16px; color: var(--muted); font-size: 12.5px; }
   .gbars { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
   .gl { display: flex; justify-content: space-between; margin-bottom: 7px; font-size: 14px; font-weight: 600; }
   .gt { height: 8px; border-radius: 999px; background: #ffffff14; overflow: hidden; }

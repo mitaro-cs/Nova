@@ -8,7 +8,7 @@
   ];
   const franchises = ['Гарри Поттер','Властелин колец','Звёздные войны','Матрица','Мстители'];
 </script>
-<section class="browse" aria-label="Жанры"><h2>Под настроение</h2><div class="genres">{#each genres as genre}<a href="/discover?chart={genre.chart}" style:background="linear-gradient(160deg, hsl({genre.hue} 34% 22%), hsl({genre.hue + 18} 24% 8%))"><Icon name={genre.icon} size={27} /><b>{genre.label}</b><span>Открыть подборку <Icon name="right" size={13} /></span></a>{/each}</div></section>
+<section class="browse" aria-label="Жанры"><h2>Под настроение</h2><div class="genres">{#each genres as genre}<a href="/discover?chart={genre.chart}" style:background="linear-gradient(160deg, hsl({genre.hue} 34% 22%), hsl({genre.hue + 18} 24% 8%))"><span class="ico"><Icon name={genre.icon} size={22} /></span><b>{genre.label}</b><span class="go">Открыть подборку <Icon name="right" size={14} /></span></a>{/each}</div></section>
 <section class="browse" aria-label="Франшизы"><h2>Любимые киновселенные</h2><div class="franchises">{#each franchises as title}<a href="/search?q={encodeURIComponent(title)}"><Icon name="film" size={18} />{title}<Icon name="right" size={14} /></a>{/each}</div></section>
 <style>
   .browse {
@@ -29,29 +29,44 @@
   .genres a {
     min-width: 0;
     min-height: 176px;
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    justify-content: space-between;
-    padding: 22px 18px;
-    border: 1px solid var(--line);
-    background: var(--surface-2);
-    border-radius: max(18px, calc(24 * var(--rw)));
-    transition: transform 0.2s, background 0.2s;
+    gap: 6px;
+    justify-content: flex-end;
+    padding: 22px;
+    border: 1px solid #ffffff1a;
+    background: #101012;
+    border-radius: max(22px, calc(26 * var(--rw)));
+    transition: transform 0.25s var(--ease), background 0.25s, border-color 0.25s;
   }
   .genres a:hover {
     transform: translateY(-4px);
-    background: var(--surface-3);
+    background: #17171a;
+    border-color: #ffffff40;
+  }
+  .ico {
+    position: absolute;
+    top: 20px;
+    left: 22px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #ffffff14;
   }
   .genres b {
-    font-size: clamp(15px, 1.8vw, 23px);
+    font-size: clamp(18px, 1.9vw, 26px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
-  .genres span {
+  .go {
     display: flex;
     align-items: center;
     gap: 6px;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 13px;
   }
   .franchises {
     display: flex;

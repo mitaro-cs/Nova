@@ -725,9 +725,28 @@ pub async fn images_backfill(app: Arc<App>) {
             .unwrap_or_default();
         let posters: Vec<(String, String)> =
             posters.into_iter().filter(|(i, _)| !retry.contains_key(&format!("p:{i}"))).take(6).collect();
-        if pages.is_empty() && posters.is_empty() {
+        // Записи без картинок (например, добавленные раньше импортом): IMDb-страницу берём целиком - год, постер, фон.
+        let bare: Vec<String> = app
+            .db
+            .with(|c| {
+                let mut st = c.prepare(
+                    "SELECT id FROM ext_titles WHERE id LIKE 'tt%' AND poster IS NULL AND poster_url IS NULL AND detailed < ?1
+                     ORDER BY updated_at DESC LIMIT 100",
+                )?;
+                let r = st.query_map([DETAILED], |r| r.get(0))?;
+                r.collect()
+            })
+            .unwrap_or_default();
+        let bare: Vec<String> = bare.into_iter().filter(|i| !retry.contains_key(&format!("d:{i}"))).take(3).collect();
+        if pages.is_empty() && posters.is_empty() && bare.is_empty() {
             tokio::time::sleep(Duration::from_secs(600)).await;
             continue;
+        }
+        for id in bare {
+            retry.insert(format!("d:{id}"), now_ms() + RETRY_MS);
+            if detail(&app, &id).await.is_ok() {
+                posters_of(&app, std::slice::from_ref(&id)).await;
+            }
         }
         for id in pages {
             if !localize_row(&app, &id).await {
@@ -978,7 +997,7 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
                 "tt0468569" => Some("Тёмный рыцарь".into()),
                 _ => None,
             })
-            .unwrap_or(raw_title)
+            .unwrap_or_else(|| crate::names::ru_title(&raw_title))
     };
     Ok(ExtCard {
         id: r.get(0)?,

@@ -16,7 +16,6 @@
   let picked = $state<Art | null>(null);
   let width = $state(1000);
   let busy = $state('');
-  let mode=$state<'upload'|'imdb'>('upload');
 
   const QUALITY = [
     { w: 500, label: 'Обычное', note: 'быстро, до 500 px' },
@@ -27,7 +26,7 @@
   const real = $derived(picked ? Math.min(width, picked.width) : 0);
 
   $effect(() => {
-    if (!open || mode!=='imdb' || items) return;
+    if (!open || items) return;
     let live = true;
     error = '';
     api<{ items: Art[] }>(`${base}/imdb-art`).then(
@@ -73,31 +72,24 @@
 
 <Modal bind:open title="Постер и фон" wide>
   <div class="art">
-    <div class="bar" role="tablist" aria-label="Источник картинки"><button class="btn" role="tab" aria-selected={mode==='upload'} onclick={()=>mode='upload'}>С устройства</button><button class="btn" role="tab" aria-selected={mode==='imdb'} onclick={()=>mode='imdb'}>Картинки IMDb</button></div>
-    {#if mode==='upload'}
-    <div class="uploads"><div><b>Своя картинка</b><p class="muted small">Выберите изображение с устройства, до 15 МБ.</p></div>
-      <label class="btn upload"><Icon name="image" size={16} />Загрузить постер<input aria-label="Загрузить постер" type="file" accept="image/*" disabled={!!busy} onchange={e=>{void upload('poster',e.currentTarget.files?.[0]);e.currentTarget.value='';}} /></label>
-      <label class="btn upload"><Icon name="image" size={16} />Загрузить фон<input aria-label="Загрузить фон" type="file" accept="image/*" disabled={!!busy} onchange={e=>{void upload('backdrop',e.currentTarget.files?.[0]);e.currentTarget.value='';}} /></label>
+    <div class="bar">
+      <div class="seg" role="tablist" aria-label="Что выбрать">
+        <button role="tab" aria-selected={tab === 'poster'} class:on={tab === 'poster'} onclick={() => (tab = 'poster')}>Постеры</button>
+        <button role="tab" aria-selected={tab === 'frame'} class:on={tab === 'frame'} onclick={() => (tab = 'frame')}>Кадры</button>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Качество">
+        {#each QUALITY as q (q.w)}
+          <button role="radio" aria-checked={width === q.w} class:on={width === q.w} title={q.note} onclick={() => (width = q.w)}>{q.label}</button>
+        {/each}
+      </div>
     </div>
-    {:else}
     {#if error}
       <p class="error" role="alert">{error}</p>
     {:else if items === null}
       <p class="muted">Загружаем картинки с IMDb…</p>
     {:else if !items.length}
-      <p class="muted">У этого фильма на IMDb нет картинок.</p>
+      <p class="muted">У этого фильма на IMDb нет картинок. Загрузите свою кнопкой внизу.</p>
     {:else}
-      <div class="bar">
-        <div class="seg" role="tablist" aria-label="Что выбрать">
-          <button role="tab" aria-selected={tab === 'poster'} class:on={tab === 'poster'} onclick={() => (tab = 'poster')}>Постеры</button>
-          <button role="tab" aria-selected={tab === 'frame'} class:on={tab === 'frame'} onclick={() => (tab = 'frame')}>Кадры</button>
-        </div>
-        <div class="seg" role="radiogroup" aria-label="Качество">
-          {#each QUALITY as q (q.w)}
-            <button role="radio" aria-checked={width === q.w} class:on={width === q.w} title={q.note} onclick={() => (width = q.w)}>{q.label}</button>
-          {/each}
-        </div>
-      </div>
       <div class="grid" class:frames={tab === 'frame'}>
         {#each shown as a (a.url)}
           <button class="pic" style:--pad="{((a.height / a.width) * 100).toFixed(3)}%" class:on={picked?.url === a.url} aria-pressed={picked?.url === a.url} onclick={() => (picked = a)} title={a.caption ?? ''}>
@@ -108,18 +100,20 @@
           <p class="muted">Здесь пусто - загляните во вкладку рядом.</p>
         {/each}
       </div>
-      <div class="foot">
-        <span class="muted">{picked ? `Скачаем ${real} px по ширине` : 'Выберите картинку'}</span>
-        <button class="btn" disabled={!picked || !!busy} onclick={() => apply('poster')}><Icon name="image" size={16} /> {busy === 'poster' ? 'Загружаем…' : 'Обложкой'}</button>
-        <button class="btn primary" disabled={!picked || !!busy} onclick={() => apply('backdrop')}><Icon name="image" size={16} /> {busy === 'backdrop' ? 'Загружаем…' : 'Фоном'}</button>
-      </div>
     {/if}
-    {/if}
+    <div class="foot">
+      <span class="muted">{picked ? `Скачаем ${real} px по ширине` : 'Выберите картинку или загрузите свою'}</span>
+      {#if picked}
+        <button class="btn" disabled={!!busy} onclick={() => apply('poster')}><Icon name="image" size={16} /> {busy === 'poster' ? 'Загружаем…' : 'Обложкой'}</button>
+        <button class="btn" disabled={!!busy} onclick={() => apply('backdrop')}><Icon name="image" size={16} /> {busy === 'backdrop' ? 'Загружаем…' : 'Фоном'}</button>
+      {/if}
+      <label class="btn primary upload"><Icon name="image" size={16} />{tab === 'poster' ? 'Загрузить постер' : 'Загрузить фон'}<input aria-label={tab === 'poster' ? 'Загрузить постер' : 'Загрузить фон'} type="file" accept="image/*" disabled={!!busy} onchange={(e) => { void upload(tab === 'poster' ? 'poster' : 'backdrop', e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></label>
+    </div>
   </div>
 </Modal>
 
 <style>
-  .uploads{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--line)}.uploads>div{flex:1 1 220px}.uploads p{margin:6px 0 0}.upload{position:relative;overflow:hidden}.upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.upload:focus-within{outline:2px solid var(--text);outline-offset:3px}
+.upload{position:relative;overflow:hidden}.upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.upload:focus-within{outline:2px solid var(--text);outline-offset:3px}
   .art {
     display: grid;
     gap: 16px;

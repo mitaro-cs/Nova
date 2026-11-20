@@ -4,7 +4,6 @@ pub(crate) mod account;
 mod activity;
 mod admin;
 mod catalog;
-mod catalog_import;
 mod diag;
 mod discover;
 pub(crate) mod links;
@@ -17,7 +16,6 @@ mod profile;
 mod profiles;
 mod resume;
 pub(crate) mod rooms;
-mod site_import;
 mod social;
 mod stats;
 pub(crate) mod stream_link;
@@ -188,19 +186,6 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/backup", post(stats::backup))
         .route("/api/diag/client", post(diag::client))
         .route("/api/admin/settings", get(admin::settings).put(admin::save_settings))
-        .route("/api/admin/catalogs", get(admin::catalogs).put(admin::save_catalogs))
-        .route("/api/admin/catalogs/probe", post(admin::probe_catalog))
-        .route("/api/admin/site-sources", get(site_import::list))
-        .route("/api/admin/site-sources/{id}/connect", post(site_import::connect))
-        .route("/api/admin/site-sources/{id}/import", post(site_import::start))
-        .route("/api/admin/site-sources/{id}/stop", post(site_import::stop))
-        .route("/api/admin/site-sources/{id}/match", post(site_import::assign))
-        .route("/api/admin/site-sources/{id}/verify", post(site_import::verify))
-        .route("/api/admin/catalogs/check", post(catalog_import::check))
-        .route(
-            "/api/admin/catalogs/import",
-            post(catalog_import::import).layer(axum::extract::DefaultBodyLimit::max(catalog_import::MAX_BYTES)),
-        )
         .route("/api/admin/logins", get(admin::logins))
         .route("/api/admin/libraries", get(admin::libraries).post(admin::add_library))
         .route("/api/admin/libraries/pick", post(admin::pick_folder))
@@ -347,7 +332,7 @@ pub fn card(r: &Row) -> rusqlite::Result<Card> {
     Ok(Card {
         id: r.get(0)?,
         kind: r.get(1)?,
-        title: r.get(2)?,
+        title: crate::names::ru_title(&r.get::<_, String>(2)?),
         original_title: r.get(3)?,
         year: r.get(4)?,
         poster: img(r.get(5)?),
@@ -356,7 +341,7 @@ pub fn card(r: &Row) -> rusqlite::Result<Card> {
         logo: img(r.get(8)?),
         rating: r.get(9)?,
         genres: crate::meta::genres_ru(json_list(r.get(10)?)),
-        overview: r.get(11)?,
+        overview: crate::names::ru_text(r.get(11)?),
         runtime: r.get(12)?,
         age: r.get(13)?,
         added_at: r.get(14)?,
