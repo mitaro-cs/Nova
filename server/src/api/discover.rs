@@ -1072,9 +1072,13 @@ pub async fn franchise(
 /// Тема недели для главной: подпись и фильмы (карточки ленты; свои - с `local`).
 pub async fn theme(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {
     // Ряд необязательный: IMDb не ответил - главная просто без него (а не ошибка 400 в консоли).
-    let cur = match tokio::time::timeout(Duration::from_secs(12), crate::themes::current(&app)).await {
-        Ok(Ok(cur)) => cur,
-        Ok(Err(e)) => {
+    // Главная не ждёт IMDb дольше 1,5 с: загрузка продолжается в фоне и попадает в кэш темы к следующему заходу.
+    let a = app.clone();
+    let job = tokio::spawn(async move { crate::themes::current(&a).await });
+    let cur = match tokio::time::timeout(Duration::from_millis(1500), job).await {
+        Ok(Ok(Ok(cur))) => cur,
+        Ok(Err(_)) => return Ok(Json(json!({"key": null, "title": "", "subtitle": "", "items": []}))),
+        Ok(Ok(Err(e))) => {
             tracing::debug!(error = %e, "тема недели недоступна");
             return Ok(Json(json!({"key": null, "title": "", "subtitle": "", "items": []})));
         }
