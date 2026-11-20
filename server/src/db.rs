@@ -715,6 +715,12 @@ CREATE INDEX IF NOT EXISTS ext_titles_updated_at ON ext_titles(updated_at DESC);
     r#"
 INSERT OR IGNORE INTO settings(key, value) VALUES ('video.catalogs', '[{"domain":"lordserials.fan","name":"Lordseriales","kind":"series","manifest":null,"search":"https://lordserials.fan/index.php?do=search&subaction=search&story={q}","enabled":true},{"domain":"old.yummyani.me","name":"YummyAnime","kind":"anime","manifest":null,"search":"https://old.yummyani.me/search?word={q}","enabled":true},{"domain":"sx.lordfilm5.pro","name":"LordFilm","kind":"movie","manifest":null,"search":"https://sx.lordfilm5.pro/index.php?do=search&subaction=search&story={q}","enabled":true},{"domain":"sr.lordfilm5.pro","name":"LordFilm сериалы","kind":"series","manifest":null,"search":"https://sr.lordfilm5.pro/filmy/?s={q}","enabled":true},{"domain":"watch-the-sopranos-online.net","name":"Клан Сопрано","kind":"series","manifest":null,"search":"https://www.watch-the-sopranos-online.net/?s={q}","enabled":true},{"domain":"serialfriends.org","name":"Друзья","kind":"series","manifest":null,"search":"https://serialfriends.org/?s={q}","enabled":true},{"domain":"supernatural-spn.net","name":"Сверхъестественное","kind":"series","manifest":null,"search":"https://supernatural-spn.net/?s={q}","enabled":true}]');
 "#,
+    // 36: согласие с политикой конфиденциальности и правилами: какую редакцию принял человек и когда.
+    // 0 - не принимал (все прежние аккаунты: примут при следующем входе).
+    r#"
+ALTER TABLE users ADD COLUMN consent_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN consent_at INTEGER;
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

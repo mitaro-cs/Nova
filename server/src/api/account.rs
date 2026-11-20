@@ -59,8 +59,13 @@ fn site_json(app: &App) -> Value {
         "registration": app.db.setting_or("site.registration", crate::api::account::REGISTRATION_DEFAULT),
         "downloads": app.db.setting_or("site.downloads", "1") == "1",
         "version": crate::VERSION,
+        "legalVersion": LEGAL_VERSION,
     })
 }
+
+/// Редакция политики конфиденциальности и правил (`web/src/routes/legal`). Поднимите число при любом изменении
+/// текста: все примут новую редакцию при следующем входе, а регистрация потребует её же.
+pub const LEGAL_VERSION: i64 = 1;
 
 pub async fn site(State(app): State<Arc<App>>) -> Json<Value> {
     Json(site_json(&app))
@@ -210,6 +215,8 @@ pub async fn invite(State(app): State<Arc<App>>, Ip(ip): Ip, Path(code): Path<St
 
 #[derive(Deserialize)]
 pub struct RegisterBody {
+    /// Редакция политики и правил, с которой согласился человек (должна быть текущей).
+    consent: Option<i64>,
     invite: Option<String>,
     name: String,
     login: String,
@@ -226,6 +233,12 @@ pub async fn register(
     headers: HeaderMap,
     Json(b): Json<RegisterBody>,
 ) -> ApiResult<Response> {
+    if b.consent != Some(LEGAL_VERSION) {
+        return Err(ApiError::bad(
+            "consent_required",
+            "Чтобы создать аккаунт, согласитесь с политикой конфиденциальности и правилами использования",
+        ));
+    }
     let mode = app.db.setting_or("site.registration", crate::api::account::REGISTRATION_DEFAULT);
     let key = format!("invite:{ip}");
     if app.login_limit.blocked(&key) || app.site_limit.blocked("invite") {
@@ -273,8 +286,8 @@ pub async fn register(
             tx.execute("UPDATE invites SET used = used + 1, uses_left = CASE WHEN uses_left IS NULL THEN NULL ELSE uses_left - 1 END WHERE code = ?", [c])?;
         }
         tx.execute(
-            "INSERT INTO users (login, name, pass, role, created_at) VALUES (?, ?, ?, 'viewer', ?)",
-            params![login, name, hash, now_ms()],
+            "INSERT INTO users (login, name, pass, role, created_at, consent_version, consent_at) VALUES (?, ?, ?, 'viewer', ?, ?, ?)",
+            params![login, name, hash, now_ms(), LEGAL_VERSION, now_ms()],
         )?;
         Ok(Ok(tx.last_insert_rowid()))
     })?;
@@ -330,8 +343,11 @@ pub async fn me(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>
         app.db.with(|c| c.query_row("SELECT pass IS NOT NULL FROM users WHERE id = ?", [v.id], |r| r.get(0)))?;
     let favorites: String =
         app.db.with(|c| c.query_row("SELECT favorites FROM profiles WHERE id = ?", [v.profile.id], |r| r.get(0)))?;
+    let accepted: i64 =
+        app.db.with(|c| c.query_row("SELECT consent_version FROM users WHERE id = ?", [v.id], |r| r.get(0)))?;
     Ok(Json(json!({
         "user": v,
+        "legal": {"version": LEGAL_VERSION, "accepted": accepted, "needed": accepted < LEGAL_VERSION},
         "favorites": super::json_list(Some(favorites)),
         "hasPassword": has_pass,
         "manage": v.manages() && auth::manage_here(&app, &v),
@@ -540,4 +556,26 @@ pub async fn totp_disable(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<
     }
     app.db.with(|c| c.execute("UPDATE users SET totp = NULL WHERE id = ?", [v.id]))?;
     Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+pub struct ConsentBody {
+    version: i64,
+}
+
+/// «Согласен»: человек принял текущую редакцию политики и правил (старую и будущую принять нельзя).
+pub async fn consent(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<ConsentBody>) -> ApiResult<Json<Value>> {
+    if b.version != LEGAL_VERSION {
+        return Err(ApiError::bad(
+            "old_version",
+            "Документы обновились. Обновите страницу и прочитайте новую редакцию",
+        ));
+    }
+    app.db.with(|c| {
+        c.execute(
+            "UPDATE users SET consent_version = ?, consent_at = ? WHERE id = ?",
+            params![LEGAL_VERSION, now_ms(), v.id],
+        )
+    })?;
+    Ok(Json(json!({"ok": true, "version": LEGAL_VERSION})))
 }

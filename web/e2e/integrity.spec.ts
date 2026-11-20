@@ -21,6 +21,7 @@ const PAGES = [
   ['/ext/tt1196946', 'фильм из IMDb'],
   ['/admin', 'управление'],
   ['/admin?tab=setup', 'мастер настройки'],
+  ['/legal/privacy', 'политика конфиденциальности'],
   ['/admin?tab=folders', 'папки'],
   ['/admin?tab=catalog', 'каталог'],
   ['/admin?tab=people', 'люди (управление)'],

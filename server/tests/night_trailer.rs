@@ -11,7 +11,7 @@ async fn night_is_local_only_and_trailer_replaces_old_english_cache() {
             .send(
                 "POST",
                 "/api/auth/register",
-                json!({"login":"nightviewer","name":"Зритель","password":"Password123"})
+                json!({"consent": 1,"login":"nightviewer","name":"Зритель","password":"Password123"})
             )
             .await
             .status()

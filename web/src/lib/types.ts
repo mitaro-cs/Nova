@@ -164,6 +164,8 @@ export interface Site {
   registration: 'invite' | 'open' | 'closed';
   downloads: boolean;
   version: string;
+  /** Редакция политики и правил на сервере. */
+  legalVersion?: number;
 }
 
 export interface Profile {
@@ -243,6 +245,8 @@ export interface User {
 
 export interface Me {
   user: User;
+  /** Согласие с политикой и правилами: `needed` - нужно принять (прежний аккаунт или новая редакция). */
+  legal?: { version: number; accepted: number; needed: boolean };
   /** Любимые фильмы (до 5): «t:12» или «x:tt…». */
   favorites?: string[];
   hasPassword: boolean;

@@ -8,10 +8,14 @@ async fn host_reset_without_email_revokes_sessions_and_old_tokens() {
     let (running, mut host) = common::start(dir.path()).await;
     let mut user = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
     assert!(
-        user.send("POST", "/api/auth/register", json!({"login":"noemail","name":"Без почты","password":"OldPass123"}))
-            .await
-            .status()
-            .is_success()
+        user.send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"login":"noemail","name":"Без почты","password":"OldPass123"})
+        )
+        .await
+        .status()
+        .is_success()
     );
     let id = user.json("/api/me").await["user"]["id"].as_i64().unwrap();
     assert_eq!(
@@ -70,10 +74,14 @@ async fn verified_email_reset_single_use_expiry_and_session_revocation() {
     let app = &running.app;
     let mut user = common::Client::new(format!("http://127.0.0.1:{}", app.ports.0));
     assert!(
-        user.send("POST", "/api/auth/register", json!({"login":"mailviewer","name":"Почта","password":"OldPass123"}))
-            .await
-            .status()
-            .is_success()
+        user.send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"login":"mailviewer","name":"Почта","password":"OldPass123"})
+        )
+        .await
+        .status()
+        .is_success()
     );
     let id = user.json("/api/me").await["user"]["id"].as_i64().unwrap();
     let issue = |purpose: &str, email: &str, expired: bool| {

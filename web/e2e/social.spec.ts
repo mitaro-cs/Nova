@@ -85,6 +85,7 @@ test('регистрация без приглашения', async ({ browser })
   await page.getByLabel('Как вас зовут').fill('Новенький');
   await page.getByLabel(/Логин/).fill(login);
   await page.getByLabel(/Пароль/).fill('пароль-12345');
+  await page.getByRole('checkbox', { name: /согласен/ }).check();
   await page.getByRole('button', { name: 'Создать аккаунт' }).click();
   await expectHome(page);
   await ctx.close();

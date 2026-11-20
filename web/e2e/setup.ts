@@ -79,6 +79,8 @@ export default async function setup(_: FullConfig) {
   const baseURL = `http://127.0.0.1:${win}`;
   const api = await request.newContext({ baseURL, extraHTTPHeaders: { 'x-fsfy': '1' } });
   await api.get(entry);
+  // Демо-люди уже согласны с политикой и правилами: иначе окно согласия закрыло бы каждую страницу (само окно - в consent.spec).
+  await api.post('/api/me/consent', { data: { version: 1 } });
   const send = async (method: string, path: string, data?: unknown) => {
     const r = await api.fetch(path, { method, data });
     if (!r.ok()) throw new Error(`${method} ${path}: ${r.status()} ${await r.text()}`);
@@ -127,6 +129,7 @@ export default async function setup(_: FullConfig) {
     const c = await request.newContext({ baseURL: publicURL, extraHTTPHeaders: { 'x-fsfy': '1' } });
     const r = await c.post('/api/auth/login', { data: { login, password: 'пароль-12345' } });
     if (!r.ok()) throw new Error(`вход ${login}: ${r.status()} ${await r.text()}`);
+    await c.post('/api/me/consent', { data: { version: 1 } });
     const me = await (await c.get('/api/me')).json();
     return { c, id: me.user.profile.id as number };
   };

@@ -69,7 +69,11 @@ async fn upload_watch_and_drop() {
     // Зритель загружать не может.
     let mut viewer = common::Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
     viewer
-        .send("POST", "/api/auth/register", json!({"name": "v", "login": "viewer1", "password": "пароль-12345"}))
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": "v", "login": "viewer1", "password": "пароль-12345"}),
+        )
         .await;
     let r = viewer
         .http

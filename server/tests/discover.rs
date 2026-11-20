@@ -318,7 +318,11 @@ async fn feed_marks_wishes_groups_links() {
 
     let mut anna = Client::new(public.clone());
     let r = anna
-        .send("POST", "/api/auth/register", json!({"name": "Анна", "login": "anna", "password": "пароль-12345"}))
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": "Анна", "login": "anna", "password": "пароль-12345"}),
+        )
         .await;
     assert!(r.status().is_success());
 
@@ -458,7 +462,13 @@ async fn feed_marks_wishes_groups_links() {
     assert_eq!(page["countries"], json!(["США"]));
     let lid2 = link["id"].as_i64().unwrap();
     let mut boris = Client::new(public.clone());
-    boris.send("POST", "/api/auth/register", json!({"name": "Б", "login": "boris", "password": "пароль-12345"})).await;
+    boris
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": "Б", "login": "boris", "password": "пароль-12345"}),
+        )
+        .await;
     assert_eq!(boris.send("DELETE", &format!("/api/links/{lid2}"), json!({})).await.status(), 403);
     assert!(host.send("DELETE", &format!("/api/links/{lid2}"), json!({})).await.status().is_success(), "хост может");
 
@@ -624,7 +634,7 @@ async fn admin_import_and_priority_are_shared_and_viewer_cannot_change_them() {
             .send(
                 "POST",
                 "/api/auth/register",
-                json!({"name":"Зритель", "login":"prioritytest", "password":"пароль-12345"})
+                json!({"consent": 1,"name":"Зритель", "login":"prioritytest", "password":"пароль-12345"})
             )
             .await
             .status()
@@ -656,7 +666,12 @@ async fn sources_status_for_viewers_and_health_for_managers() {
     let (running, host) = common::start(dir.path()).await;
     let public = format!("http://127.0.0.1:{}", running.app.ports.0);
     let mut anna = Client::new(public);
-    anna.send("POST", "/api/auth/register", json!({"name": "Анна", "login": "anna", "password": "пароль-12345"})).await;
+    anna.send(
+        "POST",
+        "/api/auth/register",
+        json!({"consent": 1,"name": "Анна", "login": "anna", "password": "пароль-12345"}),
+    )
+    .await;
     let list = anna.json("/api/sources/status").await;
     let sites: Vec<&str> = list.as_array().unwrap().iter().map(|s| s["site"].as_str().unwrap()).collect();
     assert_eq!(sites, ["lordfilm", "rutube", "vk", "archive", "peertube", "commons"]);
@@ -681,7 +696,12 @@ async fn manager_marks_feed_film_as_not_released_yet() {
     assert!(!flag(&running.app));
     let public = format!("http://127.0.0.1:{}", running.app.ports.0);
     let mut anna = Client::new(public);
-    anna.send("POST", "/api/auth/register", json!({"name": "Анна", "login": "anna", "password": "пароль-12345"})).await;
+    anna.send(
+        "POST",
+        "/api/auth/register",
+        json!({"consent": 1,"name": "Анна", "login": "anna", "password": "пароль-12345"}),
+    )
+    .await;
     let r = anna.send("PUT", "/api/admin/ext/tt0000777/soon", json!({"on": true})).await;
     assert_eq!(r.status(), 403, "зрителю - нельзя");
     assert!(!flag(&running.app));

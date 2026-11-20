@@ -10,19 +10,31 @@ async fn names_and_logins_report_conflicts_and_do_not_replace_accounts() {
     let mut first = Client::new(public.clone());
     assert!(
         first
-            .send("POST", "/api/auth/register", json!({"name":"Омар","login":"omar-ui","password":"пароль123"}))
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"consent": 1,"name":"Омар","login":"omar-ui","password":"пароль123"})
+            )
             .await
             .status()
             .is_success()
     );
     let mut second = Client::new(public.clone());
     let r = second
-        .send("POST", "/api/auth/register", json!({"name":"  ОМАР  ","login":"another-ui","password":"пароль123"}))
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name":"  ОМАР  ","login":"another-ui","password":"пароль123"}),
+        )
         .await;
     assert_eq!(r.status(), 409);
     assert_eq!(r.json::<serde_json::Value>().await.unwrap()["error"], "name_taken");
     let r = second
-        .send("POST", "/api/auth/register", json!({"name":"Другое имя","login":"OMAR-UI","password":"пароль123"}))
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name":"Другое имя","login":"OMAR-UI","password":"пароль123"}),
+        )
         .await;
     assert_eq!(r.status(), 409);
     assert_eq!(r.json::<serde_json::Value>().await.unwrap()["error"], "login_taken");
@@ -30,7 +42,11 @@ async fn names_and_logins_report_conflicts_and_do_not_replace_accounts() {
     assert_eq!(available, json!({"loginTaken":true,"nameTaken":true}));
     assert!(
         second
-            .send("POST", "/api/auth/register", json!({"name":"Анна UI","login":"anna-ui","password":"пароль123"}))
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"consent": 1,"name":"Анна UI","login":"anna-ui","password":"пароль123"})
+            )
             .await
             .status()
             .is_success()
@@ -135,7 +151,11 @@ async fn custom_images_are_stored_as_persistent_choices_and_require_manager() {
     let mut viewer = Client::new(format!("http://127.0.0.1:{}", running.app.ports.0));
     assert!(
         viewer
-            .send("POST", "/api/auth/register", json!({"name":"Зритель UI","login":"viewer-ui","password":"пароль123"}))
+            .send(
+                "POST",
+                "/api/auth/register",
+                json!({"consent": 1,"name":"Зритель UI","login":"viewer-ui","password":"пароль123"})
+            )
             .await
             .status()
             .is_success()

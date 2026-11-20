@@ -189,6 +189,7 @@ export async function stranger(name: string) {
   await host.dispose();
   const c = await request.newContext({ baseURL: publicURL, extraHTTPHeaders: { 'x-fsfy': '1' } });
   await c.post('/api/auth/login', { data: { login, password: 'пароль-12345' } });
+  await c.post('/api/me/consent', { data: { version: 1 } });
   const id = (await (await c.get('/api/me')).json()).user.profile.id as number;
   return { c, id };
 }

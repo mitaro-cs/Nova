@@ -8,8 +8,13 @@ use serde_json::{Value, json};
 
 async fn signup(public: &str, login: &str) -> Client {
     let mut c = Client::new(public.to_string());
-    let r =
-        c.send("POST", "/api/auth/register", json!({"name": login, "login": login, "password": "пароль-12345"})).await;
+    let r = c
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": login, "login": login, "password": "пароль-12345"}),
+        )
+        .await;
     assert!(r.status().is_success(), "регистрация {login}: {}", r.status());
     c
 }
@@ -243,8 +248,13 @@ async fn reviews_friends_chat_photo() {
     // ---------- регистрация: хост закрывает и открывает ----------
     let mut extra = Client::new(public.clone());
     host.send("PUT", "/api/admin/settings", json!({"registration": "invite"})).await;
-    let r =
-        extra.send("POST", "/api/auth/register", json!({"name": "x", "login": "x1", "password": "пароль-12345"})).await;
+    let r = extra
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": "x", "login": "x1", "password": "пароль-12345"}),
+        )
+        .await;
     assert_eq!(r.status(), 400, "без приглашения - нельзя");
     host.send("PUT", "/api/admin/settings", json!({"registration": "open"})).await;
 
@@ -253,7 +263,11 @@ async fn reviews_friends_chat_photo() {
         signup(&public, &format!("bot{n}")).await;
     }
     let r = extra
-        .send("POST", "/api/auth/register", json!({"name": "x", "login": "bot9", "password": "пароль-12345"}))
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": "x", "login": "bot9", "password": "пароль-12345"}),
+        )
         .await;
     assert_eq!(r.status(), 429);
     drop(running);

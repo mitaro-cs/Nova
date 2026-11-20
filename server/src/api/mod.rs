@@ -48,6 +48,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/mail", get(mail::settings).put(mail::save_settings))
         .route("/api/admin/mail/test", post(mail::test_mail))
         .route("/api/auth/register", post(account::register))
+        .route("/api/me/consent", post(account::consent))
         .route("/api/auth/availability", get(account::availability))
         .route("/api/invites/{code}", get(account::invite))
         .route("/api/host/enter", get(account::enter))

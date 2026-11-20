@@ -282,7 +282,7 @@ async fn sources_require_host_opt_in_and_do_not_expose_cookies() {
             .send(
                 "POST",
                 "/api/auth/register",
-                json!({"name":"Зритель","login":"sites-viewer","password":"пароль-12345"})
+                json!({"consent": 1,"name":"Зритель","login":"sites-viewer","password":"пароль-12345"})
             )
             .await
             .status()

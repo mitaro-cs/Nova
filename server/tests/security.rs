@@ -8,8 +8,13 @@ use serde_json::{Value, json};
 
 async fn signup(public: &str, login: &str) -> Client {
     let mut c = Client::new(public.to_string());
-    let r =
-        c.send("POST", "/api/auth/register", json!({"name": login, "login": login, "password": "пароль-12345"})).await;
+    let r = c
+        .send(
+            "POST",
+            "/api/auth/register",
+            json!({"consent": 1,"name": login, "login": login, "password": "пароль-12345"}),
+        )
+        .await;
     assert!(r.status().is_success(), "регистрация {login}: {}", r.status());
     c
 }

@@ -95,7 +95,7 @@ async fn host_adds_folder_and_viewer_watches() {
         .send(
             "POST",
             "/api/auth/register",
-            json!({"invite": "WRONG123", "name": "Аня", "login": "anya", "password": "secret1"}),
+            json!({"consent": 1,"invite": "WRONG123", "name": "Аня", "login": "anya", "password": "secret1"}),
         )
         .await;
     assert_eq!(bad.status(), 400);
@@ -103,7 +103,7 @@ async fn host_adds_folder_and_viewer_watches() {
         .send(
             "POST",
             "/api/auth/register",
-            json!({"invite": code, "name": "Аня", "login": "anya", "password": "secret1"}),
+            json!({"consent": 1,"invite": code, "name": "Аня", "login": "anya", "password": "secret1"}),
         )
         .await;
     assert!(ok.status().is_success());
@@ -111,7 +111,7 @@ async fn host_adds_folder_and_viewer_watches() {
         .send(
             "POST",
             "/api/auth/register",
-            json!({"invite": code, "name": "Боря", "login": "borya", "password": "secret1"}),
+            json!({"consent": 1,"invite": code, "name": "Боря", "login": "borya", "password": "secret1"}),
         )
         .await;
     assert_eq!(used.status(), 400, "приглашение на одного");

@@ -12,6 +12,7 @@
   import Header from '$lib/ui/Header.svelte';
   import RoomByLink from '$lib/links/RoomByLink.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import ConsentGate from '$lib/ui/ConsentGate.svelte';
   import Logo from '$lib/ui/Logo.svelte';
   import Toasts from '$lib/ui/Toasts.svelte';
   import { toast } from '$lib/ui/toast.svelte';
@@ -23,6 +24,8 @@
   const AUTH = ['/login', '/join', '/register', '/forgot-password', '/reset-password', '/verify-email', '/legal'];
   const path = $derived(page.url.pathname);
   const auth = $derived(AUTH.some((p) => path.startsWith(p)));
+  // Пока человек не принял политику и правила, сервис закрыт (страницы документов открыты).
+  const gate = $derived(!!session.me?.legal?.needed && !auth);
   const bare = $derived(auth || path.startsWith('/watch') || path.startsWith('/room'));
 
   $effect(() => {
@@ -156,7 +159,9 @@
   </div>
 {/if}
 
-{#if bare}
+{#if gate}
+  <ConsentGate />
+{:else if bare}
   {@render children()}
 {:else if session.me}
   {#if IntroView}<IntroView />{/if}

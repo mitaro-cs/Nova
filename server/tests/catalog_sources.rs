@@ -125,7 +125,7 @@ async fn import_is_atomic_validates_urls_types_and_permissions() {
             .send(
                 "POST",
                 "/api/auth/register",
-                json!({"name":"Зритель","login":"catalogviewer","password":"пароль-12345"})
+                json!({"consent": 1,"name":"Зритель","login":"catalogviewer","password":"пароль-12345"})
             )
             .await
             .status()
