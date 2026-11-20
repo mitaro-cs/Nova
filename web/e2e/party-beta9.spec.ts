@@ -22,6 +22,9 @@ test('десять зрителей: реальные плееры приним�
    expect((await page.request.post(url('/api/admin/users'),{headers:{'x-fsfy':'1'},data:{login,password,name:`Зритель ${i+1}`,role:'viewer'}})).ok()).toBe(true);
    const ctx=await browser.newContext();contexts.push(ctx);
    expect((await ctx.request.post(env().publicURL+'/api/auth/login',{headers:{'x-fsfy':'1'},data:{login,password}})).ok()).toBe(true);
+   // Комната закрыта для чужих: создатель (хост) зовёт каждого зрителя.
+   const profileId=(await (await ctx.request.get(env().publicURL+'/api/me')).json()).user.profile.id;
+   expect((await page.request.post(url(`/api/rooms/${room}/invite`),{headers:{'x-fsfy':'1'},data:{profileId}})).ok()).toBe(true);
    await ctx.route(`**/api/links/${link}/stream/p?*`,route=>{
     const range=/bytes=(\d+)-(\d*)/.exec(route.request().headers().range??'');
     const start=Number(range?.[1]??0),end=range?.[2]?Number(range[2]):clip.length-1;

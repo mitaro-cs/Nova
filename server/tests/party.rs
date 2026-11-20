@@ -479,4 +479,9 @@ async fn room_is_closed_to_strangers_and_queue_belongs_to_the_owner() {
     let own = own["id"].as_u64().unwrap();
     assert_eq!(friend.send("DELETE", &url(&format!("/queue/{id}")), json!({})).await.status(), 403);
     assert!(friend.send("DELETE", &url(&format!("/queue/{own}")), json!({})).await.status().is_success());
+    // Хост зовёт любого зрителя сервера, не только друга: после этого чужой входит.
+    let id: i64 =
+        running.app.db.with(|c| c.query_row("SELECT id FROM profiles WHERE name = 'Чужой'", [], |r| r.get(0))).unwrap();
+    assert!(host.send("POST", &url("/invite"), json!({"profileId": id})).await.status().is_success());
+    assert_eq!(stranger.get(&url("")).await.status(), 200);
 }

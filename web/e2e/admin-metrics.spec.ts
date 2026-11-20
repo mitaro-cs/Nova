@@ -39,16 +39,17 @@ test('копия базы делается по кнопке', async ({ page }) 
   await expect(page.getByText(/Копия базы готова/)).toBeVisible();
 });
 
-test('кэш видео нельзя очистить, пока его нечем очищать', async ({ page }) => {
-  // Другие тесты гоняют видео и оставляют кэш (а фоновая перепаковка может дописать его после очистки):
-  // очищаем через сервер и перезагружаем, пока кнопка не станет недоступной.
+test('кнопка очистки кэша согласована с его размером', async ({ page }) => {
+  // Другие тесты гоняют видео, и фоновая перепаковка дописывает кэш в любой момент: нельзя требовать «кэша нет».
+  // Проверяем связь: кэша нет - кнопка недоступна, есть - доступна (на то же значение, что отдал сервер).
   const clear = page.getByRole('button', { name: /Очистить кэш видео/ });
   await expect(async () => {
-    await page.request.post(url('/api/admin/cache/clear'), { headers: { 'x-fsfy': '1' } });
     await page.goto(url('/admin'));
     await expect(clear).toBeVisible();
-    // Кэша нет: кнопка не активна и не обещает освободить место.
-    await expect(clear).toBeDisabled({ timeout: 2_000 });
+    const m = await page.evaluate(() => fetch('/api/admin/metrics?tz=0').then((r) => r.json()));
+    const empty = m.disk.hls + m.disk.copy + m.disk.cacheOther === 0;
+    if (empty) await expect(clear).toBeDisabled({ timeout: 2_000 });
+    else await expect(clear).toBeEnabled({ timeout: 2_000 });
   }).toPass({ timeout: 25_000 });
 });
 

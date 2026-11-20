@@ -321,7 +321,9 @@ pub async fn invite(
             |r| r.get(0),
         )
     })?;
-    if !friend || v.profile.kids {
+    // Хост и администраторы зовут любого зрителя своего сервера; остальные - только друзей.
+    let may = friend || (v.manages() && !v.profile.kids);
+    if !may || v.profile.kids {
         return Err(ApiError::new(StatusCode::FORBIDDEN, "not_friends", "Звать можно только друзей"));
     }
     // Позвал - значит, может войти: чужой код комнаты никого не пускает.
