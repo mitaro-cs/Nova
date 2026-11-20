@@ -80,7 +80,9 @@ async fn host_adds_folder_and_viewer_watches() {
     let titles = titles.as_array().unwrap().clone();
     assert_eq!(titles.len(), 2, "{titles:?}");
     let movie = titles.iter().find(|t| t["kind"] == "movie").unwrap();
-    assert_eq!((movie["title"].as_str(), movie["year"].as_i64()), (Some("Test Movie"), Some(2020)));
+    // Названия без русского варианта показываются русской записью (транслитерацией).
+    let ru = fsfy::names::ru_title("Test Movie");
+    assert_eq!((movie["title"].as_str(), movie["year"].as_i64()), (Some(ru.as_str()), Some(2020)));
     let show = titles.iter().find(|t| t["kind"] == "series").unwrap();
     assert_eq!(show["files"], 2);
 
