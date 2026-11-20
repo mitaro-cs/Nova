@@ -9,6 +9,7 @@
   import People from '$lib/admin/People.svelte';
   import Settings from '$lib/admin/Settings.svelte';
   import Version from '$lib/admin/Version.svelte';
+  import Wizard from '$lib/admin/Wizard.svelte';
   import Wishes from '$lib/admin/Wishes.svelte';
   import { badges } from '$lib/social/badges.svelte';
   import type { Status } from '$lib/admin/types';
@@ -17,6 +18,7 @@
   import type { IconName } from '$lib/ui/icons';
 
   const TABS: [string, string, IconName][] = [
+    ['setup', 'Мастер', 'sparkle'],
     ['overview', 'Обзор', 'pulse'],
     ['folders', 'Папки', 'folder'],
     ['catalog', 'Каталог', 'film'],
@@ -27,17 +29,18 @@
     ['version', 'Версия', 'download'],
   ];
   const GROUPS: { name: string; ids: string[] }[] = [
-    { name: 'Библиотека', ids: ['overview', 'folders', 'catalog'] },
+    { name: 'Библиотека', ids: ['setup', 'overview', 'folders', 'catalog'] },
     { name: 'Люди', ids: ['people', 'wishes'] },
     { name: 'Система', ids: ['access', 'settings', 'version'] },
   ];
   const TAB = Object.fromEntries(TABS.map(([id, label, icon]) => [id, { label, icon }])) as Record<string, { label: string; icon: IconName }>;
   // Значки разделов - белые и серые, без цветов-украшений (решение владельца, 2 ноября): цвет в управлении значит
   // только состояние - зелёный «работает», красный «ошибка».
-  const TONE: Record<string, string> = Object.fromEntries(['overview', 'folders', 'catalog', 'people', 'wishes', 'access', 'settings', 'version'].map((id) => [id, '#e4e4e7']));
+  const TONE: Record<string, string> = Object.fromEntries(['setup', 'overview', 'folders', 'catalog', 'people', 'wishes', 'access', 'settings', 'version'].map((id) => [id, '#e4e4e7']));
 
   // Что в каждом разделе и что там можно сделать - хост видит это сверху раздела.
   const INFO: Record<string, { hint: string; title: string; text: string; can: string[] }> = {
+    setup: { hint: 'Пять шагов до готовности', title: 'Настройка сервера', text: 'Папка, описания, доступ и люди по шагам. Проверки идут сами, а справа видно, что получится у зрителей.', can: ['Пройти настройку по шагам', 'Проверить скорость раздачи', 'Вернуться к любому шагу'] },
     overview: { hint: 'Всё ли работает', title: 'Обзор', text: 'Состояние Nova одним взглядом: что работает, что требует внимания и кто сейчас смотрит.', can: ['Проверить, всё ли в порядке', 'Скопировать адрес для друзей', 'Увидеть, кто и что смотрит'] },
     folders: { hint: 'Где лежат фильмы', title: 'Папки', text: 'Папки на этом компьютере или внешнем диске, из которых Nova берёт фильмы и сериалы. Новые файлы подхватываются сами.', can: ['Добавить или убрать папку', 'Перетащить файлы в своё место для фильмов', 'Посмотреть, как называть папки и файлы'] },
     catalog: { hint: 'Библиотека', title: 'Каталог', text: 'Ваши фильмы и сериалы: описание, постер и фон, совпадение с IMDb, объединение и удаление.', can: ['Найти фильм и поправить описание', 'Выбрать постер и фон', 'Объединить повторы или удалить запись'] },
@@ -120,7 +123,8 @@
     </header>
     {#if statusError}<p class="error" role="alert">Не удалось обновить показатели: {statusError} <button class="btn sm" onclick={reload}>Повторить</button></p>{/if}
     {#if status}
-      {#if tab === 'overview'}<Overview {status} {reload} />
+      {#if tab === 'setup'}<Wizard {status} {reload} window={!!session.me?.window} />
+      {:else if tab === 'overview'}<Overview {status} {reload} />
       {:else if tab === 'folders'}<Folders {status} window={!!session.me?.window} {reload} />
       {:else if tab === 'catalog'}<Catalog />
       {:else if tab === 'people'}<People />
