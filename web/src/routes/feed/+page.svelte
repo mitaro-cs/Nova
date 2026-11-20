@@ -3,6 +3,7 @@
   import { catalog, loadCatalog } from '$lib/catalog.svelte';
   import { extSheet } from '$lib/discover/sheet.svelte';
   import type { Card, ExtCard } from '$lib/types';
+  import Afisha from '$lib/feed/Afisha.svelte';
   import FeedCard from '$lib/ui/FeedCard.svelte';
 
   // «Что смотреть»: вертикальная лента карточек, на экране играет трейлер одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
@@ -69,6 +70,8 @@
   {:else if !items.length}
     <p class="note">{failed ? 'Подборки сейчас недоступны. Проверьте связь и зайдите позже.' : 'Пока нечего предложить - загляните позже.'}</p>
   {:else}
+    {#if catalog.items}<Afisha items={catalog.items} />{/if}
+    <h2 class="lenta">Лента</h2>
     <div class="list">
       {#each shown as it (it.key)}
         <FeedCard
@@ -95,6 +98,12 @@
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.15;
+  }
+  .lenta {
+    margin: 34px var(--gutter) 14px;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
   .list {
     display: grid;

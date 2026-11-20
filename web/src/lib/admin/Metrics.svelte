@@ -150,6 +150,33 @@
         ]
       : [],
   );
+
+  // «За неделю»: сумма за последние 7 суток против предыдущих 7, и линия по дням (две недели).
+  type Trend = { label: string; value: number; delta: number | null; line: string; note: string };
+  const spark = (a: number[]) => {
+    const hi = Math.max(1, ...a);
+    return a.map((v, i) => `${(i / Math.max(1, a.length - 1)) * 100},${22 - (v / hi) * 20}`).join(' ');
+  };
+  const trends = $derived<Trend[]>(
+    m
+      ? (() => {
+          const d = m.activity.days;
+          const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+          const views = d.map((x) => x.views);
+          const people = d.map((x) => x.people);
+          const part = (a: number[]) => [sum(a.slice(-7)), sum(a.slice(-14, -7))];
+          const pct = (now: number, was: number) => (was > 0 ? Math.round(((now - was) / was) * 100) : null);
+          const [vNow, vWas] = part(views);
+          const [pNow, pWas] = part(people);
+          return [
+            { label: 'Просмотров за неделю', value: vNow, delta: pct(vNow, vWas), line: spark(views), note: `${vWas} неделей раньше` },
+            { label: 'Заходов зрителей', value: pNow, delta: pct(pNow, pWas), line: spark(people), note: `${m.people.activeWeek} разных людей` },
+            { label: 'Новых фильмов', value: m.library.addedWeek, delta: null, line: spark(views.map((_, i) => (i === views.length - 1 ? m!.library.addedWeek : 0))), note: `${m.library.addedMonth} за месяц` },
+            { label: 'Входов за сутки', value: m.people.loginsDay, delta: null, line: spark(people), note: m.people.failedWeek ? `${m.people.failedWeek} неудачных за неделю` : 'неудачных нет' },
+          ];
+        })()
+      : [],
+  );
 </script>
 
 {#if failed}
@@ -157,6 +184,17 @@
 {:else if !m}
   <div class="kpis" aria-busy="true">{#each Array(6) as _, i (i)}<div class="kpi skeleton"></div>{/each}</div>
 {:else}
+  <div class="trends" aria-label="За неделю">
+    {#each trends as t, i (t.label)}
+      <div class="trend rise" style:--i={i}>
+        <span class="tl">{t.label}</span>
+        <div class="tv"><b>{t.value}</b>{#if t.delta !== null}<em class:down={t.delta < 0}>{t.delta > 0 ? '+' : ''}{t.delta}%</em>{/if}</div>
+        <svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><polyline points={t.line} /></svg>
+        <small>{t.note}</small>
+      </div>
+    {/each}
+  </div>
+
   <div class="kpis" aria-label="Главные цифры">
     {#each kpis as k, i (k.label)}
       <div class="kpi rise" style:--tone={k.tone} style:--i={i}>
@@ -696,4 +734,15 @@
       transform: scaleX(0);
     }
   }
+  .trends { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .trend { min-width: 0; padding: 18px 20px; border: 1px solid #ffffff1a; border-radius: 26px; background: #101012; }
+  .tl { color: var(--muted); font-size: 12px; font-weight: 600; }
+  .tv { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+  .tv b { font-size: 34px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .tv em { color: var(--ok); font-size: 12px; font-style: normal; font-weight: 700; }
+  .tv em.down { color: #fca5a5; }
+  .trend svg { display: block; width: 100%; height: 28px; margin-top: 10px; }
+  .trend polyline { fill: none; stroke: #ffffffb0; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+  .trend small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 900px) { .trends { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
