@@ -3,13 +3,15 @@
   import type { Trickplay } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
   import Seekbar from './Seekbar.svelte';
-  import { playbackTitle } from './title';
+  import { playbackHeading } from './title';
 
   // Органы управления - вариант C: сверху название, по центру крупные «назад 10 с», пауза и «вперёд 10 с»,
   // снизу тонкая полоса перемотки, время слева и значки справа. Всё скрывается без движения.
   let {
     title = '',
     episode = '',
+    season = null,
+    episodeNo = null,
     shown,
     paused,
     busy,
@@ -49,6 +51,8 @@
   }: {
     title?: string;
     episode?: string;
+    season?: number | null;
+    episodeNo?: number | null;
     shown: boolean;
     paused: boolean;
     /** Идёт загрузка: большую кнопку не показываем, крутится индикатор. */
@@ -100,10 +104,7 @@
 <div class="top" class:hide={!shown} bind:clientHeight={topH}>
   <button class="ibtn" aria-label="Назад" onclick={onback}><Icon name="back" size={24} /></button>
   {#if title}
-    <div class="name">
-      <b>{playbackTitle(title)}</b>
-      {#if episode}<span>{episode}</span>{/if}
-    </div>
+    <div class="name"><b>{playbackHeading(title, episode, season, episodeNo)}</b></div>
   {/if}
   <span class="grow"></span>
   {#if endsAt}<span class="ends">Закончится в {endsAt}</span>{/if}
@@ -140,7 +141,7 @@
       <span class="volume-label">{Math.round((muted?0:volume)*100)}%</span>
     </div>
     {#if showAudio}<button class="ibtn" class:on={panel === 'audio'} aria-label="Озвучка" title="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
-    {#if showQuality}<button class="ibtn q" class:on={panel === 'quality'} aria-label="Качество" title="Качество" onclick={() => onpanel('quality')}>{qualityLabel}</button>{/if}
+    {#if showQuality}<button class="ibtn q" class:on={panel === 'quality'} aria-label="Качество" title="Качество" onclick={() => onpanel('quality')}><span class="qicon"><Icon name="sliders" size={20} /></span><span class="qtext">{qualityLabel}</span></button>{/if}
     <button class="ibtn" class:on={panel === 'settings'} aria-label="Настройки плеера" title="Настройки" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
     {#if pipOk}<button class="ibtn" aria-label="Картинка в картинке" title="Картинка в картинке (P)" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
     <button class="ibtn" aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
@@ -186,23 +187,17 @@
     pointer-events: none;
   }
   .name {
-    display: grid;
-    line-height: 1.25;
+    display: flex;
+    align-items: center;
     min-width: 0;
   }
   .name b {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 600;
-  }
-  .name span {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.7);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    letter-spacing: 0.01em;
   }
   .grow {
     flex: 1;
@@ -332,8 +327,14 @@
       transform: scale(0.8);
     }
   }
+  .q { gap: 6px; }
+  .qicon { display: none; }
+  /* Мини-плеер: только значки и название, цифры и подписи не теснят экран. */
   @media (max-width: 700px) {
     .ibtn{min-width:32px;padding-inline:4px}.row{gap:2px}.volume-label{display:none}.time{font-size:11px}
+    .skip text{display:none}
+    .q .qtext{display:none}
+    .q .qicon{display:inline-grid}
     .vol input {
       display: none;
     }

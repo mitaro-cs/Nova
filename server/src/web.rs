@@ -11,8 +11,8 @@ use axum::response::{IntoResponse, Response};
 struct Assets;
 
 /// Сжатые копии неизменяемых файлов интерфейса (`_app/immutable/…` — имя меняется с содержимым):
-/// сжимаем один раз и сильно (brotli 11, gzip 9), а не при каждом запросе — хосту меньше работы,
-/// через туннель — меньше байт.
+/// сжимаем один раз и кэшируем (brotli quality 5, gzip best), а не при каждом запросе — хосту меньше
+/// работы, через туннель — меньше байт. Brotli 11 здесь нельзя: он тормозил первый запрос плеера.
 static PACKED: std::sync::LazyLock<parking_lot::Mutex<std::collections::HashMap<(String, bool), bytes::Bytes>>> =
     std::sync::LazyLock::new(Default::default);
 

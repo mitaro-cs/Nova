@@ -6,6 +6,9 @@
   import Modal from '$lib/ui/Modal.svelte';
   import Select from '$lib/ui/Select.svelte';
   import { ask } from '$lib/ui/dialogs.svelte';
+  import ManualSources from './ManualSources.svelte';
+  import HostTitleSource from './HostTitleSource.svelte';
+  import { session } from '$lib/session.svelte';
 
   interface Row {
     id: number;
@@ -190,6 +193,8 @@
   }
 </script>
 
+<div id="sources"><ManualSources /></div>
+{#if session.me?.user.role === 'host'}<HostTitleSource />{/if}
 <h3 class="local-heading">Файлы вашей библиотеки</h3>
 
 <div class="bar">

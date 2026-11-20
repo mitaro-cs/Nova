@@ -7,7 +7,7 @@
   import { heightLabel } from './codecs';
   import type { Level } from './engine/hls';
   import type { Quality } from './plan';
-  import { qualityTier } from './quality-label';
+  import { levelLabel } from './quality-label';
   import { SUB_LOOKS, SUB_SIZES, type SubLook } from './tracks';
 
   // Меню над органами управления: серии, настройки, источник, озвучка, субтитры, скорость, клавиши, качество.
@@ -89,7 +89,7 @@
   const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   const speedText = (r: number) => (r === 1 ? 'Обычная' : `×${String(r).replace('.', ',')}`);
   const seasons = $derived([...new Set(episodeFiles.map((f) => f.season ?? 1))]);
-  const tier = (h: number, w?: number | null) => qualityTier(h, w ?? undefined);
+  const sourceLevelLabel = (level: Level) => levelLabel(level, srcLevels);
 </script>
 
 <div class="panel" role="menu">
@@ -192,7 +192,7 @@
     </button>
     {#each srcLevels as l (l.i)}
       <button role="menuitemradio" aria-checked={srcLevel === l.i} class:on={srcLevel === l.i} onclick={() => onlevel(l.i)}>
-        {l.height ? `${l.label ?? qualityTier(l.height)}p` : 'Исходное качество'}
+        {sourceLevelLabel(l)}
       </button>
     {/each}
   {:else if panel === 'quality'}

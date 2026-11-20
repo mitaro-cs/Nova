@@ -175,14 +175,30 @@ pub async fn search(c: &Catalog, names: &[&str], year: Option<i64>) -> Option<Ve
     let mut answered = false;
     for name in names.iter().filter(|n| !n.trim().is_empty()).take(2) {
         let url = search_url(&c.domain, template, name)?;
-        let Ok(html) = crate::api::stream_link::page(url.as_str()).await else { continue };
+        let Ok((final_url, html)) = crate::api::stream_link::page_with_url(url.as_str()).await else { continue };
         answered = true;
-        let found = extract(&html, &url, &c.domain, names, year);
+        // LordFilm и другие каталоги часто переадресуют поиск на зеркало (sx -> sz). Ссылки
+        // нужно собирать с хоста, который реально ответил, иначе все карточки отбрасываются.
+        let host = final_url.host_str().unwrap_or(&c.domain);
+        let found = extract(&html, &final_url, host, names, year);
         if !found.is_empty() {
             return Some(found);
         }
     }
     answered.then(Vec::new)
+}
+
+/// Сайт одного тайтла узнаём по названию источника. В базе название может быть локализовано
+/// («Сопрано» вместо «Клан Сопрано»), поэтому сравниваем в обе стороны.
+fn single_source(domain: &str, names: &[&str]) -> Option<&'static crate::site_sources::Source> {
+    crate::site_sources::by_domain(domain).filter(|s| {
+        s.title.is_some_and(|title| {
+            names.iter().any(|name| {
+                crate::util::norm(name) == crate::util::norm(title)
+                    || crate::video_search::matches(title, name, None, None, None, false)
+            })
+        })
+    })
 }
 
 /// Поиск серии на подключённом сайте: показываем только явно найденный сезон и эпизод.
@@ -196,15 +212,31 @@ pub async fn search_episode(
 ) -> Option<Vec<Value>> {
     // Карточки некоторых сериалов не указывают год в результатах. Пропускаем только точное
     // название и проверяем год на самой странице до разбора плеера.
-    let pages = search(c, names, None).await?;
+    // У сайтов одного тайтла (Сопрано, Друзья, Сверхъестественное) поиск не отдаёт карточек:
+    // весь сериал живет на главной. Берём серии сразу из известного источника.
+    let single = single_source(&c.domain, names);
+    let pages = if let Some(source) = single {
+        let Ok((entries, _)) = crate::site_sources::list(source, None, Some(app)).await else { return Some(vec![]) };
+        entries
+            .into_iter()
+            .filter(|e| e.season == Some(season) && e.episode == Some(episode))
+            .map(|e| json!({"url": e.url, "label": e.title, "thumbUrl": null}))
+            .collect()
+    } else {
+        search(c, names, None).await?
+    };
     let mut result = Vec::new();
     for page in pages.into_iter().take(3) {
         let Some(url) = page["url"].as_str() else { continue };
         let label = page["label"].as_str().unwrap_or("");
-        if !names.iter().any(|n| crate::util::norm(n) == crate::util::norm(label)) {
+        // У сайтов одного тайтла источник уже совпадает с фильмом по названию и IMDb. Год на странице
+        // серии обычно не указан, поэтому требовать его здесь - значит потерять весь сериал.
+        if single.is_none() && !names.iter().any(|n| crate::util::norm(n) == crate::util::norm(label)) {
             continue;
         }
-        if let Some(year) = year {
+        if single.is_none()
+            && let Some(year) = year
+        {
             let Ok((_, html)) = crate::api::stream_link::page_for(Some(app), url).await else { continue };
             let pattern =
                 format!(r#"(?is)itemprop=["'](?:dateCreated|datePublished)["'][^>]*>(?:\s|<[^>]*>)*{year}\b"#);
@@ -219,13 +251,13 @@ pub async fn search_episode(
             year: year.and_then(|y| i32::try_from(y).ok()),
             imdb: None,
             remote_id: None,
-            season: None,
-            episode: None,
+            season: single.map(|_| season),
+            episode: single.map(|_| episode),
         };
         let Ok((variants, _)) = crate::site_sources::variants(&entry, Some(app)).await else { continue };
         for variant in variants.into_iter().filter(|v| v.season == Some(season) && v.episode == Some(episode)) {
             let Ok(url) = Url::parse(&variant.url) else { continue };
-            if !crate::site_sources::is_provider(&url) {
+            if !crate::outbound::valid_url(&url) {
                 continue;
             }
             let y = year.map(|v| format!(" ({v})")).unwrap_or_default();
@@ -265,6 +297,25 @@ mod tests {
         assert!(search_url("kino.example", "ftp://kino.example/{q}", "x").is_none());
         assert!(valid_template("kino.example", "https://kino.example/search/{q}"));
         assert!(candidates("kino.example").iter().all(|t| valid_template("kino.example", t)));
+    }
+
+    #[test]
+    fn recognizes_single_title_site_with_localized_name() {
+        let names = ["Сопрано", "The Sopranos"];
+        let source = single_source("watch-the-sopranos-online.net", &names).expect("сайт одного тайтла");
+        assert_eq!(source.id, "sopranos");
+        assert!(single_source("watch-the-sopranos-online.net", &["Дороро"]).is_none());
+        assert!(single_source("old.yummyani.me", &names).is_none());
+    }
+
+    #[test]
+    fn extracts_pages_from_redirected_mirror() {
+        let html =
+            r#"<a href="/films/1-matrica-1999.html" title="Матрица (1999)"><img src="/m.jpg" alt="Матрица"></a>"#;
+        let base = Url::parse("https://sz.lordfilm5.pro/index.php?do=search&subaction=search&story=x").unwrap();
+        let found = extract(html, &base, "sz.lordfilm5.pro", &["Матрица"], Some(1999));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0]["url"], "https://sz.lordfilm5.pro/films/1-matrica-1999.html");
     }
 
     #[test]

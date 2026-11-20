@@ -76,7 +76,7 @@
     if (season === null || episode === null) return raw;
     try {
       const u = new URL(raw);
-      if (u.protocol === 'https:' && ['sd.lordfilm5.pro', 'sg.lordfilm5.pro'].includes(u.hostname) && u.pathname.startsWith('/serialy/') && u.pathname.endsWith('.html')) {
+      if (u.protocol === 'https:' && u.hostname.endsWith('.lordfilm5.pro') && u.pathname.startsWith('/serialy/') && u.pathname.endsWith('.html')) {
         u.hash = `nova-season=${season}&episode=${episode}`;
         return u.toString();
       }

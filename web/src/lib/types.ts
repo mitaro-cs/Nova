@@ -137,6 +137,7 @@ export interface ExtEpisode {
 
 export interface TitleDetail {
   metadataPending?: boolean;
+  peoplePending?: boolean;
   card: Card;
   tagline: string | null;
   countries: string[];
@@ -359,6 +360,7 @@ export interface ExtCard {
 
 export interface ExtDetail {
   refreshing?: boolean;
+  peoplePending?: boolean;
   /** Последняя отмеченная серия: страница сериала открывается на следующей. */
   lastSeen?: { season: number; episode: number } | null;
   card: ExtCard;

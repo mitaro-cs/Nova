@@ -8,7 +8,7 @@ const found = { ...film, id: 'tt1111111', title: 'Найденный поиск�
 
 test('знакомство: фильм выбирается через поиск по каталогу', async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem('nova-onboarding:1', '1'));
-  await page.route('**/api/discover', (route) => route.fulfill({ json: { rows: [{ key: 'popular_movies', title: 'Популярное', items: [film] }] } }));
+  await page.route(/\/api\/discover(?:\?|$)/, (route) => route.fulfill({ json: { rows: [{ key: 'popular_movies', title: 'Популярное', items: [film] }] } }));
   await page.route('**/api/discover/search?*', (route) => route.fulfill({ json: [found] }));
   const saved: string[] = [];
   await page.route('**/api/me/favorites', (route) => {

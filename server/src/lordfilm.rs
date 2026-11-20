@@ -1,4 +1,3 @@
-//! Automatic movie discovery on the built-in LordFilm source.
 use reqwest::Url;
 use serde_json::{Value, json};
 
@@ -6,12 +5,13 @@ pub const HOST: &str = "sd.lordfilm5.pro";
 const BASE: &str = "https://sd.lordfilm5.pro/";
 
 pub fn movie_url(u: &Url) -> bool {
-    source_url(u) && (u.path().starts_with("/filmy/") || u.path().starts_with("/mult/"))
+    source_url(u)
+        && (u.path().starts_with("/filmy/") || u.path().starts_with("/mult/") || u.path().starts_with("/multfilmy/"))
 }
 
 fn source_url(u: &Url) -> bool {
     u.scheme() == "https"
-        && matches!(u.host_str(), Some(HOST | "sg.lordfilm5.pro" | "sr.lordfilm5.pro"))
+        && u.host_str().is_some_and(|h| h == HOST || h.ends_with(".lordfilm5.pro"))
         && u.port().is_none()
         && u.username().is_empty()
         && u.password().is_none()
@@ -37,47 +37,154 @@ fn decode(s: &str) -> String {
     s.replace("&quot;", "\"").replace("&#039;", "'").replace("&nbsp;", " ").replace("&amp;", "&")
 }
 
-fn parse(html: &str, title: &str, year: Option<i64>, series: bool) -> Vec<Value> {
-    let base = Url::parse(BASE).expect("source URL");
-    let anchors = regex::Regex::new(r#"(?s)<a\b[^>]*class="th-in[^"\n]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>"#).unwrap();
-    let names = regex::Regex::new(r#"<div class="th-title">([^<]+)</div>"#).unwrap();
-    let years = regex::Regex::new(r#"<div class="th-series">\s*((?:19|20)\d{2})\s*</div>"#).unwrap();
-    let images = regex::Regex::new(r#"<img[^>]+src="([^"]+)""#).unwrap();
-    anchors
-        .captures_iter(html)
-        .filter_map(|c| {
-            let url = base.join(&decode(&c[1])).ok()?;
-            if !(if series { series_url(&url) } else { movie_url(&url) }) {
-                return None;
-            }
-            let body = &c[2];
-            let name = decode(&names.captures(body)?[1]);
-            let found_year = years.captures(body).and_then(|c| c[1].parse::<i64>().ok());
-            // A sequel or a remake must never silently become this film's play button.
-            if crate::util::norm(&name) != crate::util::norm(title) || year.is_some_and(|y| found_year != Some(y)) {
-                return None;
-            }
-            let thumb = images
-                .captures(body)
-                .and_then(|c| base.join(&decode(&c[1])).ok())
-                .filter(crate::outbound::valid_url)
-                .map(|u| u.to_string());
-            let label = found_year.map_or(name.clone(), |y| format!("{name} ({y})"));
-            Some(json!({"site":"lordfilm", "url":url.as_str(), "label":label,
-            "thumbUrl":thumb, "duration":null, "author":"LordFilm"}))
-        })
-        .take(8)
-        .collect()
+fn token_like(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    let mut ai = a.chars();
+    let mut bi = b.chars();
+    let mut common = 0usize;
+    for _ in 0..5 {
+        match (ai.next(), bi.next()) {
+            (Some(x), Some(y)) if x == y => common += 1,
+            _ => break,
+        }
+    }
+    let a_len = a.chars().count();
+    let b_len = b.chars().count();
+    // Common 5-char prefix handles Russian inflections (девятый/девятого); short stems need full prefix.
+    (common >= 5 && a_len >= 5 && b_len >= 5) || (a_len >= 4 && b_len >= 4 && (a.starts_with(b) || b.starts_with(a)))
 }
 
-pub async fn search(title: &str, year: Option<i64>) -> Option<Vec<Value>> {
-    let url = Url::parse_with_params(
-        &format!("{BASE}index.php"),
-        &[("do", "search"), ("subaction", "search"), ("story", title)],
-    )
-    .ok()?;
-    let html = crate::api::stream_link::page(url.as_str()).await.ok()?;
-    Some(parse(&html, title, year, false))
+fn names_match(norm: &str, wanted: &[String], year: Option<i64>, found_year: Option<i64>) -> bool {
+    if wanted.iter().any(|w| w == norm) {
+        return true;
+    }
+    // Same or adjacent year: allow local/alternate spelling (sites and IMDb often differ by 1).
+    // Card without year: allow strong overlap only when the expected year is known (catalog
+    // often omits year), but never treat a clearly conflicting year as a match.
+    let year_ok = match (year, found_year) {
+        (Some(y), Some(fy)) => (y - fy).abs() <= 1,
+        (Some(_), None) => true,
+        (None, Some(_)) | (None, None) => false,
+    };
+    if !year_ok {
+        return false;
+    }
+    let nt: Vec<&str> = norm.split_whitespace().collect();
+    wanted.iter().any(|w| {
+        let wt: Vec<&str> = w.split_whitespace().collect();
+        if wt.is_empty() || nt.is_empty() {
+            return false;
+        }
+        let cover = |a: &[&str], b: &[&str]| a.iter().all(|t| b.iter().any(|x| token_like(t, x)));
+        // All significant words of one title must appear in the other, with almost no extra words.
+        cover(&wt, &nt) && (wt.len() + 1 >= nt.len() || cover(&nt, &wt))
+    })
+}
+
+fn parse(html: &str, names: &[&str], year: Option<i64>, series: bool) -> Vec<Value> {
+    let base = Url::parse(BASE).expect("source URL");
+    // href/class order varies across LordFilm mirrors and layouts.
+    let anchors = regex::Regex::new(r#"(?is)<a\b([^>]*)>(.*?)</a>"#).unwrap();
+    let href_re = regex::Regex::new(r#"(?is)\bhref\s*=\s*["']([^"']+)["']"#).unwrap();
+    let class_re = regex::Regex::new(r#"(?is)\bclass\s*=\s*["']([^"']+)["']"#).unwrap();
+    let titles = regex::Regex::new(r#"<div class="th-title">([^<]+)</div>"#).unwrap();
+    let years = regex::Regex::new(r#"<div class="th-series">\s*((?:19|20)\d{2})\s*</div>"#).unwrap();
+    let years_any = regex::Regex::new(r#"\b((?:19|20)\d{2})\b"#).unwrap();
+    let images = regex::Regex::new(r#"<img[^>]+(?:data-src|src)="([^"]+)""#).unwrap();
+    let wanted: Vec<String> = names.iter().map(|n| crate::util::norm(n)).filter(|n| !n.is_empty()).collect();
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for c in anchors.captures_iter(html) {
+        let attrs = &c[1];
+        let Some(class) = class_re.captures(attrs).and_then(|m| m.get(1)).map(|m| m.as_str()) else { continue };
+        if !class.split_whitespace().any(|c| c == "th-in" || c.starts_with("th-in")) {
+            continue;
+        }
+        let Some(href) = href_re.captures(attrs).and_then(|m| m.get(1)).map(|m| decode(m.as_str())) else {
+            continue;
+        };
+        let Ok(url) = base.join(&href) else { continue };
+        if !(if series { series_url(&url) } else { movie_url(&url) }) {
+            continue;
+        }
+        if !seen.insert(url.to_string()) {
+            continue;
+        }
+        let body = &c[2];
+        let name = titles.captures(body).map(|m| decode(&m[1])).or_else(|| {
+            // Fallbacks for alternative layouts.
+            let img_alt = regex::Regex::new(r#"(?is)<img[^>]*\balt\s*=\s*["']([^"']+)["']"#).ok()?;
+            if let Some(m) = img_alt.captures(body) {
+                let t = decode(&m[1]);
+                if !t.trim().is_empty() {
+                    return Some(t);
+                }
+            }
+            let title_attr = regex::Regex::new(r#"(?is)\btitle\s*=\s*["']([^"']+)["']"#).ok()?;
+            title_attr.captures(attrs).map(|m| decode(&m[1])).filter(|t| !t.trim().is_empty())
+        });
+        let Some(name) = name else { continue };
+        let found_year = years.captures(body).and_then(|m| m[1].parse::<i64>().ok()).or_else(|| {
+            // Some layouts put year as plain text near the title.
+            years_any.captures(body).and_then(|m| m[1].parse::<i64>().ok())
+        });
+        let norm = crate::util::norm(&name);
+        // A sequel or a remake must never silently become this film's play button.
+        if let (Some(y), Some(fy)) = (year, found_year)
+            && (y - fy).abs() > 1
+        {
+            continue;
+        }
+        if !names_match(&norm, &wanted, year, found_year) {
+            continue;
+        }
+        let thumb = images
+            .captures(body)
+            .and_then(|m| base.join(&decode(&m[1])).ok())
+            .filter(crate::outbound::valid_url)
+            .map(|u| u.to_string());
+        let label = found_year.map_or(name.clone(), |y| format!("{name} ({y})"));
+        out.push(json!({"site":"lordfilm", "url":url.as_str(), "label":label,
+        "thumbUrl":thumb, "duration":null, "author":"LordFilm"}));
+        if out.len() >= 8 {
+            break;
+        }
+    }
+    out
+}
+pub async fn search_names(names: &[&str], year: Option<i64>) -> Option<Vec<Value>> {
+    let mut out = Vec::<Value>::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut answered = false;
+    for name in names.iter().filter(|n| !n.trim().is_empty()).take(4) {
+        let url = match Url::parse_with_params(
+            &format!("{BASE}index.php"),
+            &[("do", "search"), ("subaction", "search"), ("story", name)],
+        ) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+        let html = match crate::api::stream_link::page(url.as_str()).await {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+        answered = true;
+        for item in parse(&html, names, year, false) {
+            let Some(u) = item["url"].as_str() else { continue };
+            if seen.insert(u.to_string()) {
+                out.push(item);
+            }
+        }
+        if out.len() >= 8 {
+            break;
+        }
+    }
+    answered.then(|| {
+        out.truncate(8);
+        out
+    })
 }
 
 fn episode_media(html: &str, season: i64, episode: i64) -> Option<(String, Option<i64>)> {
@@ -178,22 +285,51 @@ pub async fn episodes_on_page(url: &Url) -> anyhow::Result<Vec<(i64, i64)>> {
     anyhow::bail!("Список доступных серий не найден")
 }
 
-pub async fn search_episode(title: &str, year: Option<i64>, season: i64, episode: i64) -> Option<Vec<Value>> {
-    let url = Url::parse_with_params(
-        &format!("{BASE}index.php"),
-        &[("do", "search"), ("subaction", "search"), ("story", title)],
-    )
-    .ok()?;
-    let html = crate::api::stream_link::page(url.as_str()).await.ok()?;
+pub async fn search_episode_names(names: &[&str], year: Option<i64>, season: i64, episode: i64) -> Option<Vec<Value>> {
+    let mut pages = Vec::<Value>::new();
+    let mut seen_page = std::collections::HashSet::new();
+    let mut answered = false;
+    for name in names.iter().filter(|n| !n.trim().is_empty()).take(4) {
+        let url = match Url::parse_with_params(
+            &format!("{BASE}index.php"),
+            &[("do", "search"), ("subaction", "search"), ("story", name)],
+        ) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+        let html = match crate::api::stream_link::page(url.as_str()).await {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+        answered = true;
+        for item in parse(&html, names, year, true) {
+            let Some(u) = item["url"].as_str() else { continue };
+            if seen_page.insert(u.to_string()) {
+                pages.push(item);
+            }
+        }
+        if pages.len() >= 4 {
+            break;
+        }
+    }
+    if !answered {
+        return None;
+    }
     let mut found = Vec::new();
-    for mut item in parse(&html, title, year, true).into_iter().take(2) {
-        let mut url = Url::parse(item["url"].as_str()?).ok()?;
+    for mut item in pages.into_iter().take(3) {
+        let Some(raw) = item["url"].as_str() else { continue };
+        let Ok(mut url) = Url::parse(raw) else { continue };
         url.set_fragment(Some(&format!("nova-season={season}&episode={episode}")));
         if let Ok((_, duration)) = episode_stream(&url).await {
-            item["url"] = json!(url.as_str());
-            item["label"] = json!(format!("{} S{season:02}E{episode:02}", item["label"].as_str()?));
+            let Some(label) = item["label"].as_str().map(str::to_owned) else { continue };
+            let href = url.to_string();
+            item["url"] = json!(href);
+            item["label"] = json!(format!("{label} S{season:02}E{episode:02}"));
             item["duration"] = json!(duration);
             found.push(item);
+            if found.len() >= 2 {
+                break;
+            }
         }
     }
     Some(found)
@@ -217,14 +353,32 @@ mod tests {
             item("https://evil.example/filmy/5.html", "Дюна", 2021),
         ]
         .join("");
-        let results = parse(&html, "Дюна", Some(2021), false);
+        let results = parse(&html, &["Дюна"], Some(2021), false);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["url"], format!("{BASE}filmy/1.html"));
         assert!(results[0]["duration"].is_null());
-        assert!(parse(&html, "Дюна", Some(2020), false).is_empty());
+        assert!(parse(&html, &["Дюна"], Some(2019), false).is_empty());
         assert!(series_url(&Url::parse("https://sg.lordfilm5.pro/serialy/1.html").unwrap()));
+        assert!(movie_url(&Url::parse("https://sz.lordfilm5.pro/filmy/1.html").unwrap()));
         assert!(!movie_url(&Url::parse("https://sd.lordfilm5.pro.evil.example/filmy/1.html").unwrap()));
         assert!(!movie_url(&Url::parse("https://user@sd.lordfilm5.pro/filmy/1.html").unwrap()));
+    }
+
+    #[test]
+    fn matches_original_name_and_cards_without_year() {
+        let item = |url: &str, name: &str, year: &str| {
+            format!(
+                r#"<a class="th-in with-mask" href="{url}"><img src="/poster.jpg"><div class="th-title">{name}</div><div class="th-series">{year}</div></a>"#
+            )
+        };
+        let html =
+            [item("/filmy/10.html", "Девятый легион", ""), item("/filmy/11.html", "Интерстеллар", "2014")].join("");
+        let legion = parse(&html, &["Девятый легион", "The Eagle"], Some(2011), false);
+        assert_eq!(legion.len(), 1);
+        assert_eq!(legion[0]["url"], format!("{BASE}filmy/10.html"));
+        let inter = parse(&html, &["Interstellar", "Интерстеллар"], Some(2014), false);
+        assert_eq!(inter.len(), 1);
+        assert_eq!(inter[0]["url"], format!("{BASE}filmy/11.html"));
     }
 
     #[test]
@@ -242,5 +396,22 @@ mod tests {
             episode_target(&Url::parse(&format!("{BASE}serialy/1.html#nova-season=1&episode=0")).unwrap()).is_none()
         );
         assert!(episode_target(&Url::parse(&format!("{BASE}filmy/1.html#nova-season=1&episode=2")).unwrap()).is_none());
+    }
+
+    #[test]
+    fn allows_off_by_one_year_and_inflected_words() {
+        let item = |url: &str, name: &str, year: i64| {
+            format!(
+                r#"<a class="th-in with-mask" href="{url}"><div class="th-title">{name}</div><div class="th-series">{year}</div></a>"#
+            )
+        };
+        // Festival/release year can differ by one.
+        let html = item("/filmy/20.html", "Девятый легион", 2010);
+        let legion = parse(&html, &["Девятый легион", "The Eagle"], Some(2011), false);
+        assert_eq!(legion.len(), 1);
+        // Russian inflection in one word of a multi-word title.
+        let html = item("/filmy/21.html", "Девятого легиона", 2011);
+        let legion = parse(&html, &["Девятый легион"], Some(2011), false);
+        assert_eq!(legion.len(), 1);
     }
 }

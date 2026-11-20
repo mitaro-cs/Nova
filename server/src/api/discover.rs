@@ -19,6 +19,12 @@ use std::time::Duration;
 
 const ROW: i64 = 20;
 
+#[derive(Deserialize)]
+pub struct FeedQuery {
+    /// Для главной страницы отдаём только подборки видимой вкладки; /discover без scope остаётся полным.
+    scope: Option<String>,
+}
+
 pub(super) fn ext_cards(
     app: &App,
     v: &Viewer,
@@ -41,12 +47,42 @@ pub fn ext_card(app: &App, v: &Viewer, id: &str) -> ApiResult<ExtCard> {
 }
 
 /// Подборки ленты. Пусто (ещё не загружали) - просим обновить.
-pub async fn feed(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {
+pub async fn feed(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<FeedQuery>) -> ApiResult<Json<Value>> {
     let mut rows = Vec::new();
+    let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
+    for (kind, key, label) in [
+        ("movie", "catalog_movies", "Фильмы из подключённых источников"),
+        ("series", "catalog_series", "Сериалы и аниме из подключённых источников"),
+    ] {
+        let mut items = ext_cards(
+            &app,
+            &v,
+            "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
+            "e.title LIMIT 20",
+            &[&kind, &domains],
+        )?;
+        items.truncate(ROW as usize);
+        if !items.is_empty() {
+            rows.push(json!({"key":key,"title":label,"items":items}));
+        }
+    }
     if let Some(row) = because(&app, &v)? {
         rows.push(row);
     }
-    for (key, title, _) in FEEDS {
+    let selected = FEEDS.iter().filter(|(key, _, _)| match q.scope.as_deref() {
+        Some("home") => !key.starts_with("anime_"),
+        Some("movies") => key.ends_with("_movies"),
+        Some("series") => key.ends_with("_series"),
+        Some("anime") => key.starts_with("anime_"),
+        _ => true,
+    });
+    // На домашней вкладке рисуются первые шесть IMDb-рядов; не строим и не передаём скрытые ниже.
+    let selected = if q.scope.as_deref() == Some("home") {
+        selected.take(6).collect::<Vec<_>>().into_iter()
+    } else {
+        selected.collect::<Vec<_>>().into_iter()
+    };
+    for (key, title, _) in selected {
         let mut items = ext_cards(
             &app,
             &v,
@@ -101,6 +137,22 @@ fn because(app: &App, v: &Viewer) -> ApiResult<Option<Value>> {
 
 /// Вся подборка целиком (например, топ-250).
 pub async fn chart(State(app): State<Arc<App>>, v: Viewer, Path(key): Path<String>) -> ApiResult<Json<Value>> {
+    if matches!(key.as_str(), "catalog_movies" | "catalog_series") {
+        let (kind, title) = if key == "catalog_movies" {
+            ("movie", "Фильмы из подключённых источников")
+        } else {
+            ("series", "Сериалы и аниме из подключённых источников")
+        };
+        let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
+        let items = ext_cards(
+            &app,
+            &v,
+            "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
+            "e.title",
+            &[&kind, &domains],
+        )?;
+        return Ok(Json(json!({"key":key,"title":title,"items":items})));
+    }
     let title = FEEDS.iter().find(|c| c.0 == key).map(|c| c.1).ok_or_else(ApiError::not_found)?;
     let items = ext_cards(
         &app,
@@ -372,24 +424,8 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
             a.detail_jobs.lock().remove(&title_id);
         });
     }
-    // Фильм из ленты без кадра: кадр, описание и актёры приходят с IMDb за ~1 с. Подождать их до 2 с
-    // выгоднее, чем отдать пустую страницу и переспрашивать (баннер появлялся через 5-9 с). Кадр уже
-    // есть - не ждём: старые подробности покажутся сразу, новые подтянутся опросом. Картинки не ждём никогда.
-    let no_backdrop: bool = app.db.with(|c| {
-        c.query_row("SELECT backdrop IS NULL OR backdrop = '' FROM ext_titles WHERE id = ?", [&id], |r| r.get(0))
-    })?;
-    if no_backdrop && known != Some(discover::DETAILED) && app.detail_jobs.lock().contains(&id) {
-        let until = std::time::Instant::now() + Duration::from_secs(2);
-        while std::time::Instant::now() < until {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            let detailed: Option<i64> = app.db.with(|c| {
-                c.query_row("SELECT detailed FROM ext_titles WHERE id = ?", [&id], |r| r.get(0)).optional()
-            })?;
-            if detailed == Some(discover::DETAILED) || !app.detail_jobs.lock().contains(&id) {
-                break;
-            }
-        }
-    }
+    // Никогда не задерживаем открытие страницы из-за кадра: клиент уже умеет опрашивать фоновое
+    // обновление, а пока покажет постер и градиентную обложку.
     let card = ext_card(&app, &v, &id)?;
     type Row = (Option<String>, Option<i64>, Option<i64>, Option<String>, Option<String>);
     let (overview, runtime, votes, backdrop, extra): Row = app.db.with(|c| {
@@ -410,7 +446,7 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
             ..Default::default()
         })
         .collect();
-    crate::names::localize(&app, &mut team).await;
+    let people_pending = crate::names::localize_fast(&app, &mut team);
     let people: Vec<Value> = team
         .iter()
         .zip(&raw)
@@ -463,6 +499,7 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String
         "tagline": x["tagline"], "age": x["age"], "releaseDate": x["releaseDate"],
         "countries": list("countries"), "languages": list("languages"), "aka": list("aka"),
         "people": people, "gallery": gallery, "similar": similar,
+        "peoplePending": people_pending,
         "localCard": local.first(),
         "lists": super::lists::of_ext(&app, &v, &id)?,
         "links": super::links::of(&app, v.profile.id, None, Some(&id))?,

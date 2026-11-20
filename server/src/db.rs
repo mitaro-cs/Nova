@@ -704,6 +704,17 @@ CREATE TABLE site_import_pages (
  PRIMARY KEY(domain,url)
 );
 "#,
+    // 34: свежий материал первым: индексы под авто-поиск по времени добавления.
+    r#"
+CREATE INDEX IF NOT EXISTS links_added_at ON links(added_at DESC);
+CREATE INDEX IF NOT EXISTS titles_added_at ON titles(added_at DESC);
+CREATE INDEX IF NOT EXISTS ext_titles_updated_at ON ext_titles(updated_at DESC);
+"#,
+    // 35: источники, которые владелец просил проверять, сразу после установки. Хост может
+    // выключить или удалить любой из них в «Управление → Настройки → Каталоги».
+    r#"
+INSERT OR IGNORE INTO settings(key, value) VALUES ('video.catalogs', '[{"domain":"lordserials.fan","name":"Lordseriales","kind":"series","manifest":null,"search":"https://lordserials.fan/index.php?do=search&subaction=search&story={q}","enabled":true},{"domain":"old.yummyani.me","name":"YummyAnime","kind":"anime","manifest":null,"search":"https://old.yummyani.me/search?word={q}","enabled":true},{"domain":"sx.lordfilm5.pro","name":"LordFilm","kind":"movie","manifest":null,"search":"https://sx.lordfilm5.pro/index.php?do=search&subaction=search&story={q}","enabled":true},{"domain":"sr.lordfilm5.pro","name":"LordFilm сериалы","kind":"series","manifest":null,"search":"https://sr.lordfilm5.pro/filmy/?s={q}","enabled":true},{"domain":"watch-the-sopranos-online.net","name":"Клан Сопрано","kind":"series","manifest":null,"search":"https://www.watch-the-sopranos-online.net/?s={q}","enabled":true},{"domain":"serialfriends.org","name":"Друзья","kind":"series","manifest":null,"search":"https://serialfriends.org/?s={q}","enabled":true},{"domain":"supernatural-spn.net","name":"Сверхъестественное","kind":"series","manifest":null,"search":"https://supernatural-spn.net/?s={q}","enabled":true}]');
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

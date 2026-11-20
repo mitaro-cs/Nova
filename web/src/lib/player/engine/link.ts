@@ -5,6 +5,7 @@ import type { Engine } from '../session.svelte';
 import type { Step } from '../plan';
 import { createHlsEngine, type HlsEngine } from './hls';
 import { createDashEngine } from './dash';
+import { sourceTrackName, distinctNames } from '../tracks';
 
 export interface LinkCtx {
   url: string;
@@ -29,7 +30,8 @@ export function createLinkEngine(ctx: LinkCtx): Engine & Partial<HlsEngine> {
   const audios=()=> (video as (HTMLVideoElement&{audioTracks?:AudioList})|null)?.audioTracks;
   const publish=()=>{
     const tracks=audios();
-    audioCb?.(tracks?Array.from({length:tracks.length},(_,index)=>({index,label:tracks[index].label||tracks[index].language||`Дорожка ${index+1}`,lang:tracks[index].language||null,default:tracks[index].enabled})):[]);
+    const names=tracks?distinctNames(Array.from({length:tracks.length},(_,index)=>({index,label:sourceTrackName(tracks[index].label,tracks[index].language,index)}))):[];
+    audioCb?.(names.map(t=>({ ...t, lang:tracks?.[t.index]?.language||null, default:!!tracks?.[t.index]?.enabled })));
     subsCb?.(video?.textTracks?Array.from(video.textTracks).filter(t=>t.kind==='subtitles'||t.kind==='captions').map(t=>({id:`native:${Array.from(video!.textTracks).indexOf(t)}`,label:t.label||t.language||'Субтитры',lang:t.language||null,forced:false})):[]);
   };
   return {

@@ -11,7 +11,7 @@
   import { untrack } from 'svelte';
   import { progressSync } from '$lib/progressSync.svelte';
   import { searchVideos, isLordfilm, sourceName } from '$lib/links/search';
-  import { rankFound } from '$lib/links/best';
+  import { pickBest, rankFound } from '$lib/links/best';
   import SourceStatus from '$lib/links/SourceStatus.svelte';
   import { localized } from '$lib/localized.svelte';
   import { fadeIn } from '$lib/ui/fade';
@@ -104,7 +104,7 @@
       (r) => {
         if (want !== id) return;
         d = r;
-        if (r.refreshing) pollDetail(want);
+        if (r.refreshing || r.peoplePending) pollDetail(want);
         if (r.card.kind === 'series' && !episodes.length) {
           // Открываем там, где остановились: недосмотренная серия или следующая за последней отмеченной.
           const resume = r.links.find((l) => l.progress && l.season != null && l.episode != null);
@@ -126,7 +126,7 @@
     for (let attempt = 0; attempt < 12 && want === id; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, attempt < 4 ? 1500 : 3000));
       if (want !== id) return;
-      try { const fresh = await getDetail(want); if (want !== id) return; d = fresh; if (!fresh.refreshing) return; } catch { return; }
+      try { const fresh = await getDetail(want); if (want !== id) return; d = fresh; if (!fresh.refreshing && !fresh.peoplePending) return; } catch { return; }
     }
   }
 
@@ -353,6 +353,7 @@
   }
 
   // «Хочу на Nova» - только когда фильма нет ни у нас, ни по ссылкам, ни на Rutube/VK.
+  const lordfilmFound = $derived(onlineFor === episodeKey ? (online ?? []).filter((f) => f.site === 'lordfilm') : []);
   const canWish = $derived(!!d && !d.card.local && !d.links.length && online !== null && !online.length);
   // Главная кнопка под постером: у нас - «Смотреть на Nova», иначе - первое видео онлайн.
   const first = $derived(episodeLinks.find(l => l.preferred) ?? episodeLinks.find(l => l.catalogDomain) ?? episodeLinks.find(l => isLordfilm(l.url)) ?? episodeLinks[0] ?? null);
@@ -383,9 +384,14 @@
       roomBusy = false;
     }
   }
-  const firstFound = $derived(onlineFor === episodeKey ? online?.[0] ?? null : null);
+  const firstFound = $derived(onlineFor === episodeKey ? pickBest(online ?? [], (d?.runtime ?? 0) * 60) : null);
   const sourcePending = $derived(!c?.local && !first && (!d || (isSeries && !selected && !epsSettled) || onlineFor !== episodeKey || online === null || episodeFinding));
-  const sourceMissing = $derived(!!d && !c?.local && !first && !firstFound && !sourcePending);
+  const soonYear = $derived(upcomingYear(d?.releaseDate ?? c?.release));
+  const notOut = $derived(!!c?.soon || !!soonYear);
+  const lordfilmPlayable = $derived((!!first && isLordfilm(first.url)) || firstFound?.site === 'lordfilm' || lordfilmFound.length > 0);
+  // LordFilm не дал воспроизводимого варианта — можно предложить ручной поиск/другие источники.
+  const otherSourceNeeded = $derived(!c?.local && !!d && !sourcePending && !notOut && onlineFor === episodeKey && online !== null && !lordfilmPlayable);
+  const sourceMissing = $derived(otherSourceNeeded && !first && !firstFound);
 
   async function mark(status: 'want' | 'watching' | 'watched' | 'dropped') {
     if (!d) return;
@@ -447,10 +453,8 @@
   const me = $derived(session.me?.user.profile?.id);
   let moreOpen = $state(false);
   // Фильм ещё не вышел: вместо поиска видео - «Выйдет 5 марта 2027», «Скоро» в сведениях.
-  const soonYear = $derived(upcomingYear(d?.releaseDate ?? c?.release));
   const soonLabel = $derived(soonYear ? releaseLabel(d?.releaseDate ?? c?.release) : '');
   // Не вышел: по дате IMDb или по отметке администратора («Ещё не вышел»).
-  const notOut = $derived(!!c?.soon || !!soonYear);
   const notOutText = $derived(soonYear ? `Выйдет ${soonLabel}` : 'Ещё не вышел');
   async function toggleSoon() {
     if (!d) return;
@@ -473,7 +477,8 @@
     const found = firstFound;
     if (found) return { label: 'Смотреть', onclick: () => playFound(found) };
     if (sourcePending) return { label: 'Готовим просмотр…', disabled: true };
-    return { label: 'Найти на другом источнике', onclick: () => (finding = true) };
+    if (otherSourceNeeded) return { label: 'Найти на другом источнике', onclick: () => (finding = true) };
+    return { label: 'Готовим просмотр…', disabled: true };
   });
 </script>
 
@@ -489,10 +494,10 @@
     </a>
   {:else if firstFound}
     <button class="btn white {cls}" onclick={() => playFound(firstFound)}><Icon name="play" size={16} /> Смотреть</button>
-  {:else if sourcePending}
-    <button class="btn white {cls}" disabled><Icon name="search" size={16} /> Готовим просмотр…</button>
-  {:else}
+  {:else if otherSourceNeeded}
     <button class="btn white {cls}" disabled={!d} onclick={() => (finding = true)}><Icon name="search" size={16} /> Найти на другом источнике</button>
+  {:else}
+    <button class="btn white {cls}" disabled><Icon name="search" size={16} /> Готовим просмотр…</button>
   {/if}
 {/snippet}
 
@@ -858,9 +863,17 @@
       </section>
     {/if}
 
-    {#if sourceMissing}
+    {#if otherSourceNeeded && !first}
       <section class="block" aria-label="Другие источники">
-        <p class="muted">{sourceError ? 'Не удалось проверить доступность видео.' : isSeries ? 'Этой серии пока нет в нашей базе.' : 'Этого фильма пока нет в нашей базе.'}</p>
+        <p class="muted">
+          {#if sourceError}
+            Не удалось проверить доступность видео.
+          {:else if firstFound}
+            Подходящий вариант на LordFilm не найден. Можно смотреть найденный источник или выбрать другой вручную.
+          {:else}
+            {isSeries ? 'Этой серии пока нет в нашей базе.' : 'Этого фильма пока нет в нашей базе.'}
+          {/if}
+        </p>
         <SourceStatus title={c.title} original={c.original} year={c.year} />
         <div class="retry">
           <button class="btn" onclick={() => retryKey++}><Icon name="refresh" size={16} /> Повторить</button>
@@ -868,7 +881,7 @@
         </div>
       </section>
     {/if}
-    {#if session.me?.manage && d}<section class="block" aria-label="Управление источником"><button class="btn sm" onclick={() => (finding = true)}>Источники видео</button></section>{/if}
+    {#if session.me?.manage && d && !(otherSourceNeeded && !first)}<section class="block" aria-label="Управление источником"><button class="btn sm" onclick={() => (finding = true)}>Источники видео</button></section>{/if}
   </main>
 
   {#if d}<Lightbox images={d.gallery} bind:index={shot} />{/if}
@@ -878,7 +891,7 @@
 
 <NewList bind:open={creating} oncreated={created} />
 {#if d}
-  <LinkFinder bind:open={finding} query={videoQuery} extId={d.card.id} season={isSeries ? selected?.season ?? null : null} episode={isSeries ? selected?.episode ?? null : null} saved={episodeLinks} otherSourcesOnly onadded={() => d && load(d.card.id)} />
+  <LinkFinder bind:open={finding} query={videoQuery} extId={d.card.id} season={isSeries ? selected?.season ?? null : null} episode={isSeries ? selected?.episode ?? null : null} saved={episodeLinks} otherSourcesOnly={otherSourceNeeded} onadded={() => d && load(d.card.id)} />
 {/if}
 
 <style>

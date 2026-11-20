@@ -11,7 +11,7 @@
   // «Плеер сайта» (встроенный плеер Rutube/VK или страница своего сайта). YouTube - только своим.
   const id = $derived(Number(page.params.id));
   let link = $state<VideoLink | null>(null);
-  let src = $state<{ url: string; hls: boolean; dash?: boolean; title: string; linkId: number; start: number } | null>(null);
+  let src = $state<{ url: string; hls: boolean; dash?: boolean; title: string; linkId: number; start: number; season?: number | null; episodeNo?: number | null } | null>(null);
   let own = $state(false);
   function sourcePage(l: VideoLink | null) {
     if (l?.kind !== 'site') return null;
@@ -61,7 +61,7 @@
         const start = p && p.position < p.duration * 0.95 ? p.position : 0;
         try {
           const s = await api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${want}/stream/source`);
-          if (want === id) src = { ...s, title: fetchedTitle||l.label, linkId: l.id, start };
+          if (want === id) src = { ...s, title: fetchedTitle||l.label, linkId: l.id, start, season: l.season, episodeNo: l.episode };
         } catch (x) {
           if (want !== id) return;
           // Сайт не отдал поток - его собственный плеер (у своего сайта - сообщение и ссылка).
@@ -87,7 +87,8 @@
         const min = d.runtime ?? d.card?.runtime ?? null;
         if (link === l) {
           expected = l.season==null&&min ? min * 60 : null;
-          if(d.card?.title){fetchedTitle=d.card.title;if(src)src={...src,title:d.card.title};}
+          // Заголовок фиксируется в момент открытия источника и больше не меняется.
+          if(d.card?.title && !src)fetchedTitle=d.card.title;
         }
       },
       () => {},

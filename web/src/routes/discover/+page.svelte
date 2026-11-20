@@ -4,6 +4,7 @@
   import { api, errorText, post } from '$lib/api';
   import Poster from '$lib/discover/Poster.svelte';
   import PosterRow from '$lib/discover/PosterRow.svelte';
+  import ChainCheck from '$lib/discover/ChainCheck.svelte';
   import { extSheet } from '$lib/discover/sheet.svelte';
   import LinkFinder from '$lib/links/LinkFinder.svelte';
   import { session } from '$lib/session.svelte';
@@ -41,12 +42,14 @@
   // Пустая лента - сервер только начал загрузку: спрашиваем ещё раз, пока не появится.
   $effect(() => {
     void extSheet.version;
-    if (chart) return;
+    if (chart || q.trim().length >= 2) return;
     let timer = 0;
     let tries = 0;
+    const scope = kind === 'series' ? 'series' : kind === 'movies' ? 'movies' : '';
+    const feedUrl = scope ? `/api/discover?scope=${scope}` : '/api/discover';
     const load = () =>
       Promise.all([
-        api<{ rows: Row[]; updatedAt: number | null }>('/api/discover'),
+        api<{ rows: Row[]; updatedAt: number | null }>(feedUrl),
         api<NowItem[]>('/api/friends/activity').catch(() => [] as NowItem[]),
       ]).then(
         ([r, a]) => {
@@ -127,10 +130,15 @@
         </nav>
         <div class="acts">
           <button class="btn" onclick={() => (finder = true)}><Icon name="link" size={18} /> Смотреть по ссылке</button>
+          {#if session.me?.user.role === 'host'}
+            <a class="btn" href="/admin?tab=catalog#sources">Источники каталога <Icon name="right" size={16} /></a>
+          {/if}
         </div>
       </div>
     </div>
   </section>
+
+  <ChainCheck />
 
   {#if q.trim().length >= 2}
     <section aria-label="Найдено">

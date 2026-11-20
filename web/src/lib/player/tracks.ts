@@ -2,6 +2,30 @@
 // потока с другим `audio` (цепочка `plan.ts`), отдельного кода не требует.
 import { parseVtt, type Cue } from './vtt';
 
+/**
+ * Озвучку подписываем так, как она названа в источнике. Если две дорожки называются одинаково,
+ * добавляем « 2», « 3» - иначе в выборе нельзя понять, чем они отличаются.
+ */
+export function distinctNames(items: { index: number; label: string }[]) {
+  const used = new Map<string, number>();
+  return items.map(({ index, label }) => {
+    const base = label.trim();
+    const seen = (used.get(base) ?? 0) + 1;
+    used.set(base, seen);
+    return { index, label: seen === 1 ? base : `${base} ${seen}` };
+  });
+}
+
+/** Replace position-only names with a clear language label; keep genuine distributor names unchanged. */
+export function sourceTrackName(name: string | undefined, lang: string | undefined, index: number) {
+  const raw = (name || '').trim();
+  const code = (lang || raw).trim().toLowerCase();
+  const generic = !raw || /^(?:рус|русс|rus|ru|eng|en|ukr|uk|ua|jpn|ja|audio|track|дорожка)(?:\s*[-_ ]?\s*\d+)?$/iu.test(raw);
+  if (!generic) return raw;
+  const language = ({ ru: 'Русская дорожка', rus: 'Русская дорожка', en: 'Английская дорожка', eng: 'Английская дорожка', uk: 'Украинская дорожка', ukr: 'Украинская дорожка', ua: 'Украинская дорожка', ja: 'Японская дорожка', jpn: 'Японская дорожка', de: 'Немецкая дорожка', deu: 'Немецкая дорожка', fr: 'Французская дорожка', fra: 'Французская дорожка', es: 'Испанская дорожка', spa: 'Испанская дорожка' } as Record<string, string>)[code] ?? ({ 'рус': 'Русская дорожка', 'русский': 'Русская дорожка', 'английский': 'Английская дорожка', 'украинский': 'Украинская дорожка', 'японский': 'Японская дорожка' } as Record<string, string>)[raw.toLowerCase()] ?? `Аудиодорожка ${index + 1}`;
+  return language;
+}
+
 /** Вид субтитров - у каждого зрителя свой, помнится на устройстве. */
 export interface SubLook {
   size: 's' | 'm' | 'l';

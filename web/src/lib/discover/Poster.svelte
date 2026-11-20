@@ -40,7 +40,7 @@
 
 {#snippet body()}
   <span class="art" class:ranked={rank !== null} style:background={c.poster ? undefined : placeholder(c.title)}>
-    {#if !loaded}<span class="ph">{c.title}</span>{/if}
+    {#if !loaded}<span class="ph"><i>{c.kind==='series'?'СЕРИАЛ':'ФИЛЬМ'}</i><b>{c.title}</b>{#if c.year}<small>{c.year}</small>{/if}</span>{/if}
     {#if source}<img use:fadeIn src={artW(source, 342)} alt="" loading="lazy" decoding="async" width="342" height="513" onload={() => loaded = true} onerror={retryImage} />{/if}
     {#if c.rating}<span class="rate" class:low={c.rating < 7}>{c.rating.toFixed(1)}</span>{/if}
     {#if rank}<span class="rank">{rank}</span>{/if}
@@ -127,14 +127,22 @@
   }
   .ph {
     position: absolute;
-    inset: 40px 10px 10px;
-    display: grid;
-    place-items: center;
-    padding: 0;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px 14px;
     text-align: center;
-    font-weight: 700;
     overflow: hidden;
+    background: radial-gradient(ellipse at 50% 38%, #ffffff12, transparent 58%), linear-gradient(0deg,#050506a8,transparent 74%);
   }
+  .ph::before { content: ''; position: absolute; inset: 14px; border: 1px solid #ffffff24; border-radius: 12px; pointer-events: none; }
+  .ph i { font-size: 10px; font-style: normal; font-weight: 700; letter-spacing: .22em; color: #ffffffa0; }
+  .ph b { max-width: 100%; font-size: clamp(15px, 1.4vw, 21px); line-height: 1.15; text-wrap: balance; overflow-wrap: anywhere; text-shadow: 0 2px 16px #000; }
+  .ph small { font-size: 12px; color: #ffffffa0; }
+  .ph > * { position: relative; z-index: 1; }
   .ranked .ph { bottom: 60px; }
   .rank {
     position: absolute;

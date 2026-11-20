@@ -28,7 +28,7 @@
       <div class="col" style:--speed="{70 + ((c * 17) % 5) * 10}s" style:--delay="{-((c * 23) % 50)}s">
         {#each [0, 1] as half (half)}
           {#each col as src, i (`${half}-${i}`)}
-            <span class="tile" style:--h={(c * 61 + i * 37) % 360}>{#if src}<img {src} alt="" decoding="async" loading="lazy" />{/if}</span>
+            <span class="tile" style:--h={(c * 61 + i * 37) % 360}>{#if src}<img {src} alt="" decoding="async" loading="lazy" onerror={(e)=>((e.currentTarget as HTMLImageElement).style.visibility='hidden')} />{/if}</span>
           {/each}
         {/each}
       </div>

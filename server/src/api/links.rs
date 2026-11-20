@@ -116,7 +116,7 @@ pub fn parse(raw: &str) -> Option<Parsed> {
         }
         _ => {
             let path = u.path().to_lowercase();
-            [".mp4", ".m4v", ".webm", ".m3u8", ".mov"].iter().any(|e| path.ends_with(e)).then(|| Parsed {
+            [".mp4", ".m4v", ".webm", ".m3u8", ".mpd", ".mov"].iter().any(|e| path.ends_with(e)).then(|| Parsed {
                 kind: "direct",
                 url: u.to_string(),
                 embed: None,
@@ -300,6 +300,7 @@ pub async fn import_source(
         }
         Ok(count)
     })?;
+    app.kick_material();
     Ok(Json(json!({"count":count})))
 }
 
@@ -528,7 +529,7 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
     {
         return Err(ApiError::bad("bad_episode", "Укажите сезон и номер серии"));
     }
-    let p = parse_with(&b.url, &extra_sites(&app)).ok_or_else(|| unknown_site_or_bad(&b.url))?;
+    let mut sites = extra_sites(&app);
     let source_domain = if let Some(domain) = b.source_domain.as_deref() {
         let normalized = site_domain(domain).ok_or_else(|| ApiError::bad("source", "Неверный адрес источника"))?;
         if !crate::own_sites::enabled_domains(&app).contains(&normalized)
@@ -536,15 +537,30 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
         {
             return Err(ApiError::bad("source_disabled", "Источник не подключён или выключен"));
         }
-        let url = Url::parse(&p.url).map_err(|_| ApiError::bad("source", "Неверный адрес видео"))?;
-        let same = url.host_str().is_some_and(|h| h == normalized || h.ends_with(&format!(".{normalized}")));
-        if !same && !crate::site_sources::is_provider(&url) {
-            return Err(ApiError::bad("source", "Видео не принадлежит источнику"));
+        // Каталог нашёл ссылку на плеер (online-serial.com, horsez.org и т.п.). Такой домен
+        // не обязан быть в «Своих сайтах»: источник уже разрешён хостом как каталог.
+        if !sites.iter().any(|s| s == &normalized) {
+            sites.push(normalized.clone());
         }
         Some(normalized)
     } else {
         None
     };
+    // Ссылка пришла из поиска по каталогу: её домен может отличаться от домена каталога
+    // (Dooplay ведёт на online-serial.com, horsez.org и другие плееры). Источник уже разрешён.
+    let p = parse_with(&b.url, &sites)
+        .or_else(|| {
+            source_domain.as_ref().and_then(|_| {
+                let u = Url::parse(b.url.trim()).ok()?;
+                crate::outbound::valid_url(&u).then(|| Parsed {
+                    kind: "site",
+                    url: u.to_string(),
+                    embed: None,
+                    id: None,
+                })
+            })
+        })
+        .ok_or_else(|| unknown_site_or_bad(&b.url))?;
     if let Some((season, episode)) = Url::parse(&p.url).ok().as_ref().and_then(crate::lordfilm::episode_target)
         && (b.season != Some(season) || b.episode != Some(episode))
     {
@@ -617,6 +633,8 @@ pub async fn add(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<NewLink>)
         }
         Ok(id)
     })?;
+    // Новая ссылка = новый материал: поиск по этому фильму должен увидеть её сразу.
+    app.kick_material();
     // Starting playback must never wait for a thumbnail or remote page metadata.
     let background = app.clone();
     tokio::spawn(async move {
@@ -820,6 +838,7 @@ mod tests {
         assert_eq!(y.embed.as_deref(), Some("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1"));
         assert_eq!(parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1").unwrap().kind, "youtube");
         assert_eq!(parse("https://cdn.example.com/a/movie.MP4").unwrap().kind, "direct");
+        assert_eq!(parse("https://cdn.example.com/a/manifest.mpd").unwrap().kind, "direct");
         assert!(parse("https://example.com/page").is_none());
         assert!(parse("javascript:alert(1)").is_none());
         assert!(parse("https://rutube.ru/video/short/").is_none());

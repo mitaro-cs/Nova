@@ -403,33 +403,51 @@
       transform: scale(0.5) rotate(-8deg);
     }
   }
-  @media (max-width: 900px) {
-    .card {
-      position: relative;
-      top: 0;
-    }
+  .social-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;width:100%}
+  .social-actions .btn{border-radius:999px;min-height:42px}
+  /* Один предсказуемый профильный hero для широких экранов: контент собирается в компактную сетку. */
+  @media (min-width: 1001px) {
+    .card { position:relative;top:0;width:100%;border-radius:30px;border-color:#ffffff1a;background:#08080a; }
+    .cover { height:300px; }
+    .cover::after { background:linear-gradient(180deg,#0001 10%,#0003 48%,#08080a 100%); }
+    .who { grid-template-columns:140px minmax(0,1fr) 280px;justify-items:start;align-items:center;gap:9px 22px;padding:0 30px 24px;text-align:left; }
+    .ring { grid-column:1;grid-row:1 / span 4;width:126px;height:126px;margin-top:-78px;align-self:start; }
+    h1 { grid-column:2;grid-row:1;margin:0;font-size:clamp(32px,3vw,46px);line-height:1.05; }
+    .now { grid-column:2;grid-row:2;justify-content:flex-start;margin:0;font-size:15px; }
+    .caps { grid-column:2;grid-row:3;justify-content:flex-start;margin:0; }
+    .bdg { grid-column:2;grid-row:4;justify-content:flex-start;margin:0; }
+    .genres,.bio,.locked { grid-column:2;margin:0;justify-content:flex-start; }
+    .box { grid-column:3;grid-row:1 / span 3;align-self:start;margin:0;padding:16px 4px;border-radius:18px; }
+    .box b { font-size:26px; }
+    .btns { grid-column:3;grid-row:4 / span 2;align-self:start;margin:0; }
+    .btns>.btn { min-height:42px; }
+    .social-actions { grid-column:3;grid-row:6;margin:0; }
+    .meds { grid-column:1 / -1;grid-row:7;margin:5px 0 0; }
+    .live { width:22px;height:22px; }
+  }
+  @media (max-width: 1000px) {
+    .card { position:relative;top:0; }
   }
   @media (max-width: 600px) {
-    .shortcuts{top:max(52px,calc(env(safe-area-inset-top) + 12px));right:16px}.shortcuts summary{width:44px;height:44px}
-    .card { border: 0; border-radius: 0; background: #000; }
-    .cover { height: 250px; }
-    .who { padding: 0 16px 24px; }
-    .ring { width: 116px; height: 116px; margin-top: -106px; }
-    .live { width:20px;height:20px;right:0;bottom:7px; }
-    h1 { margin-top: 18px; font-size: 29px;letter-spacing:-.035em; }
-    .now { margin-top: 9px; font-size: 13px;justify-content:center;max-width:100%;line-height:1.5; }
-    .caps { margin-top: 12px;gap:6px; }
-    .caps li { padding: 7px 10px; font-size: 12px;background:transparent;box-shadow:inset 0 0 0 1px #ffffff26; }
-    .bdg { margin-top: 10px;gap:6px; }
-    .bdg li { padding: 6px 10px; font-size: 12px;box-shadow:inset 0 0 0 1px #ffffff40; }
-    .genres { margin-top: 11px;gap:5px; }
-    .genres a { padding: 7px 10px; font-size: 12px;background:#1b1b1b; }
-    .box { margin-top: 13px; padding: 16px 6px; border-radius: 19px;border-color:#ffffff26; }
-    .box b { font-size: 25px;line-height:1.2; }
-    .box small { display:block;margin-top:9px;color:#8f8f95;font-size:12px; }
-    .btns { margin-top: 12px;gap:8px; }
-    .btns > .btn { min-height: 44px;font-size:15px; }
-    .meds { margin-top:16px;gap:12px; }
+    .card { border-radius:26px;background:#080809; }
+    .cover { height:230px; }
+    .cover::after { background:linear-gradient(180deg,#0001 8%,#080809 100%); }
+    .shortcuts { top:max(52px,calc(env(safe-area-inset-top) + 12px));right:16px; }
+    .shortcuts summary { width:44px;height:44px; }
+    .who { justify-items:start;padding:0 20px 22px;text-align:left; }
+    .ring { width:96px;height:96px;margin-top:-68px; }
+    h1 { margin-top:14px;font-size:30px; }
+    .now { justify-content:flex-start;max-width:100%;line-height:1.5; }
+    .caps,.bdg,.genres { justify-content:flex-start; }
+    .caps li { padding:7px 10px;background:transparent;box-shadow:inset 0 0 0 1px #ffffff26; }
+    .bdg li { padding:6px 10px;box-shadow:inset 0 0 0 1px #ffffff40; }
+    .genres a { padding:7px 10px;background:#1b1b1b; }
+    .box { padding:14px 0;border:0;border-radius:0;text-align:left; }
+    .box div+div { padding-left:16px; }
+    .box small { display:block;margin-top:5px; }
+    .btns { margin-top:12px; }
+    .btns>.btn { min-height:44px;font-size:15px; }
+    .meds { gap:12px; }
     .meds small { font-size:12px; }
     .m { flex-wrap:nowrap;gap:0; }
     .m :global(.medal) { width:36px;height:36px; }

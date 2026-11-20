@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { heroSet } from '$lib/ui/art';
+  import { heroSet, placeholder } from '$lib/ui/art';
   import { fitTitle } from '$lib/ui/fitTitle';
   import { getDetail, peekDetail } from '$lib/discover/details';
   import { genreRu } from '$lib/genres';
@@ -79,15 +79,6 @@
     const src = d?.backdrop ?? d?.gallery?.[0] ?? it.ext!.poster ?? null;
     return { src, set: d?.backdrop || d?.gallery?.[0] ? heroSet(src!, null) : undefined };
   }
-  // Описания соседей получаем заранее, чтобы у них был свой кадр, а не постер.
-  $effect(() => {
-    for (const s of slots) {
-      const id = s.it.ext?.id;
-      if (!id || id in fetched || peekDetail(id)) continue;
-      void getDetail(id).then((r) => (fetched[id] = r), () => {});
-    }
-  });
-
   const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
   function decode(src: string, small?: string | null) {
     const img = new Image();
@@ -200,7 +191,8 @@
       {#each slots as s (s.key)}
         {@const art = artOf(s.it)}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div class="slot" class:side={s.r !== 0} style:--rel={s.r} style:z-index={10 - Math.abs(s.r)} style:opacity={Math.abs(s.r) > 1 ? 0 : 1} in:fade|global={{ duration: 450 }} aria-hidden={s.r !== 0 ? 'true' : undefined} onclick={() => s.r !== 0 && pick(s.i)}>
+        <div class="slot" class:side={s.r !== 0} style:--rel={s.r} style:z-index={10 - Math.abs(s.r)} style:opacity={Math.abs(s.r) > 1 ? 0 : 1} style:background={placeholder(s.it.card?.title ?? s.it.ext?.title ?? 'Nova')} in:fade|global={{ duration: 450 }} aria-hidden={s.r !== 0 ? 'true' : undefined} onclick={() => s.r !== 0 && pick(s.i)}>
+          <div class="art-fallback" aria-hidden="true"><i>{s.it.card?.kind==='series'||s.it.ext?.kind==='series'?'СЕРИАЛ':'ФИЛЬМ'}</i><b>{s.it.card?.title ?? s.it.ext?.title}</b></div>
           {#if art.src}<img class="backdrop" src={art.src} srcset={art.set} sizes="(max-width: 640px) 100vw, 62vw" alt="" decoding="async" fetchpriority={s.r === 0 ? 'high' : 'auto'} onerror={(event) => { const img=event.currentTarget as HTMLImageElement; const fallback=s.it.card?.poster ?? s.it.ext?.poster; if(fallback && img.dataset.fallback !== fallback && img.getAttribute('src') !== fallback){img.dataset.fallback=fallback;img.removeAttribute('srcset');img.src=fallback;}else img.style.visibility='hidden'; }} />{/if}
           {#if Trailer && s.r === 0}<Trailer card={s.it.card} ext={s.it.ext} bind:active={trailerOn} />{/if}
           <div class="shade"></div>
@@ -251,6 +243,9 @@
   .track { position: relative; width: var(--cw); height: var(--ch); margin: 0 auto; animation: track-in .9s cubic-bezier(.22, 1, .36, 1) both; }
   @keyframes track-in { from { opacity: 0; transform: translateY(14px) scale(.975); } }
   .slot { position: absolute; inset: 0; overflow: hidden; border-radius: var(--round); background: #0e0e10; isolation: isolate; box-shadow: 0 34px 80px -34px #000; transform: translateX(calc(var(--rel) * var(--pitch))); transition: transform .95s cubic-bezier(.22, 1, .36, 1), opacity .6s ease; will-change: transform; }
+  .art-fallback { position:absolute; inset:0; z-index:-3; display:grid; place-content:center; justify-items:center; gap:14px; padding:10%; text-align:center; background:radial-gradient(ellipse at 50% 35%,#ffffff18,transparent 60%),linear-gradient(0deg,#050506bc,transparent 85%); }
+  .art-fallback i { font-size:11px; font-style:normal; font-weight:700; letter-spacing:.24em; color:#ffffffa8; }
+  .art-fallback b { max-width:18ch; font-size:clamp(24px,5vw,64px); line-height:1.08; text-wrap:balance; text-shadow:0 4px 24px #000; }
   .slot.side { cursor: pointer; }
   .backdrop { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: center 30%; }
   .shade { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(0deg, #000 0%, #000e 14%, #000a 34%, #0003 56%, transparent 74%), linear-gradient(180deg, #0005, transparent 24%); }

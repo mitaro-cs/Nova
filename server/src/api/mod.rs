@@ -4,6 +4,7 @@ pub(crate) mod account;
 mod activity;
 mod admin;
 mod catalog;
+mod catalog_import;
 mod diag;
 mod discover;
 pub(crate) mod links;
@@ -16,6 +17,7 @@ mod profile;
 mod profiles;
 mod resume;
 pub(crate) mod rooms;
+mod site_import;
 mod social;
 mod stats;
 pub(crate) mod stream_link;
@@ -119,6 +121,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/discover/refresh", post(discover::refresh))
         .route("/api/links", get(links::list).post(links::add))
         .route("/api/links/search", get(links::search))
+        .route("/api/stream/diagnose", post(stream_link::diagnose))
         .route("/api/sources/status", get(links::sources_status))
         .route("/api/admin/video-source", post(links::import_source))
         .route("/api/links/thumbnail", get(links::thumbnail))
@@ -191,6 +194,20 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/backup", post(stats::backup))
         .route("/api/diag/client", post(diag::client))
         .route("/api/admin/settings", get(admin::settings).put(admin::save_settings))
+        .route("/api/admin/catalogs", get(admin::catalogs).put(admin::save_catalogs))
+        .route("/api/admin/catalogs/probe", post(admin::probe_catalog))
+        .route("/api/admin/site-sources", get(site_import::list))
+        .route("/api/admin/site-sources/{id}/health", get(site_import::health))
+        .route("/api/admin/site-sources/{id}/connect", post(site_import::connect))
+        .route("/api/admin/site-sources/{id}/import", post(site_import::start))
+        .route("/api/admin/site-sources/{id}/stop", post(site_import::stop))
+        .route("/api/admin/site-sources/{id}/match", post(site_import::assign))
+        .route("/api/admin/site-sources/{id}/verify", post(site_import::verify))
+        .route("/api/admin/catalogs/check", post(catalog_import::check))
+        .route(
+            "/api/admin/catalogs/import",
+            post(catalog_import::import).layer(axum::extract::DefaultBodyLimit::max(catalog_import::MAX_BYTES)),
+        )
         .route("/api/admin/logins", get(admin::logins))
         .route("/api/admin/libraries", get(admin::libraries).post(admin::add_library))
         .route("/api/admin/libraries/pick", post(admin::pick_folder))

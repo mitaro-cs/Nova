@@ -72,7 +72,7 @@
     void refresh;
     const request = ++generation;
     Promise.all([
-      api<Feed>('/api/discover').then((f) => { feedFailed = false; return f; }, () => { feedFailed = true; return { rows: [] } as Feed; }),
+      api<Feed>(`/api/discover?scope=${encodeURIComponent(tab)}`).then((f) => { feedFailed = false; return f; }, () => { feedFailed = true; return { rows: [] } as Feed; }),
       api<Marks>('/api/me/marks').catch(() => ({ want: [], watching: [], watched: [] })),
     ]).then(([f, m]) => {
       if (request !== generation) return;

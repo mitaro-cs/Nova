@@ -1,5 +1,6 @@
 // DASH загружается только при открытии MPD. Навигация и локальная библиотека его не скачивают.
 import type { HlsEngine, Level } from './hls';
+import { sourceTrackName, distinctNames } from '../tracks';
 
 interface Track { id?: string; index?: number; lang?: string; labels?: {text:string}[]; roles?: {value:string}[] }
 interface Representation { id: string; height?: number; width?: number; bandwidth?: number }
@@ -40,7 +41,9 @@ export function createDashEngine(url:string,loader=loadDash):HlsEngine {
           display:[v.height?`${v.height}p`:'Исходное качество',v.bandwidth?`${(v.bandwidth/1e6).toFixed(1)} Мбит/с`:null].filter(Boolean).join(' · ')})).sort((a,b)=>b.height-a.height);
         levelsCb?.(current);
         const active=p.getCurrentTrackFor('audio');
-        audioCb?.(p.getTracksFor('audio').map((t,index)=>({index,label:t.labels?.[0]?.text||t.roles?.[0]?.value||t.lang||`Дорожка ${index+1}`,lang:t.lang??null,default:!!active&&active.id===t.id})));
+        const tracks=p.getTracksFor('audio');
+        const audioNames=distinctNames(tracks.map((t,index)=>({index,label:sourceTrackName(t.labels?.[0]?.text||t.roles?.[0]?.value,t.lang,index)})));
+        audioCb?.(audioNames.map((t,index)=>({...t,lang:tracks[index]?.lang??null,default:!!active&&active.id===tracks[index]?.id})));
         subsCb?.(p.getTracksFor('text').map((t,index)=>({id:`dash:${index}`,label:t.labels?.[0]?.text||t.lang||`Субтитры ${index+1}`,lang:t.lang??null,forced:false})));
         p.enableText(false);
       });

@@ -15,7 +15,7 @@
   import { genreRu } from '$lib/genres';
   import { setMark, setStatus, toggle, toggleMark } from '$lib/marks';
   import type { Card, ExtCard, ExtDetail } from '$lib/types';
-  import { artW, heroSet } from './art';
+  import { artW, heroSet, placeholder } from './art';
   import Icon from './Icon.svelte';
 
   // Карточка ленты «Что смотреть»: кадр из фильма 16:9, на нём - трейлер без звука, пока карточка занимает
@@ -112,7 +112,8 @@
 <article class="fc" bind:this={root}>
   <div class="shot">
     <a class="cover" {href} onclick={() => ext && remember(ext)} aria-label={c.title}>
-      {#if shot}<img class:poster={!framed} src={artW(shot, 640)} srcset={big ? heroSet(big, small) : undefined} sizes="(min-width: 1001px) 60vw, 100vw" alt="" loading="lazy" decoding="async" />{/if}
+      <span class="cover-fallback" style:background={placeholder(c.title)} aria-hidden="true"><i>{c.kind==='series'?'СЕРИАЛ':'ФИЛЬМ'}</i><b>{c.title}</b>{#if c.year}<small>{c.year}</small>{/if}</span>
+      {#if shot}<img class:poster={!framed} src={artW(shot, 640)} srcset={big ? heroSet(big, small) : undefined} sizes="(min-width: 1001px) 60vw, 100vw" alt="" loading="lazy" decoding="async" onerror={(e)=>{const img=e.currentTarget as HTMLImageElement;const fallback=c.poster?artW(c.poster,640):undefined;if(fallback&&img.dataset.posterFallback!=='1'&&img.currentSrc!==fallback){img.dataset.posterFallback='1';img.removeAttribute('srcset');img.src=fallback;}else img.style.display='none';}} />{/if}
       {#if active && TB && imdb}{#key imdb}<TB imdbId={imdb} bare bind:available bind:muted bind:this={tb} />{/key}{/if}
     </a>
     {#if active && available}
@@ -157,8 +158,13 @@
     inset: 0;
     display: block;
   }
+  .cover-fallback { position:absolute; inset:0; z-index:0; display:grid; place-content:center; justify-items:center; gap:10px; padding:24px; text-align:center; background-image:radial-gradient(ellipse at 50% 35%,#ffffff18,transparent 60%),linear-gradient(0deg,#050506bb,transparent 85%); }
+  .cover-fallback i { font-size:10px; font-style:normal; font-weight:700; letter-spacing:.22em; color:#ffffffa8; }
+  .cover-fallback b { max-width:18ch; font-size:clamp(20px,3vw,42px); line-height:1.1; text-wrap:balance; text-shadow:0 3px 18px #000; }
+  .cover-fallback small { font-size:12px; color:#ffffffb5; }
   .cover img {
     position: absolute;
+    z-index: 1;
     inset: 0;
     width: 100%;
     height: 100%;

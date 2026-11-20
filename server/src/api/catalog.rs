@@ -445,7 +445,7 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) 
         )
     })?;
     let mut people: Vec<crate::meta::Person> = serde_json::from_str(&people).unwrap_or_default();
-    crate::names::localize(&app, &mut people).await;
+    let people_pending = crate::names::localize_fast(&app, &mut people);
     for p in &mut people {
         p.photo = img(p.photo.take());
     }
@@ -485,6 +485,7 @@ pub async fn title(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) 
         "imdbId": imdb_id, "provider": provider, "files": files, "seasons": seasons, "next": next,
         "inList": c.in_list, "similar": similar, "canDownload": downloads, "friends": friends,
         "metadataPending": metadata_pending && crate::meta::Provider::from_settings(&app).is_some(),
+        "peoplePending": people_pending,
     })))
 }
 

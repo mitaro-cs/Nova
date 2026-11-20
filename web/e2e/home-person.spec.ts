@@ -6,7 +6,7 @@ const card = { id: 'tt0903747', kind: 'series', title: 'Во все тяжкие
 
 test('главная показывает подборки и планы даже без локальных файлов', async ({ page }, info) => {
   await page.route('**/api/library', (r) => r.fulfill({ json: { items: [], recent: [], counts: { all: 0, want: 0, watching: 0, watched: 0 } } }));
-  await page.route('**/api/discover', (r) => r.fulfill({ json: { rows: [{ key: 'popular_series', title: 'Популярные сериалы', items: [card] }] } }));
+  await page.route(/\/api\/discover(?:\?|$)/, (r) => r.fulfill({ json: { rows: [{ key: 'popular_series', title: 'Популярные сериалы', items: [card] }] } }));
   await page.route('**/api/me/marks', (r) => r.fulfill({ json: { want: [], watching: [{ ext: card }], watched: [] } }));
   await page.route('**/api/discover/title/*', (r) => r.fulfill({ json: { card, overview: 'История учителя, чья жизнь меняется.', backdrop: null, posterLarge: null } }));
   await page.goto(url('/'));
@@ -19,7 +19,7 @@ test('главная показывает подборки и планы даж�
 
 test('при сбое IMDb сохранённые планы остаются большой рекомендацией', async ({ page }) => {
   await page.route('**/api/library', (r) => r.fulfill({ json: { items: [], recent: [], counts: {} } }));
-  await page.route('**/api/discover', (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: {} }));
+  await page.route(/\/api\/discover(?:\?|$)/, (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: {} }));
   await page.route('**/api/me/marks', (r) => r.fulfill({ json: { want: [{ ext: { ...card, mark: 'want' } }], watching: [], watched: [] } }));
   await page.route('**/api/theme', (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: {} }));
   await page.route('**/api/discover/title/*', (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: {} }));
@@ -31,7 +31,7 @@ test('при сбое IMDb сохранённые планы остаются б
 
 test('при недоступном IMDb главная предлагает поиск и повтор загрузки', async ({ page }) => {
   await page.route('**/api/library', (r) => r.fulfill({ json: { items: [], recent: [], counts: {} } }));
-  await page.route('**/api/discover', (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: { message: 'Подборки недоступны' } }));
+  await page.route(/\/api\/discover(?:\?|$)/, (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: { message: 'Подборки недоступны' } }));
   await page.route('**/api/me/marks', (r) => r.fulfill({ json: { want: [], watching: [], watched: [] } }));
   await page.route('**/api/theme', (r) => r.fulfill({ status: 503, headers: { 'x-fsfy': '1' }, json: {} }));
   await page.goto(url('/'));

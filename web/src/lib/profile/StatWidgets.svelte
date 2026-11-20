@@ -117,15 +117,16 @@
   .grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
+    gap: 0;
+    border-block: 1px solid var(--line);
   }
   .w {
     min-width: 0;
-    padding: 16px;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: var(--surface);
+    padding: 20px 18px;
+    background: transparent;
   }
+  .w:not(:nth-child(3n)) { border-right: 1px solid var(--line); }
+  .w:nth-child(-n+6) { border-bottom: 1px solid var(--line); }
   .w.wide {
     grid-column: span 2;
   }
@@ -264,8 +265,12 @@
   @media (max-width: 900px) {
     .grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
     }
+    .w:not(:nth-child(3n)) { border-right: 0; }
+    .w:nth-child(odd) { border-right: 1px solid var(--line); }
+    .w:nth-child(-n+6) { border-bottom: 0; }
+    .w:not(:nth-last-child(-n+2)) { border-bottom: 1px solid var(--line); }
+    .w.wide { grid-column: span 2; }
     .big {
       font-size: 32px;
     }
@@ -277,5 +282,8 @@
     .w.wide {
       grid-column: auto;
     }
+    .w,.w:nth-child(odd) { padding:18px 8px;border-right:0;border-bottom:1px solid var(--line); }
+    .w:last-child { border-bottom:0; }
+    .bars { justify-content:flex-start; }
   }
 </style>

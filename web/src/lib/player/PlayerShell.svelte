@@ -12,6 +12,7 @@
   import Overlay from './Overlay.svelte';
   import Panels from './Panels.svelte';
   import { heightLabel } from './codecs';
+  import { defaultAudioTrack } from './audio-default';
   import { createHlsEngine, type HlsEngine, type Level } from './engine/hls';
   import { createLinkEngine } from './engine/link';
   import { createNativeEngine, type NativeEngine } from './engine/native';
@@ -20,7 +21,7 @@
   import { nativeLevels } from './native-master';
   import { buildChain, detectCaps, type Quality, type Step } from './plan';
   import { createProgress, elsewherePosition } from './progress';
-  import { qualityTier } from './quality-label';
+  import { levelLabel, qualityName, qualityTier } from './quality-label';
   import { createVolumeControl } from './volume';
   import { browserName, reportEvent } from './report';
   import { PlaySession, type Engine, type PlayEvent } from './session.svelte';
@@ -53,7 +54,7 @@
   }: {
     fileId?: number;
     /** `linkId` - ссылка, у которой сохраняем место; `start` - откуда начать (где остановился). */
-    src?: { url: string; hls: boolean; dash?: boolean; title: string; linkId?: number; start?: number } | null;
+    src?: { url: string; hls: boolean; dash?: boolean; title: string; linkId?: number; start?: number; season?: number | null; episodeNo?: number | null } | null;
     onfail?: () => void;
     sync?: PlayerSync | null;
     sidebar?: boolean;
@@ -139,8 +140,11 @@
   const bufferedPct = $derived(duration ? Math.min(100, ((offset + buffered) / duration) * 100) : 0);
 
   const qualityLabel = $derived.by(() => {
-    const auto = `Авто${hlsHeight ? ` · ${qualityTier(hlsHeight)}p` : ''}`;
-    if (src) return srcLevel === -1 ? auto : `${srcLevels.find((l) => l.i === srcLevel)?.label ?? qualityTier(srcLevels.find((l) => l.i === srcLevel)?.height ?? 720)}p`;
+    const auto = `Авто${hlsHeight ? ` · ${qualityName(hlsHeight)}` : ''}`;
+    if (src) {
+      const level = srcLevels.find((l) => l.i === srcLevel);
+      return level ? levelLabel(level, srcLevels) : auto;
+    }
     const step = session?.step;
     if (step?.mode !== 'hls') return 'Оригинал';
     return step.quality === 'auto' ? auto : typeof step.quality === 'number' ? heightLabel(step.quality) : 'Оригинал';
@@ -191,7 +195,7 @@
           const previous = info.play.audio[audio];
           info.play.audio = tracks;
           const kept = previous ? tracks.findIndex(t => t.label === previous.label && t.lang === previous.lang) : -1;
-          audio = kept >= 0 ? kept : Math.max(0, tracks.findIndex((t) => t.default));
+          audio = kept >= 0 ? kept : Math.max(0, defaultAudioTrack(tracks));
           sourceTracks?.setAudioTrack?.(audio);
         });
         e.onSubtitleTracks?.((tracks) => { if (info && src) info.play.subs = tracks; });
@@ -279,6 +283,7 @@
         srcLevels = [];
         desiredPlaying = true;
       });
+      mismatchOff = false;
       ready = false;
       current = 0;
       offset = 0;
@@ -300,7 +305,7 @@
         untrack(() => {
           info = {
             play: { direct: !s.hls, remux: false, transcode: false, hevc: false, tenBit: false, duration: null, width: null, height: null, audio: [], subs: [] },
-            titleId: 0, kind: 'movie', title: s.title, episode: '', prev: null, next: null, nextInfo: null, season: null, position: 0,
+            titleId: 0, kind: 'movie', title: s.title, episode: '', prev: null, next: null, nextInfo: null, season: s.season ?? null, position: 0,
             markers: { intro: null, credits: null, manual: false }, trickplay: null, hls: false,
           };
           begin(s.start && s.start > 5 ? s.start : 0);
@@ -315,7 +320,7 @@
           if (resource !== resourceGeneration) return;
           void speed.then(value=>{if(resource===resourceGeneration)mbit=value;});
           info = i;
-          audio = Math.max(0, i.play.audio.findIndex((a) => a.default));
+          audio = Math.max(0, defaultAudioTrack(i.play.audio));
           quality = slow || (mbit===null&&i.hls) ? 'auto' : startQuality(mbit, i.bitrate ?? null);
           if (quality === 'auto' && i.hls) say('Включили автоматическое качество');
           const forced = i.play.subs.find((x) => x.forced && x.lang?.startsWith('ru'));
@@ -425,6 +430,13 @@
       ? { duration, expect: expect!, canReport: !!onwrong }
       : null,
   );
+  // При заметном расхождении с длительностью карточки сначала приостанавливаем поток.
+  // Зритель может явно продолжить, если знает, что источник указал неверную длительность.
+  $effect(() => {
+    if (!mismatch) return;
+    desiredPlaying = false;
+    video?.pause();
+  });
 
   // ---------- заставка, титры, следующая серия ----------
   const canNext = $derived(!!info?.next || !!nextSource);
@@ -535,7 +547,8 @@
       video.src = url.href;
       video.addEventListener('loadedmetadata', () => (video!.currentTime = at), { once: true });
     }
-    say(i === -1 ? 'Качество - автоматически' : `Качество ${srcLevels.find((l) => l.i === i)?.label ?? qualityTier(srcLevels.find((l) => l.i === i)?.height ?? 720)}p`);
+    const chosen = srcLevels.find((l) => l.i === i);
+    say(i === -1 ? 'Качество - автоматически' : `Качество ${chosen ? levelLabel(chosen, srcLevels) : qualityName(720)}`);
   }
 
   async function pickSubs(id: string) {
@@ -938,6 +951,8 @@
     {onwrong}
     ondismissmismatch={() => {
       mismatchOff = true;
+      desiredPlaying = true;
+      video?.play().catch(() => (paused = true));
     }}
     ongoelsewhere={() => {
       if (elsewhere === null) return;
@@ -960,6 +975,8 @@
   <Controls
     title={src?.title ?? info?.title ?? ''}
     episode={info?.episode ?? ''}
+    season={src?.season ?? info?.season ?? null}
+    episodeNo={src?.episodeNo ?? null}
     {shown}
     {paused}
     busy={waiting || !!error}
@@ -978,7 +995,7 @@
     showAudio={(info?.play.audio.length ?? 0) > 1}
     showSubs={!!info?.play.subs.length}
     subsOn={!!subId}
-    showQuality={!!info?.hls || (!!src && srcLevels.length > 1)}
+    showQuality={!!info?.hls || (!!src && (src.hls || srcLevels.length > 1))}
     {canNext}
     canTogether={!sync && (!!fileId || !!src?.linkId)}
     {roomBusy}

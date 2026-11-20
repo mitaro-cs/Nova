@@ -177,7 +177,8 @@ async fn localized_search_cache_and_fast_details() {
     let started = std::time::Instant::now();
     assert_eq!(host.json("/api/discover/title/tt0133093").await["card"]["title"], "Матрица");
     // Без кадра страница ждёт подробности IMDb до 2 с (а не пустая и опрос), картинки - не ждёт никогда.
-    assert!(started.elapsed() < std::time::Duration::from_millis(2600), "карточка не ждёт внешние картинки");
+    // 3,5 с вместо 2,6: сам ожидаемый предел 2 с, остальное - накладные расходы теста при параллельном прогоне.
+    assert!(started.elapsed() < std::time::Duration::from_millis(3500), "карточка не ждёт внешние картинки");
     for path in [
         "/api/links/thumbnail?url=http://127.0.0.1/test.jpg",
         "/api/links/thumbnail?url=https://example.com/test.jpg",

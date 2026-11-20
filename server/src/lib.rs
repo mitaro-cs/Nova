@@ -2,6 +2,7 @@
 //! хоста, интерфейс - в браузере у зрителей и в окне приложения у хоста.
 
 pub mod access;
+mod antibot;
 pub mod api;
 pub mod auth;
 pub mod catalog_search;
@@ -51,6 +52,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{Notify, Semaphore};
+use tokio::task::JoinHandle;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = "Nova";
@@ -109,10 +111,19 @@ impl App {
         self.probe_kick.notify_one();
     }
 
-    /// В ленте появились фильмы: докачать постеры и найти русские названия.
+    /// Появился материал: внешний тайтл, файл или ссылка. Сбросить кэш поиска (иначе свежая
+    /// находка останется невидимой), сразу разбудить описание, постеры и русские названия.
     pub fn kick_ext(&self) {
+        crate::video_search::forget_cache();
+        self.meta_kick.notify_one();
         self.posters_kick.notify_one();
         self.titles_kick.notify_one();
+    }
+
+    /// Локальный файл или новая ссылка: тот же единый триггер поиска и описания.
+    pub fn kick_material(&self) {
+        self.kick_ext();
+        self.probe_kick.notify_one();
     }
 
     pub fn reload_tools(&self) {
@@ -173,7 +184,9 @@ async fn bind(ip: Ipv4Addr, wanted: u16) -> anyhow::Result<TcpListener> {
 pub struct Running {
     pub app: Arc<App>,
     stop: tokio::sync::watch::Sender<bool>,
-    servers: Vec<tokio::task::JoinHandle<()>>,
+    /// Фоновые воркеры: их нужно остановить до резервной копии базы и выхода.
+    tasks: Vec<JoinHandle<()>>,
+    servers: Vec<JoinHandle<()>>,
 }
 
 impl Running {
@@ -181,13 +194,23 @@ impl Running {
         self.app.window_entry()
     }
 
-    /// Остановить приём запросов и дождаться окончания.
+    /// Остановить приём запросов и фоновые задачи, дождаться их окончания.
+    ///
+    /// Важно для обновления: `desktop::update::backup_db` вызывается после `stop_server`,
+    /// поэтому к этому моменту все воркеры должны отпустить соединение с базой.
     pub async fn shutdown(self) {
         let _ = self.stop.send(true);
         for (_, task) in self.app.site_jobs.lock().drain() {
             task.abort();
         }
         self.app.access.shutdown();
+        for task in &self.tasks {
+            task.abort();
+        }
+        // Ожидание с тайм-аутом: зависший воркер не должен заблокировать выход или обновление.
+        for task in self.tasks {
+            let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
+        }
         for s in self.servers {
             let _ = tokio::time::timeout(Duration::from_secs(5), s).await;
         }
@@ -274,26 +297,27 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
     backfill(&app)?;
     library::inbox::ensure_on_start(&app);
 
-    tokio::spawn(library::jobs::scan_worker(app.clone()));
+    let mut tasks: Vec<JoinHandle<()>> = Vec::new();
+    tasks.push(tokio::spawn(library::jobs::scan_worker(app.clone())));
     // В отладочной сборке brotli 11 медленный (тесты ждали бы секунды) — там сжатие по запросу.
     if !cfg!(debug_assertions) {
-        tokio::task::spawn_blocking(web::warm);
+        tasks.push(tokio::task::spawn_blocking(web::warm));
     }
-    tokio::spawn(library::jobs::probe_worker(app.clone()));
-    tokio::spawn(library::inbox::watch_worker(app.clone()));
-    tokio::spawn(meta::worker(app.clone()));
-    tokio::spawn(cleanup(app.clone()));
-    tokio::spawn(hls::janitor(app.clone()));
-    tokio::spawn(copy::janitor(app.clone()));
-    tokio::spawn(discover::worker(app.clone()));
-    tokio::spawn(discover::posters(app.clone()));
-    tokio::spawn(discover::images_backfill(app.clone()));
-    tokio::spawn(discover::titles_ru(app.clone()));
-    tokio::spawn(names::warm_directors(app.clone()));
-    tokio::spawn(discover::shrink_posters(app.clone()));
-    tokio::spawn(rooms::janitor(app.clone()));
-    tokio::spawn(api::backfill_link_thumbs(app.clone()));
-    tokio::spawn(ruwiki::backfill(app.clone()));
+    tasks.push(tokio::spawn(library::jobs::probe_worker(app.clone())));
+    tasks.push(tokio::spawn(library::inbox::watch_worker(app.clone())));
+    tasks.push(tokio::spawn(meta::worker(app.clone())));
+    tasks.push(tokio::spawn(cleanup(app.clone())));
+    tasks.push(tokio::spawn(hls::janitor(app.clone())));
+    tasks.push(tokio::spawn(copy::janitor(app.clone())));
+    tasks.push(tokio::spawn(discover::worker(app.clone())));
+    tasks.push(tokio::spawn(discover::posters(app.clone())));
+    tasks.push(tokio::spawn(discover::images_backfill(app.clone())));
+    tasks.push(tokio::spawn(discover::titles_ru(app.clone())));
+    tasks.push(tokio::spawn(names::warm_directors(app.clone())));
+    tasks.push(tokio::spawn(discover::shrink_posters(app.clone())));
+    tasks.push(tokio::spawn(rooms::janitor(app.clone())));
+    tasks.push(tokio::spawn(api::backfill_link_thumbs(app.clone())));
+    tasks.push(tokio::spawn(ruwiki::backfill(app.clone())));
     // Жанры, сохранённые раньше по-английски или описательно (Викиданные), - к общему русскому списку.
     match meta::normalize_stored_genres(&app.db) {
         Ok(n) if n > 0 => tracing::info!("жанры по-русски: {n}"),
@@ -323,7 +347,7 @@ pub async fn start(opts: Options, host: Arc<dyn host::Host>) -> anyhow::Result<R
         }));
     }
     tracing::info!(port = ports.0, window_port = ports.1, "сервер запущен");
-    Ok(Running { app, stop, servers })
+    Ok(Running { app, stop, tasks, servers })
 }
 
 /// Данные, появившиеся в новой версии, для старых записей.

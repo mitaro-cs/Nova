@@ -44,7 +44,7 @@ test('внешнее видео продолжается с точного ме�
 test('баннер листается в покое и сохраняет ручной выбор', async ({page}) => {
   await page.addInitScript(()=>sessionStorage.removeItem('nova-showcase'));
   await page.route('**/api/library',r=>r.fulfill({json:{items:[],recent:[],counts:{}}}));
-  await page.route('**/api/discover',r=>r.fulfill({json:{rows:[{key:'popular_movies',title:'Популярные фильмы',items:cards}]}}));
+  await page.route(/\/api\/discover(?:\?|$)/,r=>r.fulfill({json:{rows:[{key:'popular_movies',title:'Популярные фильмы',items:cards}]}}));
   await page.route('**/api/me/marks',r=>r.fulfill({json:{want:[],watching:[],watched:[]}}));
   await page.route('**/api/continue',r=>r.fulfill({json:[]}));
   await page.route('**/api/theme',r=>r.fulfill({status:503,headers:{'x-fsfy':'1'},json:{}}));

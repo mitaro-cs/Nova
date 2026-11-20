@@ -37,7 +37,7 @@
               <div class="frames">
                 {#each set as c, i (i)}
                   <a class="fm" href="/title/{c.id}" title={c.title} tabindex={copy === 1 ? -1 : undefined} style:background={c.backdropSmall || c.poster ? undefined : placeholder(c.title)}>
-                    {#if c.backdropSmall || c.poster}<img use:fadeIn src={artW((c.backdropSmall ?? c.poster)!, 160)} alt={copy === 1 ? '' : c.title} loading="lazy" decoding="async" width="80" height="54" />{/if}
+                    {#if c.backdropSmall || c.poster}<img use:fadeIn src={artW((c.backdropSmall ?? c.poster)!, 160)} alt={copy === 1 ? '' : c.title} loading="lazy" decoding="async" width="80" height="54" onerror={(e)=>((e.currentTarget as HTMLImageElement).style.visibility='hidden')} />{/if}
                     {#if c.year}<small>{c.year}</small>{/if}
                   </a>
                 {/each}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova · учебная лаборатория 401/403</title>
+<style>
+  :root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#08090c;color:#f4f4f5}body{max-width:1000px;margin:36px auto;padding:0 20px}
+  h1{font-size:clamp(28px,5vw,42px);line-height:1.1;margin:4px 0 10px}h2{font-size:18px;margin:26px 0 10px}.muted{color:#aaaab4}.notice{padding:12px 15px;border:1px solid #34353e;border-radius:13px;background:#14151b;font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}.group{margin-top:24px}button{min-height:50px;padding:11px 14px;border:1px solid #3a3b43;border-radius:13px;background:#191a20;color:inherit;text-align:left;font:inherit;cursor:pointer}button:hover{background:#24252d;border-color:#73747f}button:disabled{opacity:.6;cursor:wait}
+  .unsafe{border-color:#8e6042;color:#ffd6ad}.safe{border-color:#426c58;color:#b9f0cf}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:17px;border:1px solid #303139;border-radius:14px;background:#101115;min-height:105px}.status{font-weight:800;color:#eab676}.tag{display:inline-block;padding:2px 8px;border:1px solid #454650;border-radius:99px;font-size:11px;color:#c6c6ce}
+</style>
+<body>
+  <span class="tag">НОВА · УЧЕБНЫЙ РЕЖИМ</span>
+  <h1>HTTP 401 и 403</h1>
+  <p class="muted">Практикум для изучения контроля доступа. Сервер принимает соединения только на 127.0.0.1. Все ответы ниже — лабораторные модели.</p>
+  <p class="notice"><b>Важно:</b> кейсы LordFilm, Lordserials и YummyAnime здесь только как подписи к фиктивным ответам 403. Запросов к этим сайтам нет; приложение не извлекает с них видео и не обходит их защиту.</p>
+
+  <section class="group"><h2>Сценарии ответа</h2><div class="grid">
+    <button data-scenario="baseline">Обычный запрос к закрытому ресурсу · 403</button>
+    <button data-scenario="unsafe-header" class="unsafe">Показать ошибку уязвимой модели · фиктивный 200</button>
+    <button data-scenario="safe-proxy" class="safe">Исправленная модель · 403</button>
+    <button data-scenario="user-agent">Смена User-Agent · 403</button>
+    <button data-scenario="retry">Повтор запроса · 403</button>
+  </div></section>
+
+  <section class="group"><h2>Фиктивные кейсы источников</h2><div class="grid">
+    <button data-source="lordfilm">LordFilm · показать образец 403</button>
+    <button data-source="lordserials">Lordserials · показать образец 403</button>
+    <button data-source="yummyanime">YummyAnime · показать образец 403</button>
+  </div></section>
+
+  <h2>Ответ модели</h2><pre id="out" aria-live="polite">Выберите сценарий. Каждый результат помечен как симуляция.</pre>
+  <p class="muted">Учебный вывод: не доверяйте непроверенным данным клиента и не считайте полученный 200 доказательством разрешения. Для реального источника используйте выданный владельцем API, embed или учётные данные.</p>
+<script>
+  const out=document.querySelector('#out');
+  async function show(path,button){
+    document.querySelectorAll('button').forEach(b=>b.disabled=true);
+    try{const r=await fetch(path,{cache:'no-store'});const data=await r.json();out.innerHTML=`<span class="status">Модель вернула HTTP ${data.status}</span>\n${escapeHtml(data.title)}\n${escapeHtml(data.decision)}\n${escapeHtml(data.explanation)}\n\nВнешний запрос: НЕТ`}
+    catch(e){out.textContent=String(e)}finally{document.querySelectorAll('button').forEach(b=>b.disabled=false)}
+  }
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  document.querySelectorAll('[data-scenario]').forEach(b=>b.addEventListener('click',()=>show(`/api/demo?scenario=${b.dataset.scenario}`,b)));
+  document.querySelectorAll('[data-source]').forEach(b=>b.addEventListener('click',()=>show(`/api/source?name=${b.dataset.source}`,b)));
+</script>
+</body>
+</html>

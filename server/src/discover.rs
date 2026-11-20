@@ -102,12 +102,12 @@ pub async fn genre_search(
     search_cached(app, &format!("genre:{genre}:{}:votes", types.len()), &src).await
 }
 
-/// Поиск IMDb по источнику (жанр, страны), больше всего оценок - первым; ids в ленте, на 12 часов.
+/// Поиск IMDb по источнику (жанр, страны), больше всего оценок - первым; ids в ленте, на час.
 pub async fn search_cached(app: &Arc<App>, key: &str, src: &Src) -> anyhow::Result<Vec<String>> {
     let cached: Option<String> = app.db.with(|c| {
         c.query_row(
             "SELECT ids FROM catalog_search_cache WHERE query = ? AND at > ?",
-            params![key, now_ms() - 12 * 3_600_000],
+            params![key, now_ms() - 3_600_000],
             |r| r.get(0),
         )
         .optional()
@@ -275,7 +275,9 @@ const SIMILAR: &str = r#"query S($id: ID!) { title(id: $id) { moreLikeThisTitles
 /// 5 (alpha 0.4) - кадр баннера из фильма (`still_frame` около 16:9), а не рекламный плакат.
 pub const DETAILED: i64 = 6;
 
-const EVERY: Duration = Duration::from_secs(12 * 3600);
+/// Обновление ленты: раз в 3 часа вместо 12, чтобы новые подборки появлялись быстрее.
+/// Чаще не стоит: IMDb неофициальный, лишние запросы легко приводят к блокировке.
+const EVERY: Duration = Duration::from_secs(3 * 3600);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ext {
@@ -441,16 +443,16 @@ pub async fn worker(app: Arc<App>) {
         {
             tracing::warn!(error = %e, "лента IMDb");
         }
-        let _ = tokio::time::timeout(Duration::from_secs(3600), app.discover_kick.notified()).await;
+        let _ = tokio::time::timeout(Duration::from_secs(300), app.discover_kick.notified()).await;
     }
 }
 
-/// Постеры ленты - по 6 за раз, пока есть нескачанные; затем ждём новых.
+/// Постеры ленты - пока есть нескачанные; затем дешёвая проверка раз в 5 минут.
 pub async fn posters(app: Arc<App>) {
     loop {
-        let n = posters_batch(&app, 6).await;
+        let n = posters_batch(&app, 20).await;
         if n == 0 {
-            let _ = tokio::time::timeout(Duration::from_secs(3600), app.posters_kick.notified()).await;
+            let _ = tokio::time::timeout(Duration::from_secs(300), app.posters_kick.notified()).await;
         } else {
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
@@ -495,7 +497,7 @@ pub async fn titles_ru(app: Arc<App>) {
         let enabled = app.db.setting("names.wikidata.sparql").is_none_or(|v| !v.is_empty());
         let todo = if enabled { pending_titles(&app.db, 65, now_ms()).unwrap_or_default() } else { vec![] };
         if todo.is_empty() {
-            let _ = tokio::time::timeout(Duration::from_secs(3600), app.titles_kick.notified()).await;
+            let _ = tokio::time::timeout(Duration::from_secs(300), app.titles_kick.notified()).await;
             continue;
         }
         match crate::catalog_search::localize(&app, &todo).await {
