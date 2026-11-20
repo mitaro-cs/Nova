@@ -91,6 +91,10 @@
   let topH = $state(80);
   let bottomH = $state(120);
   $effect(() => onheight(topH, bottomH));
+  // «Закончится в»: время конца при обычной скорости, пересчитывается с каждым шагом ролика.
+  const endsAt = $derived(
+    duration > 0 && time >= 0 ? new Date(Date.now() + Math.max(0, duration - time) * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '',
+  );
 </script>
 
 <div class="top" class:hide={!shown} bind:clientHeight={topH}>
@@ -102,6 +106,7 @@
     </div>
   {/if}
   <span class="grow"></span>
+  {#if endsAt}<span class="ends">Закончится в {endsAt}</span>{/if}
   {#if canTogether}
     <button class="ibtn" disabled={roomBusy} aria-label="Смотреть вместе" title="Смотреть вместе с текущего места" onclick={ontogether}><Icon name="party" size={22} /></button>
   {/if}
@@ -122,6 +127,7 @@
 {/if}
 
 <div class="bottom" class:hide={!shown} bind:clientHeight={bottomH} role="group" aria-label="Управление просмотром">
+  <div class="cap">
   <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} {onseek} {ondrag} />
   <div class="row">
     <span class="time">{clock(time)} <span class="faint">/ {clock(duration)}</span></span>
@@ -138,6 +144,7 @@
     <button class="ibtn" class:on={panel === 'settings'} aria-label="Настройки плеера" title="Настройки" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
     {#if pipOk}<button class="ibtn" aria-label="Картинка в картинке" title="Картинка в картинке (P)" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
     <button class="ibtn" aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
+  </div>
   </div>
 </div>
 
@@ -337,5 +344,18 @@
     .cbig:not(.main) { background: transparent; }
     .cbig.main :global(svg) { width: 22px; height: 22px; }
     .skip { width: 24px; height: 24px; }
+  }
+  /* Дизайн «Стекло» (плеер D): название и время парят плашками, управление - одна капсула снизу. */
+  .ends { display: none; }
+  @media (min-width: 701px) {
+    .top { background: none; padding-inline: clamp(18px, 3vw, 40px); }
+    .top .name { padding: 8px 20px; border: 1px solid #ffffff26; border-radius: 999px; background: #0007; }
+    .top .ibtn { width: 46px; height: 46px; border: 1px solid #ffffff26; background: #0007; }
+    .ends { display: inline-block; padding: 10px 18px; border: 1px solid #ffffff26; border-radius: 999px; background: #0007; font-size: 14px; font-weight: 600; white-space: nowrap; }
+    .bottom { background: none; padding: 0 clamp(18px, 3vw, 40px) calc(28px + env(safe-area-inset-bottom)); }
+    .cap { padding: 16px 26px 10px; border: 1px solid #ffffff26; border-radius: 32px; background: #0c0c0ed9; }
+  }
+  @media (min-width: 1000px) {
+    .center { inset: auto 35% 38px; }
   }
 </style>

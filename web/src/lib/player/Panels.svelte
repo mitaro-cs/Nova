@@ -333,4 +333,7 @@
     flex: 1;
     justify-content: center;
   }
+  @media (min-width: 701px) {
+    .panel { bottom: 168px; border: 1px solid #ffffff26; border-radius: 28px; background: rgba(16, 16, 18, 0.95); padding: 14px; }
+  }
 </style>
