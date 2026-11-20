@@ -10,7 +10,7 @@ test('политика: отдельная страница с оглавлен�
   await page.goto(url('/legal/privacy'));
   await expect(page.getByRole('heading', { level: 1, name: 'Политика конфиденциальности' })).toBeVisible();
   await expect(page.getByText(/редакция \d+ от/)).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Оглавление' }).getByRole('link', { name: 'Ваши права' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Оглавление' }).getByRole('link', { name: 'Ваши права' })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Какие данные сохраняются/ })).toBeVisible();
   await expectClean(page, 'политика конфиденциальности');
   await page.goto(url('/legal/terms'));
@@ -43,7 +43,7 @@ test('прежний аккаунт: окно согласия, пока не п
     extraHTTPHeaders: { 'x-fsfy': '1' },
   });
   const login = `old${Date.now() % 1000000}`;
-  expect((await host.post('/api/admin/users', { data: { name: 'Прежний', login, password: 'пароль-12345' } })).ok()).toBe(true);
+  expect((await host.post('/api/admin/users', { data: { name: `Прежний ${login}`, login, password: 'пароль-12345' } })).ok()).toBe(true);
   await host.dispose();
   const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await ctx.newPage();

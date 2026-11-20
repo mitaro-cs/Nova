@@ -1508,7 +1508,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fsfy-desktop"
-version = "2.0.0-beta"
+version = "2.0.1-beta"
 dependencies = [
  "fsfy-server",
  "keepawake",
@@ -1530,7 +1530,7 @@ dependencies = [
 
 [[package]]
 name = "fsfy-server"
-version = "2.0.0-beta"
+version = "2.0.1-beta"
 dependencies = [
  "anyhow",
  "argon2",
