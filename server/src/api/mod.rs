@@ -176,6 +176,11 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/rooms/{id}/chat", post(rooms::chat))
         .route("/api/rooms/{id}/react", post(rooms::react))
         .route("/api/rooms/{id}/invite", post(rooms::invite))
+        .route("/api/rooms/{id}/queue", post(rooms::queue_add).put(rooms::queue_order))
+        .route("/api/rooms/{id}/queue/next", post(rooms::queue_next))
+        .route("/api/rooms/{id}/queue/{item}", axum::routing::delete(rooms::queue_remove))
+        .route("/api/rooms/{id}/queue/{item}/approve", post(rooms::queue_approve))
+        .route("/api/rooms/{id}/queue/{item}/play", post(rooms::queue_play))
         .route("/api/rooms/{id}/voice", post(rooms::voice))
         .route("/api/rooms/{id}/signal", post(rooms::signal))
         // управление

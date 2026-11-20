@@ -68,6 +68,70 @@ pub fn save_place(app: &App, who: &[i64], file: i64, link: Option<i64>, position
     }
 }
 
+/// Своя комната или та, куда позвал создатель: чужим код комнаты ничего не открывает (ни людей, ни чат, ни управление).
+fn guard(app: &App, v: &Viewer, id: &str) -> ApiResult<()> {
+    match app.rooms.allows(id, v.profile.id) {
+        None => Err(no_room()),
+        Some(false) => Err(ApiError::new(StatusCode::FORBIDDEN, "not_invited", "Вас не звали в эту комнату")),
+        Some(true) => Ok(()),
+    }
+}
+
+/// Только создатель комнаты.
+fn owner_only(app: &App, v: &Viewer, id: &str) -> ApiResult<()> {
+    match app.rooms.with(id, |r| r.owner == v.profile.id) {
+        None => Err(no_room()),
+        Some(false) => Err(ApiError::new(StatusCode::FORBIDDEN, "not_owner", "Это может только создатель комнаты")),
+        Some(true) => Ok(()),
+    }
+}
+
+/// Карточка для очереди: название и откуда видео (файл виден зрителю или ссылка есть).
+fn item_for(app: &App, v: &Viewer, file: Option<i64>, link: Option<i64>) -> ApiResult<crate::rooms::Item> {
+    let by_name = me(app, v)?["name"].as_str().unwrap_or_default().to_string();
+    let mut item = crate::rooms::Item {
+        id: 0,
+        file_id: 0,
+        link_id: None,
+        title_id: 0,
+        label: String::new(),
+        source: String::new(),
+        by: v.profile.id,
+        by_name,
+        approved: false,
+    };
+    match (file, link) {
+        (Some(f), _) => {
+            let t = title_of_file(app, v, f)?;
+            item.file_id = f;
+            item.title_id = t;
+            item.source = "Nova".into();
+            item.label = app.db.with(|c| c.query_row("SELECT title FROM titles WHERE id = ?", [t], |r| r.get(0)))?;
+        }
+        (None, Some(l)) => {
+            let (label, kind): (String, String) = app
+                .db
+                .with(|c| {
+                    c.query_row("SELECT label, kind FROM links WHERE id = ?", [l], |r| Ok((r.get(0)?, r.get(1)?)))
+                        .optional()
+                })?
+                .ok_or_else(ApiError::not_found)?;
+            item.link_id = Some(l);
+            item.label = label;
+            item.source = match kind.as_str() {
+                "rutube" => "Rutube",
+                "vk" => "VK",
+                "youtube" => "YouTube",
+                "site" => "Сайт",
+                _ => "Файл",
+            }
+            .into();
+        }
+        _ => return Err(ApiError::bad("no_video", "Что смотреть вместе: файл или ссылка")),
+    }
+    Ok(item)
+}
+
 fn no_room() -> ApiError {
     ApiError::new(StatusCode::NOT_FOUND, "no_room", "Комната закрыта - создайте новую со страницы фильма")
 }
@@ -98,18 +162,23 @@ pub async fn create(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<Create
     let who = me(&app, &v)?;
     let name = who["name"].as_str().unwrap_or_default().to_string();
     let link = b.file_id.is_none().then_some(b.link_id).flatten();
-    let id = app.rooms.create(v.profile.id, title, file, link, b.position.max(0.0), name);
+    let mut first = item_for(&app, &v, b.file_id, b.link_id)?;
+    first.id = 1;
+    first.approved = true;
+    let id = app.rooms.create(v.profile.id, title, file, link, b.position.max(0.0), name, Some(first));
     Ok(Json(json!({"id": id})))
 }
 
 /// Что за комната (без входа): фильм, кто там, где сейчас.
-pub async fn info(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+pub async fn info(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
     app.rooms.with(&id, |r| Json(r.snapshot())).ok_or_else(no_room)
 }
 
 /// Войти: поток событий комнаты. Первое событие - снимок (место, люди, чат), дальше - изменения.
 /// Закрыл вкладку - вышел.
 pub async fn events(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String>) -> ApiResult<impl IntoResponse> {
+    guard(&app, &v, &id)?;
     let who = me(&app, &v)?;
     let (rx, snap) = app.rooms.join(&id, v.profile.id, who).ok_or_else(no_room)?;
     struct Leave {
@@ -161,6 +230,7 @@ pub async fn set_state(
     Path(id): Path<String>,
     Json(b): Json<StateBody>,
 ) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
     let (cur_file, title, link) =
         app.rooms.with(&id, |r| (r.state.file_id, r.title_id, r.state.link_id)).ok_or_else(no_room)?;
     // У видео по ссылке файл не меняется; у сериала - только серии этого же сериала.
@@ -190,6 +260,7 @@ pub async fn chat(
     Path(id): Path<String>,
     Json(b): Json<ChatBody>,
 ) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
     let body = super::social::text(&b.body, 500, "Сообщение")?;
     if body.is_empty() {
         return Err(ApiError::bad("empty", "Пустое сообщение"));
@@ -215,6 +286,7 @@ pub async fn react(
     Path(id): Path<String>,
     Json(b): Json<ReactBody>,
 ) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
     if !REACTIONS.contains(&b.emoji.as_str()) {
         return Err(ApiError::bad("bad_emoji", "Такой реакции нет"));
     }
@@ -236,6 +308,7 @@ pub async fn invite(
     Path(id): Path<String>,
     Json(b): Json<InviteBody>,
 ) -> ApiResult<Json<Value>> {
+    owner_only(&app, &v, &id)?;
     let me_id = v.profile.id;
     let title = app.rooms.with(&id, |r| r.title_id).ok_or_else(no_room)?;
     let friend: bool = app.db.with(|c| {
@@ -251,6 +324,8 @@ pub async fn invite(
     if !friend || v.profile.kids {
         return Err(ApiError::new(StatusCode::FORBIDDEN, "not_friends", "Звать можно только друзей"));
     }
+    // Позвал - значит, может войти: чужой код комнаты никого не пускает.
+    app.rooms.with(&id, |r| r.invited.insert(b.profile_id));
     let link = app.rooms.with(&id, |r| r.state.link_id).flatten();
     let name: String = match link {
         Some(l) => app.db.with(|c| c.query_row("SELECT label FROM links WHERE id = ?", [l], |r| r.get(0)))?,
@@ -283,6 +358,7 @@ pub async fn voice(
     Path(id): Path<String>,
     Json(b): Json<VoiceBody>,
 ) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
     app.rooms.voice(&id, v.profile.id, b.on).ok_or_else(no_room)?;
     Ok(Json(json!({"ok": true})))
 }
@@ -300,9 +376,101 @@ pub async fn signal(
     Path(id): Path<String>,
     Json(b): Json<SignalBody>,
 ) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
     if b.data.to_string().len() > 20_000 {
         return Err(ApiError::bad("too_big", "Слишком большой сигнал"));
     }
     app.rooms.signal(&id, v.profile.id, b.to, b.data).ok_or_else(no_room)?;
     Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueBody {
+    file_id: Option<i64>,
+    /// Ссылка, уже проверенная через `POST /api/links` (Rutube, VK, YouTube, прямой файл, свой сайт хоста).
+    link_id: Option<i64>,
+}
+
+/// В очередь: создатель - сразу, остальные - предложением.
+pub async fn queue_add(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path(id): Path<String>,
+    Json(b): Json<QueueBody>,
+) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
+    let item = item_for(&app, &v, b.file_id, b.link_id)?;
+    match app.rooms.add_item(&id, item).ok_or_else(no_room)? {
+        Ok(i) => Ok(Json(json!(i))),
+        Err(m) => Err(ApiError::new(StatusCode::TOO_MANY_REQUESTS, "queue_full", m)),
+    }
+}
+
+pub async fn queue_approve(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path((id, item)): Path<(String, u64)>,
+) -> ApiResult<Json<Value>> {
+    owner_only(&app, &v, &id)?;
+    app.rooms.approve(&id, item).filter(|ok| *ok).ok_or_else(ApiError::not_found)?;
+    Ok(Json(json!({"ok": true})))
+}
+
+pub async fn queue_remove(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path((id, item)): Path<(String, u64)>,
+) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
+    app.rooms.remove_item(&id, item, v.profile.id).filter(|ok| *ok).ok_or_else(|| {
+        ApiError::new(StatusCode::FORBIDDEN, "not_owner", "Убрать можно своё предложение, остальное - создатель")
+    })?;
+    Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+pub struct OrderBody {
+    ids: Vec<u64>,
+}
+
+/// Порядок очереди задаёт только создатель.
+pub async fn queue_order(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path(id): Path<String>,
+    Json(b): Json<OrderBody>,
+) -> ApiResult<Json<Value>> {
+    owner_only(&app, &v, &id)?;
+    if b.ids.len() > crate::rooms::QUEUE_MAX {
+        return Err(ApiError::bad("too_big", "Слишком длинный список"));
+    }
+    app.rooms.reorder(&id, &b.ids).ok_or_else(no_room)?;
+    Ok(Json(json!({"ok": true})))
+}
+
+/// Включить видео из очереди у всех (создатель).
+pub async fn queue_play(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path((id, item)): Path<(String, u64)>,
+) -> ApiResult<Json<Value>> {
+    owner_only(&app, &v, &id)?;
+    let name = me(&app, &v)?["name"].as_str().unwrap_or_default().to_string();
+    // Место текущего видео запоминаем до переключения: «смотреть дальше» не должно потеряться.
+    remember(&app, &id, None);
+    app.rooms.play_item(&id, item, name).filter(|ok| *ok).ok_or_else(ApiError::not_found)?;
+    Ok(Json(json!({"ok": true})))
+}
+
+/// Следующее видео после текущего (создатель; плеер создателя зовёт это, когда видео кончилось).
+pub async fn queue_next(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    owner_only(&app, &v, &id)?;
+    let name = me(&app, &v)?["name"].as_str().unwrap_or_default().to_string();
+    let Some(next) = app.rooms.next_item(&id).ok_or_else(no_room)? else {
+        return Ok(Json(json!({"ended": true})));
+    };
+    remember(&app, &id, None);
+    app.rooms.play_item(&id, next, name).ok_or_else(no_room)?;
+    Ok(Json(json!({"ended": false, "id": next})))
 }

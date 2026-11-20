@@ -45,9 +45,43 @@ pub struct Room {
     pub voice: std::collections::BTreeSet<i64>,
     pub empty_since: Option<i64>,
     pub tx: broadcast::Sender<String>,
+    /// Кого создатель позвал (создатель - всегда): входить, писать и управлять могут только они.
+    pub invited: std::collections::BTreeSet<i64>,
+    /// Очередь просмотра: порядок задаёт создатель, остальные могут лишь предложить (`approved = false`).
+    pub queue: Vec<Item>,
+    pub current: Option<u64>,
+    pub next_item: u64,
 }
 
+/// Что стоит в очереди: фильм с сервиса (`file_id`) или видео по ссылке (`link_id`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Item {
+    pub id: u64,
+    pub file_id: i64,
+    pub link_id: Option<i64>,
+    pub title_id: i64,
+    pub label: String,
+    /// «Nova», «Rutube», «VK», «YouTube», «Файл», «Сайт».
+    pub source: String,
+    pub by: i64,
+    pub by_name: String,
+    pub approved: bool,
+}
+
+/// В очереди не больше стольких видео, и не больше стольких чужих предложений от одного человека.
+pub const QUEUE_MAX: usize = 50;
+pub const SUGGEST_MAX: usize = 10;
+
 impl Room {
+    pub fn allows(&self, profile: i64) -> bool {
+        self.owner == profile || self.invited.contains(&profile)
+    }
+
+    pub fn queue_event(&self) {
+        self.send(json!({"type": "queue", "queue": self.queue, "current": self.current}));
+    }
+
     pub fn members_json(&self) -> Vec<Value> {
         let mut m: Vec<&Value> = self.members.values().map(|(p, _)| p).collect();
         m.sort_by_key(|p| p["id"].as_i64());
@@ -70,6 +104,7 @@ impl Room {
         json!({
             "type": "snapshot", "id": self.id, "ownerId": self.owner, "titleId": self.title_id,
             "state": self.current(), "members": self.members_json(), "chat": self.chat, "voice": self.voice,
+            "queue": self.queue, "current": self.current,
         })
     }
 
@@ -82,6 +117,7 @@ impl Room {
 pub struct Rooms(Arc<Mutex<HashMap<String, Room>>>);
 
 impl Rooms {
+    #[allow(clippy::too_many_arguments)]
     pub fn create(
         &self,
         owner: i64,
@@ -90,6 +126,7 @@ impl Rooms {
         link_id: Option<i64>,
         position: f64,
         by: String,
+        first: Option<Item>,
     ) -> String {
         let mut map = self.0.lock();
         let id = loop {
@@ -111,9 +148,111 @@ impl Rooms {
                 chat: Vec::new(),
                 empty_since: Some(now_ms()),
                 tx,
+                invited: [owner].into(),
+                current: first.as_ref().map(|i| i.id),
+                next_item: 2,
+                queue: first.into_iter().collect(),
             },
         );
         id
+    }
+
+    /// Есть ли комната и можно ли этому человеку в неё: `None` - комнаты нет.
+    pub fn allows(&self, id: &str, profile: i64) -> Option<bool> {
+        self.with(id, |r| r.allows(profile))
+    }
+
+    /// Поставить в очередь. Создатель - сразу в очередь, остальные - предложением, которое создатель принимает.
+    pub fn add_item(&self, id: &str, mut item: Item) -> Option<Result<Item, &'static str>> {
+        self.with(id, |r| {
+            let owner = item.by == r.owner;
+            if r.queue.len() >= QUEUE_MAX {
+                return Err("В очереди уже 50 видео");
+            }
+            if !owner && r.queue.iter().filter(|i| i.by == item.by && !i.approved).count() >= SUGGEST_MAX {
+                return Err("Слишком много предложений: дождитесь, пока создатель их разберёт");
+            }
+            item.id = r.next_item;
+            r.next_item += 1;
+            item.approved = owner;
+            r.queue.push(item.clone());
+            if r.current.is_none() && owner {
+                r.current = Some(item.id);
+            }
+            r.queue_event();
+            Ok(item)
+        })
+    }
+
+    /// Принять предложение (создатель).
+    pub fn approve(&self, id: &str, item: u64) -> Option<bool> {
+        self.with(id, |r| {
+            let Some(i) = r.queue.iter_mut().find(|i| i.id == item) else { return false };
+            i.approved = true;
+            r.queue_event();
+            true
+        })
+    }
+
+    /// Убрать: создатель - любое, остальные - только своё предложение.
+    pub fn remove_item(&self, id: &str, item: u64, by: i64) -> Option<bool> {
+        self.with(id, |r| {
+            let owner = by == r.owner;
+            let Some(at) = r.queue.iter().position(|i| i.id == item && (owner || (i.by == by && !i.approved))) else {
+                return false;
+            };
+            r.queue.remove(at);
+            if r.current == Some(item) {
+                r.current = None;
+            }
+            r.queue_event();
+            true
+        })
+    }
+
+    /// Новый порядок (создатель): те, кого нет в списке, остаются в конце как были.
+    pub fn reorder(&self, id: &str, order: &[u64]) -> Option<()> {
+        self.with(id, |r| {
+            let mut rest = std::mem::take(&mut r.queue);
+            let mut next = Vec::with_capacity(rest.len());
+            for want in order {
+                if let Some(at) = rest.iter().position(|i| i.id == *want) {
+                    next.push(rest.remove(at));
+                }
+            }
+            next.extend(rest);
+            r.queue = next;
+            r.queue_event();
+        })
+    }
+
+    /// Включить видео из очереди у всех сразу (создатель). `None` - комнаты нет, `Some(false)` - такого видео нет.
+    pub fn play_item(&self, id: &str, item: u64, by: String) -> Option<bool> {
+        self.with(id, |r| {
+            let Some(i) = r.queue.iter().find(|i| i.id == item && i.approved).cloned() else { return false };
+            r.title_id = i.title_id;
+            r.current = Some(i.id);
+            r.state = State {
+                revision: r.state.revision.saturating_add(1),
+                file_id: i.file_id,
+                link_id: i.link_id,
+                playing: true,
+                position: 0.0,
+                at: now_ms(),
+                by,
+            };
+            r.send(json!({"type": "now", "titleId": r.title_id, "state": r.state, "current": r.current}));
+            r.queue_event();
+            true
+        })
+    }
+
+    /// Следующее принятое видео после текущего. `Some(None)` - очередь кончилась.
+    pub fn next_item(&self, id: &str) -> Option<Option<u64>> {
+        self.with(id, |r| {
+            let at = r.current.and_then(|c| r.queue.iter().position(|i| i.id == c)).map_or(0, |p| p + 1);
+            r.queue.iter().skip(at).find(|i| i.approved).map(|i| i.id)
+        })
     }
 
     pub fn with<T>(&self, id: &str, f: impl FnOnce(&mut Room) -> T) -> Option<T> {
@@ -244,7 +383,7 @@ mod tests {
     #[test]
     fn join_state_leave() {
         let rooms = Rooms::default();
-        let id = rooms.create(1, 7, 70, None, 12.0, "Хост".into());
+        let id = rooms.create(1, 7, 70, None, 12.0, "Хост".into(), None);
         let (mut rx, snap) = rooms.join(&id, 1, json!({"id": 1, "name": "Хост"})).unwrap();
         assert_eq!(snap["state"]["fileId"], 70);
         assert!(rx.try_recv().unwrap().contains("members"));
@@ -276,7 +415,7 @@ mod tests {
     #[test]
     fn voice_and_signals() {
         let rooms = Rooms::default();
-        let id = rooms.create(1, 7, 70, None, 0.0, "А".into());
+        let id = rooms.create(1, 7, 70, None, 0.0, "А".into(), None);
         let (mut rx, _) = rooms.join(&id, 1, json!({"id": 1})).unwrap();
         rooms.join(&id, 2, json!({"id": 2})).unwrap();
         while rx.try_recv().is_ok() {}

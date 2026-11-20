@@ -29,6 +29,16 @@ impl Events {
     }
 }
 
+/// Создатель «позвал» человека: в тестах - прямо в комнате, без дружбы (она проверяется отдельно).
+async fn invite(app: &fsfy::App, room: &str, user: &mut common::Client, name: &str) {
+    user.get("/api/me").await; // профиль появляется с первым запросом
+    let id: i64 = app
+        .db
+        .with(|c| c.query_row("SELECT id FROM profiles WHERE name = ?", [name], |r| r.get(0)))
+        .unwrap_or_else(|e| panic!("профиль «{name}»: {e}"));
+    app.rooms.with(room, |r| r.invited.insert(id)).unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn ten_viewers_receive_ordered_controls_and_rejoin_at_current_position() {
     exercise_viewers(10).await;
@@ -111,6 +121,7 @@ async fn exercise_viewers(count: usize) {
                 .status()
                 .is_success()
         );
+        invite(&running.app, &room, &mut user, &format!("Зритель {n}")).await;
         let response = user.get(&format!("/api/rooms/{room}/events")).await;
         let mut stream = Events { response, buffer: String::new() };
         stream.event("snapshot").await;
@@ -302,6 +313,7 @@ async fn room_place_is_remembered_for_everyone_in_the_room() {
         .as_str()
         .unwrap()
         .to_owned();
+    invite(&running.app, &room, &mut guest, "Гость").await;
     let mut host_events =
         Events { response: host.get(&format!("/api/rooms/{room}/events")).await, buffer: String::new() };
     host_events.event("snapshot").await;
@@ -361,4 +373,110 @@ async fn play_link_does_not_wait_for_remote_thumbnail_and_cloudpub_url_survives_
     let view = running.app.access.view(&running.app);
     assert_eq!(view.public_url.as_deref(), Some("https://saved-address.cloudpub.ru"));
     running.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn room_is_closed_to_strangers_and_queue_belongs_to_the_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let base = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let media = |n: i64| dir.path().join(format!("q{n}.mp4"));
+    for n in [9950, 9951] {
+        std::fs::write(media(n), vec![1u8; 1024]).unwrap();
+    }
+    running
+        .app
+        .db
+        .with(|c| {
+            for (id, name) in [(9950, "Первый"), (9951, "Второй")] {
+                c.execute(
+                    "INSERT INTO titles(id,kind,key,title,added_at,updated_at) VALUES(?1,'movie',?2,?2,0,0)",
+                    rusqlite::params![id, name],
+                )?;
+                c.execute(
+                    "INSERT INTO files(id,title_id,path,size,mtime,added_at) VALUES(?1,?1,?2,1024,0,0)",
+                    rusqlite::params![id, media(id).to_string_lossy().as_ref()],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let mut people = Vec::new();
+    for (login, name) in [("friend", "Друг"), ("stranger", "Чужой")] {
+        assert!(
+            host.send(
+                "POST",
+                "/api/admin/users",
+                json!({"login":login,"name":name,"password":"PartyPass123","role":"viewer"})
+            )
+            .await
+            .status()
+            .is_success()
+        );
+        let mut user = common::Client::new(base.clone());
+        assert!(
+            user.send("POST", "/api/auth/login", json!({"login":login,"password":"PartyPass123"}))
+                .await
+                .status()
+                .is_success()
+        );
+        people.push(user);
+    }
+    let mut stranger = people.pop().unwrap();
+    let mut friend = people.pop().unwrap();
+    let room = host.send("POST", "/api/rooms", json!({"fileId":9950})).await.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let url = |tail: &str| format!("/api/rooms/{room}{tail}");
+
+    // Код комнаты чужого не пускает: ни снимок, ни чат, ни управление, ни очередь.
+    assert_eq!(stranger.get(&url("")).await.status(), 403);
+    assert_eq!(stranger.send("POST", &url("/chat"), json!({"body":"привет"})).await.status(), 403);
+    assert_eq!(stranger.send("POST", &url("/state"), json!({"playing":true,"position":1})).await.status(), 403);
+    assert_eq!(stranger.send("POST", &url("/queue"), json!({"fileId":9951})).await.status(), 403);
+    assert_eq!(stranger.get(&url("/events")).await.status(), 403);
+
+    // Позвал - вошёл. Звать может только создатель.
+    invite(&running.app, &room, &mut friend, "Друг").await;
+    assert_eq!(friend.get(&url("")).await.status(), 200);
+    assert_eq!(friend.send("POST", &url("/invite"), json!({"profileId":1})).await.status(), 403);
+
+    // Гость может лишь предложить; в очереди оно ждёт создателя.
+    let suggested = friend.send("POST", &url("/queue"), json!({"fileId":9951})).await.json::<Value>().await.unwrap();
+    assert_eq!(suggested["approved"], false);
+    let id = suggested["id"].as_u64().unwrap();
+    assert_eq!(friend.send("POST", &url(&format!("/queue/{id}/approve")), json!({})).await.status(), 403);
+    assert_eq!(friend.send("PUT", &url("/queue"), json!({"ids":[id]})).await.status(), 403);
+    assert_eq!(friend.send("POST", &url(&format!("/queue/{id}/play")), json!({})).await.status(), 403);
+    // Непринятое включить нельзя и создателю.
+    assert_eq!(host.send("POST", &url(&format!("/queue/{id}/play")), json!({})).await.status(), 404);
+
+    assert!(host.send("POST", &url(&format!("/queue/{id}/approve")), json!({})).await.status().is_success());
+    // Порядок: второй выше первого.
+    assert!(host.send("PUT", &url("/queue"), json!({"ids":[id, 1]})).await.status().is_success());
+    let snap = host.json(&url("")).await;
+    assert_eq!(snap["queue"][0]["id"], id);
+    assert_eq!(snap["queue"][0]["label"], "Второй");
+    assert_eq!(snap["queue"][0]["source"], "Nova");
+
+    // Включил из очереди - у всех другой фильм и место с нуля.
+    assert!(host.send("POST", &url(&format!("/queue/{id}/play")), json!({})).await.status().is_success());
+    let snap = friend.json(&url("")).await;
+    assert_eq!(snap["titleId"], 9951);
+    assert_eq!(snap["current"], id);
+    assert_eq!(snap["state"]["fileId"], 9951);
+
+    // Дальше по очереди: после последнего - конец.
+    let next = host.send("POST", &url("/queue/next"), json!({})).await.json::<Value>().await.unwrap();
+    assert_eq!(next["ended"], false);
+    assert_eq!(next["id"], 1);
+    let end = host.send("POST", &url("/queue/next"), json!({})).await.json::<Value>().await.unwrap();
+    assert_eq!(end["ended"], true);
+
+    // Своё предложение гость убирает сам, чужое - нет.
+    let own = friend.send("POST", &url("/queue"), json!({"fileId":9950})).await.json::<Value>().await.unwrap();
+    let own = own["id"].as_u64().unwrap();
+    assert_eq!(friend.send("DELETE", &url(&format!("/queue/{id}")), json!({})).await.status(), 403);
+    assert!(friend.send("DELETE", &url(&format!("/queue/{own}")), json!({})).await.status().is_success());
 }
