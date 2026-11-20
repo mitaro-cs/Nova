@@ -5,6 +5,7 @@
   import Poster from '$lib/discover/Poster.svelte';
   import PosterRow from '$lib/discover/PosterRow.svelte';
   import ChainCheck from '$lib/discover/ChainCheck.svelte';
+  import Spotlight from '$lib/discover/Spotlight.svelte';
   import { extSheet } from '$lib/discover/sheet.svelte';
   import LinkFinder from '$lib/links/LinkFinder.svelte';
   import { session } from '$lib/session.svelte';
@@ -174,6 +175,7 @@
       </div>
     {/each}
   {:else if feed.rows.length}
+    {#if !kind}<Spotlight rows={feed.rows} />{/if}
     <BrowseGenres />
     {#if friendRows.length}<PosterRow title="Друзья смотрят" items={friendRows} />{/if}
     {#each rows as row, i (row.key)}
