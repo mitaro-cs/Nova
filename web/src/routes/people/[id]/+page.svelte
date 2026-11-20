@@ -701,4 +701,12 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
+  /* Вкладки-капсула (профиль D): плашка переезжает под выбранной. */
+  @media (min-width: 601px) {
+    .tabs { gap: 4px; width: max-content; max-width: 100%; padding: 5px; border: 1px solid #ffffff1a; border-radius: 999px; background: #0c0c0e; }
+    .tabs button { position: relative; z-index: 1; padding: 10px 22px; border-radius: 999px; font-size: 14px; }
+    .tabs button[aria-selected='true'] { color: #0a0a0b; }
+    .tabs button[aria-selected='true'] sup { color: #52525b; }
+    .ink { top: 5px; bottom: 5px; height: auto; border-radius: 999px; }
+  }
 </style>

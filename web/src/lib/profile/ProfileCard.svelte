@@ -479,4 +479,14 @@
     h1 { font-size: clamp(34px, 4vw, 52px); letter-spacing: -0.04em; line-height: 1.02; }
     .now { font-size: 16px; }
   }
+  /* Дизайн «Стена постеров» (профиль D): обложка 440 px, портрет 172 px, имя 72 px лежит на стене. */
+  @media (min-width: 1001px) {
+    .cover { height: 440px; }
+    .cover::after { background: linear-gradient(180deg, #0003 0%, #000a 62%, #08080a 100%); }
+    .who { grid-template-columns: 200px minmax(0, 1fr) auto; gap: 4px 30px; padding: 0 40px 32px; }
+    .ring { width: 172px; height: 172px; margin-top: -132px; grid-row: 1 / span 3; }
+    h1 { margin-top: -84px; font-size: clamp(44px, 5.4vw, 72px); letter-spacing: -0.05em; line-height: 1; }
+    .now { margin-top: 6px; }
+    .live { width: 26px; height: 26px; right: 8px; bottom: 8px; }
+  }
 </style>
