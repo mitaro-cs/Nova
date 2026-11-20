@@ -2,6 +2,7 @@
   import { api, post, errorText } from '$lib/api';
   import { extSheet } from '$lib/discover/sheet.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import AccessControlLab from './AccessControlLab.svelte';
   let {onchanged}: {onchanged?:()=>void} = $props();
   type Source={source:{id:string;name:string;url:string;kind:string};domain:string;configured:boolean;enabled:boolean;running:boolean;state:string;pages:number;message:string;verificationAvailable:boolean;sessionAllowed:boolean;counts:{found:number;imported:number;failed:number;pending:number};problems:{url:string;title:string;state:string;message:string}[]};
   let items=$state<Source[]>([]),error=$state(''),busy=$state('');
@@ -77,6 +78,7 @@
     {/each}
   </div>
   <p class="footnote"><Icon name="info" size={16} />Импорт работает, пока Nova открыта. Если сайт недоступен или требует проверку человека, причина появится в его карточке. Доступность всех потоков зависит от источника.</p>
+  <AccessControlLab />
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 </section>
 
