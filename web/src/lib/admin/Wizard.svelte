@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { size } from '$lib/fmt';
   import { forgetSpeed, measureSpeed } from '$lib/player/speed';
@@ -75,7 +76,7 @@
     measured = true;
     measuring = false;
   }
-  $effect(() => {
+  onMount(() => {
     void measure();
   });
   const viewers = $derived(mbit ? Math.max(1, Math.floor(mbit / 8)) : 0);

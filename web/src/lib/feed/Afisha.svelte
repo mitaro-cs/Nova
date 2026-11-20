@@ -136,13 +136,13 @@
 </div>
 
 <style>
-  .af { display: grid; gap: 26px; padding: 0 var(--gutter); }
+  .af { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; padding: 0 var(--gutter); }
   .ask { display: flex; align-items: center; gap: 14px; padding: 10px 14px 10px 10px; border: 1px solid #ffffff33; border-radius: 999px; background: #101012; }
   .spark { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #0a0a0b; }
   .ask input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: #fff; font: inherit; font-size: 17px; }
   .ask input::placeholder { color: #a1a1aa; }
   .ask:focus-within { border-color: #fff; }
-  .chips { display: flex; gap: 8px; }
+  .chips { display: flex; flex: none; gap: 8px; }
   .chips button { padding: 9px 16px; border: 1px solid #ffffff24; border-radius: 999px; background: #17171a; color: #fff; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background 0.2s; }
   .chips button:hover { background: #26262a; }
   .none { margin: 0; color: var(--muted); }
@@ -169,6 +169,6 @@
   .nm b { font-size: 15px; }
   .nm small { color: var(--muted); font-size: 12px; }
   .ideas em { color: #c4c4cc; font-size: 12px; font-style: normal; font-weight: 700; }
-  @media (max-width: 900px) { .chips { display: none; } }
+  @media (max-width: 1280px) { .chips { display: none; } }
   @media (max-width: 640px) { .day { border-radius: 28px; } .af { gap: 20px; } .ideas { padding: 16px; border-radius: 26px; } }
 </style>
