@@ -513,8 +513,23 @@ export interface RoomChat {
   at: number;
 }
 
+/** Видео в очереди комнаты: фильм Nova или ссылка; `approved: false` - предложение гостя, ждёт создателя. */
+export interface RoomItem {
+  id: number;
+  fileId: number;
+  linkId: number | null;
+  titleId: number;
+  label: string;
+  source: string;
+  by: number;
+  byName: string;
+  approved: boolean;
+}
+
 export type RoomEvent =
-  | { type: 'snapshot'; id: string; ownerId: number; titleId: number; state: RoomState; members: Who[]; chat: RoomChat[]; voice: number[] }
+  | { type: 'snapshot'; id: string; ownerId: number; titleId: number; state: RoomState; members: Who[]; chat: RoomChat[]; voice: number[]; queue?: RoomItem[]; current?: number | null }
+  | { type: 'queue'; queue: RoomItem[]; current: number | null }
+  | { type: 'now'; titleId: number; state: RoomState; current: number | null }
   | { type: 'voice'; ids: number[] }
   | { type: 'signal'; from: number; to: number; data: { type: 'offer' | 'answer'; sdp: RTCSessionDescriptionInit } | { type: 'ice'; candidate: RTCIceCandidateInit } }
   | { type: 'state'; state: RoomState }

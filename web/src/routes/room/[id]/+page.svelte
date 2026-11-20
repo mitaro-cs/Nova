@@ -5,7 +5,7 @@
   import PlayerShell from '$lib/player/PlayerShell.svelte';
   import type { PlayerSync } from '$lib/player/sync';
   import { session } from '$lib/session.svelte';
-  import type { RoomChat, RoomEvent, RoomState, Who } from '$lib/types';
+  import type { RoomChat, RoomEvent, RoomItem, RoomState, Who } from '$lib/types';
   import { Voice } from '$lib/room/voice.svelte';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
@@ -23,6 +23,13 @@
   let chat = $state<RoomChat[]>([]);
   let error = $state('');
   let side = $state(true);
+  // Очередь просмотра: порядок задаёт создатель, остальные предлагают. Вкладка боковой панели - «Очередь» или «Чат».
+  let queue = $state<RoomItem[]>([]);
+  let current = $state<number | null>(null);
+  let ownerId = $state(0);
+  let tab = $state<'queue' | 'chat'>('chat');
+  let newUrl = $state('');
+  let adding = $state(false);
   let connection = $state('connecting');
   let text = $state('');
   let inviting = $state(false);
@@ -86,12 +93,24 @@
         if (me && !voice) voice = new Voice(room_, me);
         voice?.setIds(e.voice ?? []);
         titleId = e.titleId;
+        ownerId = e.ownerId;
+        queue = e.queue ?? [];
+        current = e.current ?? null;
         members = e.members;
         chat = e.chat;
         setState(e.state);
         scrollChat();
       } else if (e.type === 'state') {if(sending)deferred=e.state;else setState(e.state);}
       else if (e.type === 'members') members = e.members;
+      else if (e.type === 'queue') {
+        queue = e.queue;
+        current = e.current;
+      } else if (e.type === 'now') {
+        titleId = e.titleId;
+        current = e.current;
+        acceptedRevision = -1;
+        setState(e.state);
+      }
       else if (e.type === 'chat') {
         chat = [...chat.slice(-59), { from: e.from, body: e.body, at: e.at }];
         scrollChat();
@@ -103,7 +122,7 @@
     es.onerror = () => {
       connection = 'reconnecting';
       api('/api/rooms/'+room_).catch((x) => {
-        if (x?.status === 404 || x?.status === 401) { error=errorText(x);es.close(); }
+        if (x?.status === 404 || x?.status === 401 || x?.status === 403) { error=errorText(x);es.close(); }
       });
     };
     return () => {
@@ -203,6 +222,41 @@
     }
   }
   const me = $derived(session.me?.user.profile?.id);
+  const owner = $derived(me != null && me === ownerId);
+  const ready = $derived(queue.filter((q) => q.approved));
+  const asks = $derived(queue.filter((q) => !q.approved));
+
+  async function act(path: string, method: 'POST' | 'PUT' | 'DELETE' = 'POST', json: unknown = {}) {
+    try {
+      await api(`/api/rooms/${id}/queue${path}`, { method, json });
+    } catch (x) {
+      error = errorText(x);
+    }
+  }
+  /** Ссылка: сначала проверка сервером (Rutube, VK, YouTube, прямой файл, сайты хоста), потом - в очередь. */
+  async function addLink(e: SubmitEvent) {
+    e.preventDefault();
+    const url = newUrl.trim();
+    if (!url || adding) return;
+    adding = true;
+    error = '';
+    try {
+      const l = await post<{ id: number }>('/api/links', { url });
+      await post(`/api/rooms/${id}/queue`, { linkId: l.id });
+      newUrl = '';
+    } catch (x) {
+      error = errorText(x);
+    } finally {
+      adding = false;
+    }
+  }
+  const move = (i: number, d: -1 | 1) => {
+    const ids = ready.map((q) => q.id);
+    const j = i + d;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    void act('', 'PUT', { ids });
+  };
 </script>
 
 {#if error && !room}
@@ -212,11 +266,11 @@
     <a class="btn" href="/">На главную</a>
   </div>
 {:else if room}
-  {#key id}
-    {#if room.linkId && !linkSrc}
+  {#key `${id}:${room.linkId ?? room.fileId}`}
+    {#if room.linkId && (!linkSrc || linkSrc.linkId !== room.linkId)}
       <div class="boot" aria-busy="true"><Icon name="party" size={36} /> Готовим видео с сайта…</div>
     {:else}
-    <PlayerShell fileId={room.fileId} src={linkSrc} {sync} sidebar={side}>
+    <PlayerShell fileId={room.fileId} src={room.linkId ? linkSrc : null} {sync} sidebar={side}>
       <div class="room" class:closed={!side}>
         <div class="room-status" role="status"><Icon name="party" size={14}/><span>Смотрим вместе</span><i class:online={connection === 'online'}></i><small>{error || (connection === 'online' ? `${members.length} участн.` : 'Восстанавливаем связь…')}</small></div>
         <button class="toggle" aria-label={side ? 'Спрятать чат' : 'Показать чат'} aria-expanded={side} onclick={() => (side = !side)}>
@@ -266,6 +320,43 @@
                 {/each}
               </ul>
             {/if}
+            <div class="tabs2" role="tablist" aria-label="Панель комнаты">
+              <button role="tab" aria-selected={tab === 'queue'} class:on={tab === 'queue'} onclick={() => (tab = 'queue')}>Очередь{#if queue.length}<sup>{queue.length}</sup>{/if}</button>
+              <button role="tab" aria-selected={tab === 'chat'} class:on={tab === 'chat'} onclick={() => (tab = 'chat')}>Чат</button>
+            </div>
+            {#if tab === 'queue'}
+              <p class="who">{owner ? 'Вы создатель: порядок задаёте вы, остальные могут предложить' : 'Порядок задаёт создатель комнаты; вы можете предложить видео'}</p>
+              <ol class="queue" aria-label="Очередь просмотра">
+                {#each ready as q, i (q.id)}
+                  <li class:now={q.id === current}>
+                    <span class="src">{q.source}</span>
+                    <span class="nm"><b>{q.label}</b><small>{q.id === current ? 'играет · ' : ''}{q.byName}</small></span>
+                    {#if owner}
+                      <button class="sq" aria-label="Выше" disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
+                      <button class="sq" aria-label="Ниже" disabled={i === ready.length - 1} onclick={() => move(i, 1)}>↓</button>
+                      {#if q.id !== current}<button class="sq" aria-label="Включить сейчас" onclick={() => act(`/${q.id}/play`)}><Icon name="play" size={12} /></button>{/if}
+                      <button class="sq" aria-label="Убрать из очереди" onclick={() => act(`/${q.id}`, 'DELETE')}><Icon name="close" size={12} /></button>
+                    {/if}
+                  </li>
+                {/each}
+                {#each asks as q (q.id)}
+                  <li class="ask">
+                    <span class="src">{q.source}</span>
+                    <span class="nm"><b>{q.label}</b><small>предложил(а) {q.byName}</small></span>
+                    {#if owner}<button class="btn sm" onclick={() => act(`/${q.id}/approve`)}>Принять</button>{/if}
+                    {#if owner || q.by === me}<button class="sq" aria-label="Убрать предложение" onclick={() => act(`/${q.id}`, 'DELETE')}><Icon name="close" size={12} /></button>{/if}
+                  </li>
+                {/each}
+                {#if !queue.length}<li class="muted">Очередь пуста</li>{/if}
+              </ol>
+              {#if owner && ready.length > 1}<button class="btn sm" onclick={() => act('/next')}>Следующее</button>{/if}
+              <form class="addq" onsubmit={addLink}>
+                <input class="input" bind:value={newUrl} placeholder="Ссылка на видео (Rutube, VK, YouTube, файл)" aria-label="Ссылка на видео для очереди" maxlength="500" />
+                <button class="btn sm primary" disabled={!newUrl.trim() || adding}>{adding ? '…' : owner ? 'Добавить' : 'Предложить'}</button>
+              </form>
+              <p class="safe">Ссылки проверяет сервер: чужие страницы внутри Nova не открываются</p>
+              {#if error}<p class="error">{error}</p>{/if}
+            {:else}
             <ol class="feed" bind:this={feed} aria-live="polite">
               {#if room.by}<li class="sys">Последним управлял(а) {room.by}</li>{/if}
               {#each chat as m, i (i)}
@@ -281,6 +372,7 @@
               <input class="input" bind:value={text} maxlength="500" placeholder="Сообщение…" aria-label="Сообщение в комнату" />
               <button class="btn sm icon" aria-label="Отправить" disabled={!text.trim()}><Icon name="send" size={16} /></button>
             </form>
+            {/if}
           </aside>
         {/if}
         <div class="reacts" role="group" aria-label="Реакции">
@@ -674,4 +766,22 @@
     .room:not(.closed) .toggle { right:372px; }
     .room:not(.closed) .reacts { left:calc((100% - 360px) / 2); }
   }
+  .tabs2 { display: flex; gap: 6px; padding: 4px; border-radius: 999px; background: #17171a; }
+  .tabs2 button { flex: 1; padding: 8px 0; border: 0; border-radius: 999px; background: none; color: #c4c4cc; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .tabs2 button.on { background: #fff; color: #0a0a0b; }
+  .tabs2 sup { margin-left: 4px; font-size: 10px; }
+  .who { margin: 10px 2px 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .queue { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; overflow-y: auto; flex: 1; min-height: 0; }
+  .queue li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #ffffff14; border-radius: 16px; background: #17171a; }
+  .queue li.now { border-color: #fff; }
+  .queue li.ask { border-style: dashed; }
+  .src { flex: none; padding: 2px 8px; border-radius: 999px; background: #ffffff1a; font-size: 10px; font-weight: 700; }
+  .nm { display: grid; flex: 1; min-width: 0; }
+  .nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .nm small { color: var(--muted); font-size: 11px; }
+  .sq { display: grid; place-items: center; flex: none; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: #ffffff14; color: #fff; font-size: 12px; cursor: pointer; }
+  .sq:disabled { opacity: 0.3; cursor: default; }
+  .addq { display: flex; gap: 6px; margin-top: 8px; }
+  .addq .input { flex: 1; min-width: 0; }
+  .safe { margin: 4px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 </style>

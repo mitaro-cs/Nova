@@ -127,6 +127,15 @@
   </div>
 {/if}
 
+{#if paused && !busy && !panel}
+  <div class="paused" aria-label="Пауза">
+    <small>Пауза</small>
+    <h2>{title}</h2>
+    {#if episode}<p>{episode}</p>{/if}
+    <div><button class="go" type="button" onclick={ontoggle}><Icon name="play" size={18} /> Продолжить</button>{#if duration > time}<span class="left">Осталось {Math.max(1, Math.round((duration - time) / 60))} мин</span>{/if}</div>
+  </div>
+{/if}
+
 <div class="bottom" class:hide={!shown} bind:clientHeight={bottomH} role="group" aria-label="Управление просмотром">
   <div class="cap">
   <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} {onseek} {ondrag} />
@@ -346,17 +355,37 @@
     .cbig.main :global(svg) { width: 22px; height: 22px; }
     .skip { width: 24px; height: 24px; }
   }
-  /* Дизайн «Стекло» (плеер D): название и время парят плашками, управление - одна капсула снизу. */
+  /* Минимализм (плееры «Тишина» и «Пауза»): ни плашек, ни рамок - название, время, тонкая линия и одна строка значков;
+     на паузе кадр темнеет и крупно встаёт название с кнопкой «Продолжить». */
   .ends { display: none; }
+  .paused { display: none; }
   @media (min-width: 701px) {
-    .top { background: none; padding-inline: clamp(18px, 3vw, 40px); }
-    .top .name { padding: 8px 20px; border: 1px solid #ffffff26; border-radius: 999px; background: #0007; }
-    .top .ibtn { width: 46px; height: 46px; border: 1px solid #ffffff26; background: #0007; }
-    .ends { display: inline-block; padding: 10px 18px; border: 1px solid #ffffff26; border-radius: 999px; background: #0007; font-size: 14px; font-weight: 600; white-space: nowrap; }
-    .bottom { background: none; padding: 0 clamp(18px, 3vw, 40px) calc(28px + env(safe-area-inset-bottom)); }
-    .cap { padding: 16px 26px 10px; border: 1px solid #ffffff26; border-radius: 32px; background: #0c0c0ed9; }
+    .top { background: none; padding-inline: clamp(18px, 3vw, 44px); }
+    .top .name { padding: 0; border: 0; background: none; }
+    .top .name b { font-size: 15px; opacity: 0.9; }
+    .top .ibtn { width: 40px; height: 40px; border: 0; background: none; }
+    .top .ibtn:hover { background: #ffffff1f; }
+    .ends { display: inline-block; font-size: 13px; font-weight: 500; opacity: 0.6; white-space: nowrap; }
+    .bottom { background: linear-gradient(transparent, #000000a6); padding: 60px clamp(18px, 3vw, 44px) calc(30px + env(safe-area-inset-bottom)); }
+    .cap { padding: 0; border: 0; border-radius: 0; background: none; }
+    .ibtn { opacity: 0.85; }
+    .ibtn:hover, .ibtn.on { opacity: 1; }
+    .paused {
+      position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 0 clamp(28px, 4.5vw, 72px) 150px; pointer-events: none;
+      background: linear-gradient(90deg, #000000b8 0%, #00000040 55%, transparent 100%), linear-gradient(0deg, #000000cc 0%, transparent 45%);
+      animation: swap 0.25s ease-out;
+    }
+    .paused * { pointer-events: auto; }
+    .paused small { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }
+    .paused h2 { margin: 10px 0 0; max-width: 18ch; font-size: clamp(34px, 4.4vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 1; overflow-wrap: anywhere; }
+    .paused p { margin: 12px 0 0; font-size: 18px; opacity: 0.75; }
+    .paused .go { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px; padding: 14px 30px; border: 0; border-radius: 999px; background: #fff; color: #0a0a0b; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .paused .left { margin-left: 18px; font-size: 14px; opacity: 0.7; }
+    /* Большие кнопки по центру на паузе не нужны: есть «Продолжить». */
+    .center.covered, .center.hide { opacity: 0; }
   }
   @media (min-width: 1000px) {
-    .center { inset: auto 35% 38px; }
+    .center { inset: auto 35% 34px; }
   }
 </style>

@@ -5,6 +5,7 @@
   import { percent } from '$lib/library';
   import Icon from '$lib/ui/Icon.svelte';
   import Metrics from './Metrics.svelte';
+  import ServerMode from './ServerMode.svelte';
   import Scheme from './Scheme.svelte';
   import type { IconName } from '$lib/ui/icons';
   import type { Health, Status } from './types';
@@ -143,6 +144,8 @@
     }
   }
 </script>
+
+<ServerMode {status} {reload} />
 
 <section class="summary" class:bad={problems > 0} aria-label="Сводка">
   <span class="dot" aria-hidden="true"><Icon name={problems ? 'info' : 'check'} size={30} /></span>
