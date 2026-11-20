@@ -130,9 +130,6 @@
         </nav>
         <div class="acts">
           <button class="btn" onclick={() => (finder = true)}><Icon name="link" size={18} /> Смотреть по ссылке</button>
-          {#if session.me?.user.role === 'host'}
-            <a class="btn" href="/admin?tab=catalog#sources">Источники каталога <Icon name="right" size={16} /></a>
-          {/if}
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@
   import Afisha from '$lib/feed/Afisha.svelte';
   import FeedCard from '$lib/ui/FeedCard.svelte';
 
-  // «Что смотреть»: вертикальная лента карточек, на экране играет трейлер одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
+  // Только описанное по IMDb (свои фильмы без описания в ленту не идут). «Что смотреть»: вертикальная лента карточек, на экране играет трейлер одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
   // «Не интересно» не показываем. Подгружается по шесть, когда лента подходит к концу.
   type Item = { key: string; card?: Card; ext?: ExtCard };
   type Feed = { rows: { key: string; items: ExtCard[] }[] };
@@ -33,7 +33,7 @@
   const items = $derived.by<Item[]>(() => {
     if (!feed || !catalog.items) return [];
     const own = catalog.items
-      .filter((c) => c.status !== 'dropped' && c.status !== 'watched' && (c.backdrop || c.poster))
+      .filter((c) => c.status !== 'dropped' && c.status !== 'watched' && (c.backdrop || c.poster) && (c.overview || c.rating != null))
       .sort((a, b) => b.addedAt - a.addedAt)
       .map<Item>((card) => ({ key: `t${card.id}`, card }));
     const seen = new Set<string>();
@@ -67,10 +67,11 @@
   <h1>Что смотреть</h1>
   {#if feed === null || !catalog.items}
     <div class="skeleton" aria-busy="true"></div>
-  {:else if !items.length}
+  {:else}
+    <Afisha items={catalog.items} ext={feed.rows.flatMap((r) => r.items)} />
+  {#if !items.length}
     <p class="note">{failed ? 'Подборки сейчас недоступны. Проверьте связь и зайдите позже.' : 'Пока нечего предложить - загляните позже.'}</p>
   {:else}
-    {#if catalog.items}<Afisha items={catalog.items} />{/if}
     <h2 class="lenta">Лента</h2>
     <div class="list">
       {#each shown as it (it.key)}
@@ -84,6 +85,7 @@
       {/each}
     </div>
     {#if items.length > limit}<div bind:this={more} class="more" aria-hidden="true"></div>{/if}
+  {/if}
   {/if}
 </main>
 

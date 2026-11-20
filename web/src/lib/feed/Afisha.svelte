@@ -1,40 +1,91 @@
 <script lang="ts">
+  import { getDetail } from '$lib/discover/details';
   import PosterRow from '$lib/discover/PosterRow.svelte';
   import { isAnime } from '$lib/library';
-  import type { Card } from '$lib/types';
+  import type { Card, ExtCard, ExtDetail } from '$lib/types';
   import { fadeIn } from '$lib/ui/fade';
   import Icon from '$lib/ui/Icon.svelte';
 
   // «Афиша» страницы «Что смотреть»: фильм дня на кадре из фильма, «Спросите Nova» (запрос словами и чипы),
-  // подборки по идее и «Вы не досмотрели». Всё считается тут из каталога, без запросов к серверу.
-  let { items }: { items: Card[] } = $props();
+  // подборки по идее и «Вы не досмотрели». Берём свои фильмы и подборки IMDb вместе (всё описано по IMDb);
+  // кадр у фильма из ленты подгружаем отдельно. Считается тут, без новых запросов к серверу, кроме кадров.
+  let { items, ext = [] }: { items: Card[]; ext?: ExtCard[] } = $props();
 
-  const open = (c: Card) => c.status !== 'dropped' && c.status !== 'watched';
-  const has = (c: Card, ...stems: string[]) => c.genres.some((g) => stems.some((s) => g.toLowerCase().includes(s)));
+  type Entry = {
+    key: string;
+    title: string;
+    year: number | null;
+    genres: string[];
+    runtime: number | null;
+    kind: 'movie' | 'series';
+    match: number;
+    backdrop: string | null;
+    href: string;
+    resume: boolean;
+    card?: Card;
+    ext?: ExtCard;
+  };
+
+  // Свои фильмы - только описанные по IMDb (с описанием или оценкой): остальные без картинок и с чужими годами.
+  const open = (c: Card) => c.status !== 'dropped' && c.status !== 'watched' && (!!c.overview || c.rating != null);
+  const openExt = (e: ExtCard) => e.mark !== 'dropped' && e.mark !== 'watched' && !!e.poster;
+  const has = (e: Entry, ...stems: string[]) => e.genres.some((g) => stems.some((s) => g.toLowerCase().includes(s)));
+
+  const entries = $derived.by<Entry[]>(() => {
+    const own = items.filter(open).map<Entry>((card) => ({
+      key: `t${card.id}`, title: card.title, year: card.year, genres: card.genres, runtime: card.runtime, kind: card.kind,
+      match: card.matchPct ?? 0, backdrop: card.backdrop, href: `/title/${card.id}`, resume: card.status === 'watching' && !!card.resume, card,
+    }));
+    const seen = new Set<string>();
+    const outer = ext.filter((e) => !e.local && openExt(e) && !seen.has(e.id) && !!seen.add(e.id)).map<Entry>((e) => ({
+      key: `x${e.id}`, title: e.title, year: e.year, genres: e.genres, runtime: null, kind: e.kind,
+      match: Math.round((e.rating ?? 0) * 10), backdrop: backs[e.id]?.backdrop ?? null, href: `/ext/${e.id}`, resume: false, ext: e,
+    }));
+    return [...own, ...outer];
+  });
+
+  // Кадры и описания фильмов из ленты: берём у первых кандидатов, пока не найдётся достаточно с кадром.
+  let backs = $state<Record<string, Pick<ExtDetail, 'backdrop' | 'overview' | 'runtime'>>>({});
+  $effect(() => {
+    const want = ext.filter((e) => !e.local && openExt(e)).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 8);
+    let live = true;
+    (async () => {
+      for (const e of want) {
+        if (!live) return;
+        if (backs[e.id]) continue;
+        try {
+          const d = await getDetail(e.id);
+          if (live && d.backdrop) backs[e.id] = { backdrop: d.backdrop, overview: d.overview, runtime: d.runtime };
+        } catch {
+          /* кадра нет - этот фильм героем не станет */
+        }
+      }
+    })();
+    return () => (live = false);
+  });
 
   // ---------- фильм дня ----------
-  let skipped = $state<number[]>([]);
-  const candidates = $derived(
-    items
-      .filter((c) => open(c) && c.backdrop && !skipped.includes(c.id))
-      .sort((a, b) => (b.matchPct ?? 0) - (a.matchPct ?? 0) || b.addedAt - a.addedAt),
-  );
+  let skipped = $state<string[]>([]);
+  const candidates = $derived(entries.filter((e) => e.backdrop && !skipped.includes(e.key)).sort((a, b) => b.match - a.match));
   const day = $derived(candidates[0] ?? null);
-  const lead = $derived(day ? [day.kind === 'series' ? 'Сериал' : 'Фильм', day.year, day.genres.slice(0, 2).join(', '), day.runtime ? `${Math.floor(day.runtime / 60)} ч ${day.runtime % 60} мин` : null].filter(Boolean).join(' · ') : '');
+  const dayText = $derived(day?.ext ? backs[day.ext.id]?.overview ?? null : day?.card?.overview ?? null);
+  const dayRuntime = $derived(day ? day.runtime ?? (day.ext ? backs[day.ext.id]?.runtime ?? null : null) : null);
+  const lead = $derived(
+    day ? [day.kind === 'series' ? 'Сериал' : 'Фильм', day.year, day.genres.slice(0, 2).join(', '), dayRuntime ? `${Math.floor(dayRuntime / 60)} ч ${dayRuntime % 60} мин` : null].filter(Boolean).join(' · ') : '',
+  );
 
   // ---------- подборки по идее ----------
-  type Idea = { id: string; name: string; hint: string; pick: (c: Card) => boolean };
+  type Idea = { id: string; name: string; hint: string; pick: (e: Entry) => boolean };
   const IDEAS: Idea[] = [
-    { id: 'short', name: 'Один вечер - один фильм', hint: 'Не длиннее 100 минут', pick: (c) => c.kind === 'movie' && !!c.runtime && c.runtime <= 100 },
-    { id: 'think', name: 'Чтобы подумать', hint: 'Фантастика, детективы и триллеры', pick: (c) => has(c, 'фантаст', 'детектив', 'триллер') },
-    { id: 'rain', name: 'Дождь за окном', hint: 'Тихие драмы и мелодрамы', pick: (c) => has(c, 'драм', 'мелодрам') },
-    { id: 'night', name: 'Тёмное кино после полуночи', hint: 'Ужасы и мрачные триллеры', pick: (c) => has(c, 'ужас', 'триллер') },
-    { id: 'family', name: 'Всей семьёй', hint: 'Мультфильмы и семейное кино', pick: (c) => has(c, 'мульт', 'семейн') },
-    { id: 'serial', name: 'Сериал на неделю', hint: 'Сериалы, которые вы ещё не начали', pick: (c) => c.kind === 'series' && c.status !== 'watching' },
+    { id: 'short', name: 'Один вечер - один фильм', hint: 'Не длиннее 100 минут', pick: (e) => e.kind === 'movie' && !!e.runtime && e.runtime <= 100 },
+    { id: 'think', name: 'Чтобы подумать', hint: 'Фантастика, детективы и триллеры', pick: (e) => has(e, 'фантаст', 'детектив', 'триллер') },
+    { id: 'rain', name: 'Дождь за окном', hint: 'Тихие драмы и мелодрамы', pick: (e) => has(e, 'драм', 'мелодрам') },
+    { id: 'night', name: 'Тёмное кино после полуночи', hint: 'Ужасы и мрачные триллеры', pick: (e) => has(e, 'ужас', 'триллер') },
+    { id: 'family', name: 'Всей семьёй', hint: 'Мультфильмы и семейное кино', pick: (e) => has(e, 'мульт', 'семейн') },
+    { id: 'serial', name: 'Сериал на неделю', hint: 'Сериалы, которые вы ещё не начали', pick: (e) => e.kind === 'series' },
   ];
-  const ideas = $derived(
-    IDEAS.map((i) => ({ ...i, cards: items.filter((c) => open(c) && i.pick(c)).sort((a, b) => (b.matchPct ?? 0) - (a.matchPct ?? 0)) })).filter((i) => i.cards.length >= 2),
-  );
+  const best = (a: Entry, b: Entry) => b.match - a.match;
+  const ideas = $derived(IDEAS.map((i) => ({ ...i, list: entries.filter(i.pick).sort(best) })).filter((i) => i.list.length >= 2));
 
   // ---------- «Спросите Nova» ----------
   const CHIPS = ['Посмешить', 'Подумать', 'Не больше 90 минут', 'Страшное', 'Аниме'];
@@ -42,40 +93,40 @@
   let idea = $state('');
 
   /** Слова запроса → условия. Что не поняли, ищем в названии. */
-  function parse(q: string): ((c: Card) => boolean) | null {
+  function parse(q: string): ((e: Entry) => boolean) | null {
     const t = q.toLowerCase().trim();
     if (!t) return null;
-    const rules: ((c: Card) => boolean)[] = [];
+    const rules: ((e: Entry) => boolean)[] = [];
     const m = /(\d{2,3})\s*мин/.exec(t);
-    if (m) rules.push((c) => !!c.runtime && c.runtime <= Number(m[1]));
-    else if (/коротк|быстр/.test(t)) rules.push((c) => !!c.runtime && c.runtime <= 100);
-    if (/длинн|эпичн/.test(t)) rules.push((c) => !!c.runtime && c.runtime >= 140);
-    if (/смеш|комед|весел/.test(t)) rules.push((c) => has(c, 'комед'));
-    if (/подума|умн|головоломк/.test(t)) rules.push((c) => has(c, 'фантаст', 'детектив', 'триллер'));
-    if (/страш|ужас|жутк/.test(t)) rules.push((c) => has(c, 'ужас'));
-    if (/космос|фантаст/.test(t)) rules.push((c) => has(c, 'фантаст'));
-    if (/драм|груст|трогат/.test(t)) rules.push((c) => has(c, 'драм'));
-    if (/боевик|экшен|драк/.test(t)) rules.push((c) => has(c, 'боевик'));
-    if (/мульт|дет(ям|ск)/.test(t)) rules.push((c) => has(c, 'мульт', 'семейн'));
-    if (/аниме/.test(t)) rules.push((c) => isAnime(c));
-    if (/сериал/.test(t)) rules.push((c) => c.kind === 'series');
-    if (!rules.length) return (c) => c.title.toLowerCase().includes(t) || (c.originalTitle ?? '').toLowerCase().includes(t);
-    return (c) => rules.every((r) => r(c));
+    if (m) rules.push((e) => !!e.runtime && e.runtime <= Number(m[1]));
+    else if (/коротк|быстр/.test(t)) rules.push((e) => !!e.runtime && e.runtime <= 100);
+    if (/длинн|эпичн/.test(t)) rules.push((e) => !!e.runtime && e.runtime >= 140);
+    if (/смеш|комед|весел/.test(t)) rules.push((e) => has(e, 'комед'));
+    if (/подума|умн|головоломк/.test(t)) rules.push((e) => has(e, 'фантаст', 'детектив', 'триллер'));
+    if (/страш|ужас|жутк/.test(t)) rules.push((e) => has(e, 'ужас'));
+    if (/космос|фантаст/.test(t)) rules.push((e) => has(e, 'фантаст'));
+    if (/драм|груст|трогат/.test(t)) rules.push((e) => has(e, 'драм'));
+    if (/боевик|экшен|драк/.test(t)) rules.push((e) => has(e, 'боевик'));
+    if (/мульт|дет(ям|ск)/.test(t)) rules.push((e) => has(e, 'мульт', 'семейн'));
+    if (/аниме/.test(t)) rules.push((e) => (e.card ? isAnime(e.card) : has(e, 'аниме')));
+    if (/сериал/.test(t)) rules.push((e) => e.kind === 'series');
+    if (!rules.length) return (e) => e.title.toLowerCase().includes(t) || (e.card?.originalTitle ?? e.ext?.original ?? '').toLowerCase().includes(t);
+    return (e) => rules.every((r) => r(e));
   }
   const found = $derived.by(() => {
     const rule = parse(ask);
-    const base = items.filter(open);
-    if (rule) return { title: `По запросу «${ask.trim()}»`, cards: base.filter(rule).sort((a, b) => (b.matchPct ?? 0) - (a.matchPct ?? 0)).slice(0, 18) };
+    if (rule) return { title: `По запросу «${ask.trim()}»`, list: entries.filter(rule).sort(best).slice(0, 18) };
     const i = ideas.find((x) => x.id === idea);
-    return i ? { title: i.name, cards: i.cards.slice(0, 18) } : null;
+    return i ? { title: i.name, list: i.list.slice(0, 18) } : null;
   });
 
   // ---------- ряды ----------
-  const resume = $derived(items.filter((c) => c.status === 'watching' && c.resume).slice(0, 18));
-  const fresh = $derived(items.filter(open).sort((a, b) => b.addedAt - a.addedAt).slice(0, 18));
+  const resume = $derived(entries.filter((e) => e.resume).slice(0, 18));
+  const fresh = $derived(entries.filter((e) => e.card).sort((a, b) => b.card!.addedAt - a.card!.addedAt).slice(0, 18));
+  const popular = $derived(entries.filter((e) => e.ext).sort(best).slice(0, 18));
 
-  const tiles = (cards: Card[]) => cards.map((card) => ({ card }));
-  const collage = (cards: Card[]) => cards.slice(0, 3);
+  const tiles = (list: Entry[]) => list.map((e) => (e.card ? { card: e.card } : { ext: e.ext! }));
+  const collage = (list: Entry[]) => list.slice(0, 3).map((e) => e.card?.poster ?? e.ext?.poster ?? null);
 </script>
 
 <div class="af">
@@ -87,8 +138,8 @@
 
   {#if found}
     <section class="found" aria-label="Подобрано">
-      {#if found.cards.length}
-        <PosterRow title={found.title} items={tiles(found.cards)} />
+      {#if found.list.length}
+        <PosterRow title={found.title} items={tiles(found.list)} />
       {:else}
         <p class="none">По запросу «{ask.trim()}» ничего не нашли. Попробуйте жанр или длину: «комедия», «до 90 минут».</p>
       {/if}
@@ -100,13 +151,14 @@
       <img use:fadeIn src={day.backdrop} alt="" decoding="async" />
       <i class="shade" aria-hidden="true"></i>
       <div class="txt">
-        <span class="tag">{day.matchPct ? `Фильм дня · совпадение ${day.matchPct}%` : 'Фильм дня'}</span>
+        <span class="tag">{day.card?.matchPct ? `Фильм дня · совпадение ${day.card.matchPct}%` : 'Фильм дня'}</span>
         <h2>{day.title}</h2>
         <p>{lead}</p>
+        {#if dayText}<p class="ov">{dayText}</p>{/if}
         <div class="btns">
-          <a class="btn primary big" href="/title/{day.id}">Смотреть</a>
-          <a class="btn big" href="/title/{day.id}#trailer">Трейлер</a>
-          <button class="btn big" type="button" onclick={() => (skipped = [...skipped, day.id])}>Не сегодня</button>
+          <a class="btn primary big" href={day.href}>Смотреть</a>
+          <a class="btn big" href="{day.href}#trailer">Трейлер</a>
+          <button class="btn big" type="button" onclick={() => (skipped = [...skipped, day.key])}>Не сегодня</button>
         </div>
       </div>
     </section>
@@ -120,10 +172,10 @@
           <li>
             <button type="button" class:on={idea === i.id && !ask} onclick={() => ((idea = idea === i.id ? '' : i.id), (ask = ''))}>
               <span class="fan" aria-hidden="true">
-                {#each collage(i.cards) as c, k (c.id)}<img use:fadeIn src={c.poster} alt="" style:--k={k} loading="lazy" decoding="async" />{/each}
+                {#each collage(i.list) as src, k (k)}{#if src}<img use:fadeIn {src} alt="" style:--k={k} loading="lazy" decoding="async" />{/if}{/each}
               </span>
               <span class="nm"><b>{i.name}</b><small>{i.hint}</small></span>
-              <em>{i.cards.length}</em>
+              <em>{i.list.length}</em>
             </button>
           </li>
         {/each}
@@ -133,6 +185,7 @@
 
   {#if resume.length}<PosterRow title="Вы не досмотрели" items={tiles(resume)} />{/if}
   {#if fresh.length}<PosterRow title="Новое в библиотеке" items={tiles(fresh)} />{/if}
+  {#if popular.length}<PosterRow title="Популярное на IMDb" items={tiles(popular)} />{/if}
 </div>
 
 <style>
@@ -153,6 +206,7 @@
   .tag { display: inline-block; padding: 8px 16px; border-radius: 999px; background: #ffffff1f; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
   .day h2 { margin: 14px 0 0; font-size: clamp(32px, 4.6vw, 60px); font-weight: 800; letter-spacing: -0.045em; line-height: 1; overflow-wrap: anywhere; }
   .day p { margin: 12px 0 0; color: #d4d4d8; font-size: 16px; }
+  .day .ov { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; max-width: 58ch; font-size: 15px; color: #c4c4cc; }
   .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .big { min-height: 48px; padding-inline: 26px; border-radius: 999px; font-size: 16px; }
   .ideas { padding: 24px; border: 1px solid #ffffff1a; border-radius: 32px; background: #101012; }

@@ -49,23 +49,7 @@ pub fn ext_card(app: &App, v: &Viewer, id: &str) -> ApiResult<ExtCard> {
 /// Подборки ленты. Пусто (ещё не загружали) - просим обновить.
 pub async fn feed(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<FeedQuery>) -> ApiResult<Json<Value>> {
     let mut rows = Vec::new();
-    let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
-    for (kind, key, label) in [
-        ("movie", "catalog_movies", "Фильмы из подключённых источников"),
-        ("series", "catalog_series", "Сериалы и аниме из подключённых источников"),
-    ] {
-        let mut items = ext_cards(
-            &app,
-            &v,
-            "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
-            "e.title LIMIT 20",
-            &[&kind, &domains],
-        )?;
-        items.truncate(ROW as usize);
-        if !items.is_empty() {
-            rows.push(json!({"key":key,"title":label,"items":items}));
-        }
-    }
+    // Подборки только с IMDb: фильмы, импортированные с сайтов, в ленту не попадают (у них чужие названия, годы и нет картинок).
     if let Some(row) = because(&app, &v)? {
         rows.push(row);
     }
@@ -137,22 +121,6 @@ fn because(app: &App, v: &Viewer) -> ApiResult<Option<Value>> {
 
 /// Вся подборка целиком (например, топ-250).
 pub async fn chart(State(app): State<Arc<App>>, v: Viewer, Path(key): Path<String>) -> ApiResult<Json<Value>> {
-    if matches!(key.as_str(), "catalog_movies" | "catalog_series") {
-        let (kind, title) = if key == "catalog_movies" {
-            ("movie", "Фильмы из подключённых источников")
-        } else {
-            ("series", "Сериалы и аниме из подключённых источников")
-        };
-        let domains = serde_json::to_string(&crate::own_sites::enabled_domains(&app)).map_err(ApiError::internal)?;
-        let items = ext_cards(
-            &app,
-            &v,
-            "e.kind = ?2 AND e.id IN (SELECT cl.item_key FROM catalog_links cl WHERE cl.domain IN (SELECT value FROM json_each(?3)))",
-            "e.title",
-            &[&kind, &domains],
-        )?;
-        return Ok(Json(json!({"key":key,"title":title,"items":items})));
-    }
     let title = FEEDS.iter().find(|c| c.0 == key).map(|c| c.1).ok_or_else(ApiError::not_found)?;
     let items = ext_cards(
         &app,

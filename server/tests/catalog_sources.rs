@@ -54,12 +54,9 @@ async fn imports_every_variant_orders_pins_and_disables_sources() {
     let third = host.json(&format!("/api/links/{next}/next")).await["next"]["id"].as_i64().unwrap();
     assert_eq!(host.json(&format!("/api/links/{third}")).await["season"], 2);
     let feed = host.json("/api/discover").await;
+    // В ленту попадает только IMDb: импортированное с сайтов (чужие названия и годы) подборкой не показывается.
     assert!(
-        feed["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|r| r["key"] == "catalog_movies" && r["items"][0]["id"] == "tt7654321")
+        !feed["rows"].as_array().unwrap().iter().any(|r| r["key"] == "catalog_movies" || r["key"] == "catalog_series")
     );
     let mut off = b.clone();
     off["enabled"] = json!(false);
