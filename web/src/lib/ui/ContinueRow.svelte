@@ -10,6 +10,24 @@
   // «Продолжить просмотр» в «Кинозале»: широкие кадры 16:9 с полосой просмотренного; название и
   // где остановились - под кадром.
   let { items }: { items: ResumeItem[] } = $props();
+  // Прокрутка мышью: стрелки по краям (колесо прокручивает страницу, а полосу прокрутки в окне не видно).
+  let strip = $state<HTMLDivElement>();
+  let start = $state(true);
+  let end = $state(true);
+  function edges() {
+    if (!strip) return;
+    start = strip.scrollLeft < 8;
+    end = strip.scrollLeft + strip.clientWidth > strip.scrollWidth - 8;
+  }
+  $effect(() => {
+    void items.length;
+    if (!strip) return;
+    edges();
+    const ro = new ResizeObserver(edges);
+    ro.observe(strip);
+    return () => ro.disconnect();
+  });
+  const page = (dir: -1 | 1) => strip?.scrollBy({ left: dir * strip.clientWidth * 0.85, behavior: 'smooth' });
   const shown = $derived(items.filter((r) => r.card?.status !== 'dropped' && r.ext?.mark !== 'dropped'));
   async function remove(item: ResumeItem) {
     const title = (item.card ?? item.ext)?.title ?? '';
@@ -25,7 +43,8 @@
 {#if shown.length}
   <section class="continue" aria-label="Продолжить просмотр">
     <h2>Продолжить просмотр</h2>
-    <div class="strip">
+    <div class="wrap">
+    <div class="strip" bind:this={strip} onscroll={edges}>
       {#each shown as item (item.key)}
         {@const card = item.card ?? item.ext!}
         {@const art = item.art ?? card.poster}
@@ -44,10 +63,36 @@
         </article>
       {/each}
     </div>
+    {#if !start}<button class="arrow l" aria-label="Назад" onclick={() => page(-1)}><Icon name="back" size={22} /></button>{/if}
+    {#if !end}<button class="arrow r" aria-label="Дальше" onclick={() => page(1)}><Icon name="right" size={22} /></button>{/if}
+    </div>
   </section>
 {/if}
 
 <style>
+  .wrap { position: relative; }
+  /* Круглые стрелки по центру кадра (16:9 от ширины карточки): не заходят на подписи и крестик «убрать». */
+  .arrow {
+    position: absolute;
+    top: calc(var(--fw) * 0.28 - 22px);
+    z-index: 3;
+    display: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: #000000b3;
+    box-shadow: inset 0 0 0 1px #ffffff33;
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .arrow:hover { background: #000000e6; transform: scale(1.08); }
+  .arrow.l { left: 8px; }
+  .arrow.r { right: 8px; }
+  @media (min-width: 1001px) and (hover: hover) { .arrow { display: grid; } }
+
   .continue {
     margin-bottom: 30px;
   }

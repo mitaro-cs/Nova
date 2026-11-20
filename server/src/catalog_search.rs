@@ -287,6 +287,25 @@ async fn search_full(app: &Arc<App>, query: &str) -> anyhow::Result<Vec<String>>
     Ok(ids)
 }
 
+/// Русское описание из Википедии (начало статьи), если своего русского нет: заменяет нерусское описание IMDb,
+/// которое в интерфейсе всё равно не показывается.
+pub async fn ru_overview(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
+    localize(app, &[id.into()]).await?;
+    let raw: String =
+        app.db.with(|c| c.query_row("SELECT data FROM title_localizations WHERE id=?", [id], |r| r.get(0)))?;
+    let data: Value = serde_json::from_str(&raw)?;
+    let title = data["wiki"].as_str().ok_or_else(|| anyhow::anyhow!("Нет русской статьи"))?;
+    let mut url = reqwest::Url::parse("https://ru.wikipedia.org/api/rest_v1/page/summary/")?;
+    url.path_segments_mut().map_err(|_| anyhow::anyhow!("URL"))?.pop_if_empty().push(title);
+    let summary: Value =
+        app.http.get(url).timeout(Duration::from_secs(5)).send().await?.error_for_status()?.json().await?;
+    let Some(text) = crate::names::ru_text(summary["extract"].as_str().map(crate::ruwiki::trim)) else {
+        return Ok(());
+    };
+    app.db.with(|c| c.execute("UPDATE ext_titles SET overview = ?1 WHERE id = ?2", params![text, id]))?;
+    Ok(())
+}
+
 /// Заполнить основные данные русской статьёй, если IMDb блокирует запросы. Никогда не затирает имеющиеся кадры.
 pub async fn fallback_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
     localize(app, &[id.into()]).await?;

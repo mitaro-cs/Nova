@@ -19,7 +19,7 @@ const NAME: &str = r#"query N($id: ID!, $cats: [ID!]) { name(id: $id) { nameText
   credits(first: 80, filter: { categories: $cats }) { edges { node { title {
     id titleText { text } originalTitleText { text } titleType { id isSeries }
     releaseYear { year } ratingsSummary { aggregateRating voteCount }
-    primaryImage { url } genres { genres { text } }
+    primaryImage { url width height } genres { genres { text } }
   } } } } } }"#;
 
 /// Id режиссёра у нас уже известен (описания фильмов или прошлый поиск).
@@ -169,8 +169,16 @@ pub async fn fetch(app: &Arc<App>, id: &str, role: &str) -> anyhow::Result<()> {
     }
     let cats: &[&str] = if role == "actor" { &["actor", "actress"] } else { &["director"] };
     let v = Imdb::new(app.http.clone()).data(NAME, json!({ "id": id, "cats": cats }), "name").await?;
-    let edges: Vec<Value> =
-        v["credits"]["edges"].as_array().into_iter().flatten().map(|e| json!({ "node": e["node"]["title"] })).collect();
+    // Только фильмы и сериалы: серии сериалов (у них свои названия, вроде имени героя), игры и ролики в работы
+    // не идут - иначе на странице человека появляются «фильмы» без постера и описания.
+    const KINDS: &[&str] = &["movie", "tvSeries", "tvMiniSeries", "tvMovie", "tvSpecial"];
+    let edges: Vec<Value> = v["credits"]["edges"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|e| e["node"]["title"]["titleType"]["id"].as_str().is_none_or(|t| KINDS.contains(&t)))
+        .map(|e| json!({ "node": e["node"]["title"] }))
+        .collect();
     let mut works = parse_chart(&json!({ "edges": edges }));
     works.sort_by_key(|w| std::cmp::Reverse(w.year.unwrap_or(0)));
     works.dedup_by(|a, b| a.id == b.id);

@@ -31,6 +31,10 @@
   let failed = $state(false);
   const source = $derived(failed ? null : (replacement ?? c.poster));
   $effect(() => { void c.poster; void card?.id; replacement = null; loaded = false; failed = false; });
+  // Картинка из кэша браузера бывает готова раньше, чем навешан onload: тогда заглушка с названием висела поверх постера.
+  function ready(img: HTMLImageElement) {
+    if (img.complete && img.naturalWidth > 0) loaded = true;
+  }
   function retryImage() {
     const fallback = card ? `/api/discover/poster/${card.id}` : null;
     if (fallback && source !== fallback) replacement = fallback;
@@ -41,7 +45,7 @@
 {#snippet body()}
   <span class="art" class:ranked={rank !== null} style:background={c.poster ? undefined : placeholder(c.title)}>
     {#if !loaded}<span class="ph"><i>{c.kind==='series'?'СЕРИАЛ':'ФИЛЬМ'}</i><b>{c.title}</b>{#if c.year}<small>{c.year}</small>{/if}</span>{/if}
-    {#if source}<img use:fadeIn src={artW(source, 342)} alt="" loading="lazy" decoding="async" width="342" height="513" onload={() => loaded = true} onerror={retryImage} />{/if}
+    {#if source}<img use:fadeIn use:ready src={artW(source, 342)} alt="" loading="lazy" decoding="async" width="342" height="513" onload={() => loaded = true} onerror={retryImage} />{/if}
     {#if c.rating}<span class="rate" class:low={c.rating < 7}>{c.rating.toFixed(1)}</span>{/if}
     {#if rank}<span class="rank">{rank}</span>{/if}
     {#if c.here}<span class="here">Есть у нас</span>{/if}

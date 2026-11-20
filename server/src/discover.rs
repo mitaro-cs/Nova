@@ -190,7 +190,7 @@ pub const FEEDS: &[(&str, &str, Src)] = &[
 
 const NODE: &str = "id titleText { text } originalTitleText { text } titleType { id isSeries }
     releaseYear { year } releaseDate { year month day } ratingsSummary { aggregateRating voteCount }
-    primaryImage { url } genres { genres { text } }";
+    primaryImage { url width height } genres { genres { text } }";
 
 /// Поиск IMDb: `POPULARITY` - сначала модное сейчас, `USER_RATING_COUNT` - больше всего оценок (классика жанра).
 fn search_query(sort: &str) -> String {
@@ -257,7 +257,7 @@ const CHART: &str = r#"query C($chart: ChartTitleType!) { chartTitles(first: 250
   edges { currentRank node {
     id titleText { text } originalTitleText { text } titleType { id isSeries }
     releaseYear { year } ratingsSummary { aggregateRating voteCount }
-    primaryImage { url } genres { genres { text } }
+    primaryImage { url width height } genres { genres { text } }
   } }
 } }"#;
 
@@ -265,7 +265,7 @@ const SIMILAR: &str = r#"query S($id: ID!) { title(id: $id) { moreLikeThisTitles
   edges { node {
     id titleText { text } originalTitleText { text } titleType { id isSeries }
     releaseYear { year } ratingsSummary { aggregateRating voteCount }
-    primaryImage { url } genres { genres { text } }
+    primaryImage { url width height } genres { genres { text } }
   } }
 } } }"#;
 
@@ -307,6 +307,16 @@ pub fn imdb_id(id: &str) -> bool {
 }
 
 /// Разбор `chartTitles`: только фильмы и сериалы (без эпизодов и игр).
+/// Постер IMDb - только вертикальная картинка: у некоторых фильмов «главное изображение» - горизонтальный кадр,
+/// в рамке постера он выглядит обрезанной полосой. Без размеров (старый ответ) берём как есть.
+pub fn poster_of(img: &Value) -> Option<String> {
+    let url = img["url"].as_str().filter(|u| !u.is_empty())?;
+    match (img["width"].as_f64(), img["height"].as_f64()) {
+        (Some(w), Some(h)) if h < w * 1.15 => None,
+        _ => Some(sized(url, 342)),
+    }
+}
+
 pub fn parse_chart(v: &Value) -> Vec<Ext> {
     v["edges"]
         .as_array()
@@ -337,7 +347,7 @@ pub fn parse_chart(v: &Value) -> Vec<Ext> {
                     .filter_map(|g| text(&g["text"]))
                     .take(3)
                     .collect(),
-                poster_url: text(&n["primaryImage"]["url"]).map(|u| sized(&u, 342)),
+                poster_url: poster_of(&n["primaryImage"]),
                 release: release_of(&n["releaseDate"]),
             })
         })
@@ -740,7 +750,22 @@ pub async fn images_backfill(app: Arc<App>) {
             })
             .unwrap_or_default();
         let bare: Vec<String> = bare.into_iter().filter(|i| !retry.contains_key(&format!("d:{i}"))).take(3).collect();
-        if pages.is_empty() && posters.is_empty() && bare.is_empty() {
+        // Описание не по-русски (или его нет) у уже открытых фильмов - русское из Википедии, понемногу.
+        let english: Vec<String> = app
+            .db
+            .with(|c| {
+                let mut st = c.prepare(
+                    "SELECT id FROM ext_titles WHERE id LIKE 'tt%' AND detailed >= ?1
+                       AND (overview IS NULL OR overview NOT GLOB '*[А-яЁё]*')
+                     ORDER BY updated_at DESC LIMIT 200",
+                )?;
+                let r = st.query_map([DETAILED], |r| r.get(0))?;
+                r.collect()
+            })
+            .unwrap_or_default();
+        let english: Vec<String> =
+            english.into_iter().filter(|i| !retry.contains_key(&format!("r:{i}"))).take(4).collect();
+        if pages.is_empty() && posters.is_empty() && bare.is_empty() && english.is_empty() {
             tokio::time::sleep(Duration::from_secs(600)).await;
             continue;
         }
@@ -749,6 +774,11 @@ pub async fn images_backfill(app: Arc<App>) {
             if detail(&app, &id).await.is_ok() {
                 posters_of(&app, std::slice::from_ref(&id)).await;
             }
+        }
+        for id in english {
+            // Нет статьи - не спрашиваем сутки.
+            retry.insert(format!("r:{id}"), now_ms() + RETRY_MS * 24);
+            let _ = crate::catalog_search::ru_overview(&app, &id).await;
         }
         for id in pages {
             if !localize_row(&app, &id).await {
@@ -835,6 +865,16 @@ async fn fetch_detail(app: &Arc<App>, id: &str) -> anyhow::Result<()> {
         let id = id.to_string();
         tokio::spawn(async move {
             localize_row(&a, &id).await;
+        });
+    }
+    // Описание IMDb не по-русски (а показываем только русское) - берём начало русской статьи Википедии.
+    let current: Option<String> =
+        app.db.with(|c| c.query_row("SELECT overview FROM ext_titles WHERE id = ?", [id], |r| r.get(0)))?;
+    if crate::names::ru_text(current).is_none() {
+        let a = app.clone();
+        let id = id.to_string();
+        tokio::spawn(async move {
+            let _ = crate::catalog_search::ru_overview(&a, &id).await;
         });
     }
     let a = app.clone();
@@ -966,6 +1006,8 @@ pub struct ExtCard {
     pub release: Option<String>,
     /// Администратор отметил фильм «Ещё не вышел» вручную.
     pub soon: bool,
+    /// Аниме: жанр «Аниме», японская анимация или фильм из подборок аниме - в разделы «Фильмы»/«Сериалы» не идёт.
+    pub anime: bool,
 }
 
 pub fn card_sql(kids: bool) -> String {
@@ -977,7 +1019,11 @@ pub fn card_sql(kids: bool) -> String {
            CASE WHEN EXISTS (SELECT 1 FROM ext_dropped d WHERE d.ext_id = e.id AND d.profile_id = ?1) THEN 'dropped'
              ELSE (SELECT m.status FROM ext_marks m WHERE m.ext_id = e.id AND m.profile_id = ?1) END,
            EXISTS (SELECT 1 FROM wishes w WHERE w.ext_id = e.id AND w.profile_id = ?1 AND w.dismissed_at IS NULL AND w.done_at IS NULL),
-           e.release, e.soon
+           e.release, e.soon,
+           (e.genres LIKE '%Аниме%' OR e.genres LIKE '%Anime%'
+             OR ((e.genres LIKE '%Мульт%' OR e.genres LIKE '%Анимац%' OR e.genres LIKE '%Animation%')
+                 AND (e.extra LIKE '%Япония%' OR e.extra LIKE '%Japan%'))
+             OR EXISTS (SELECT 1 FROM ext_charts c WHERE c.ext_id = e.id AND c.chart LIKE 'anime%'))
          FROM ext_titles e",
         crate::api::visible(kids)
     )
@@ -1017,6 +1063,7 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
         wished: r.get(10)?,
         release: r.get(11)?,
         soon: r.get(12)?,
+        anime: r.get(13)?,
     })
 }
 

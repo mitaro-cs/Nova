@@ -27,7 +27,8 @@ export function ofTab(items: Card[], tab: Tab): Card[] {
   if (tab === 'home') return items;
   if (tab === 'anime') return items.filter(isAnime);
   const kind = tab === 'movies' ? 'movie' : 'series';
-  return items.filter((c) => c.kind === kind);
+  // Аниме - только в своём разделе.
+  return items.filter((c) => c.kind === kind && !isAnime(c));
 }
 
 const DAY = 86_400_000;

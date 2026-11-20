@@ -98,9 +98,12 @@
     return [...local, ...ext.map((e) => ({ ext: e }))].slice(0, 6);
   });
   const animeIds = $derived(new Set(feed?.rows.filter((r) => r.key.startsWith('anime_')).flatMap((r) => r.items.map((c) => c.id)) ?? []));
+  const animeOf = (m: Pick<Marks['want'][number], 'card' | 'ext'>) =>
+    !!((m.card && isAnime(m.card)) || (m.ext && (m.ext.anime || isAnime(m.ext) || animeIds.has(m.ext.id))));
+  // Аниме - только в своём разделе: в «Фильмах» и «Сериалах» его нет.
   const inSection = (m: Pick<Marks['want'][number], 'card' | 'ext'>) => tab === 'anime'
-    ? !!((m.card && isAnime(m.card)) || (m.ext && (isAnime(m.ext) || animeIds.has(m.ext.id))))
-    : tab === 'home' || (m.card ?? m.ext)?.kind === kind;
+    ? animeOf(m)
+    : tab === 'home' || ((m.card ?? m.ext)?.kind === kind && !animeOf(m));
   const want = $derived(marks ? marks.want.filter(inSection) : []);
   // «Смотрю» из Обзора и отмеченное вручную (начатое с сервиса - уже в «Продолжить»).
   const going = $derived(marks ? marks.watching.filter((m) => inSection(m) && !resumes.some((r) => r.key === (m.card ? `t:${m.card.id}` : `x:${m.ext?.id}`))) : []);

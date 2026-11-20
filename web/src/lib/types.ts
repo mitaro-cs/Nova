@@ -360,6 +360,8 @@ export interface ExtCard {
   release?: string | null;
   /** Администратор отметил фильм «Ещё не вышел» вручную (дата IMDb не всегда верна). */
   soon?: boolean;
+  /** Аниме (жанр, японская анимация или подборка аниме): не в «Фильмах» и «Сериалах». */
+  anime?: boolean;
 }
 
 export interface ExtDetail {

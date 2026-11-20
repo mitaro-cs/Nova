@@ -742,7 +742,8 @@
     shown = true;
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      if (!panel && !dragging) shown = false;
+      // На паузе управление не прячем: перемотать можно в любой момент.
+      if (!panel && !dragging && !paused) shown = false;
     }, 4000);
   }
 

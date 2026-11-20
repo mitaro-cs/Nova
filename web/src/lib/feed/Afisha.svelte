@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { api } from '$lib/api';
+  import { cubicOut } from 'svelte/easing';
+  import { fade } from 'svelte/transition';
   import { getDetail } from '$lib/discover/details';
   import PosterRow from '$lib/discover/PosterRow.svelte';
   import { isAnime } from '$lib/library';
@@ -91,33 +94,82 @@
   const CHIPS = ['Посмешить', 'Подумать', 'Не больше 90 минут', 'Страшное', 'Аниме'];
   let ask = $state('');
   let idea = $state('');
+  // Подборка по идее открывается под карточкой подборок, запрос словами - под строкой запроса.
+  const fromIdea = $derived(!!idea && !ask.trim());
 
-  /** Слова запроса → условия. Что не поняли, ищем в названии. */
-  function parse(q: string): ((e: Entry) => boolean) | null {
+  /** Слова запроса → условия (жанры, длина, годы, тип). Что осталось непонятным - ищем в названии и по IMDb. */
+  const GENRES: [RegExp, string[]][] = [
+    [/смеш|комед|весел|ржать|угар/, ['комед']],
+    [/страш|ужас|жутк|хоррор/, ['ужас']],
+    [/космос|фантаст|будущ|робот|инопланет/, ['фантаст']],
+    [/драм|груст|трогат|слёз|слез/, ['драм']],
+    [/боевик|экшен|драк|перестрел|взрыв/, ['боевик']],
+    [/мульт|дет(ям|ск)|семейн/, ['мульт', 'семейн']],
+    [/детектив|расследов|убийств|загадк/, ['детектив']],
+    [/триллер|напряж|саспенс/, ['триллер']],
+    [/романт|любов|мелодрам|свидан/, ['мелодрам', 'романт']],
+    [/фэнтези|магия|волшеб|дракон/, ['фэнтези']],
+    [/приключ|путешеств/, ['приключ']],
+    [/криминал|мафи|бандит|ограблен/, ['криминал']],
+    [/войн|военн/, ['воен']],
+    [/истори|биограф|реальн/, ['истор', 'биограф']],
+    [/документ/, ['документ']],
+    [/мюзикл|музык|песн/, ['мюзикл', 'музык']],
+    [/спорт|бокс|футбол/, ['спорт']],
+    [/вестерн|ковбо/, ['вестерн']],
+  ];
+  // Служебные слова не ищем в названиях (\b в JS не работает с кириллицей - поэтому набор слов).
+  const STOP = new Set(['что', 'нибудь', 'что-нибудь', 'хочу', 'про', 'без', 'для', 'фильм', 'фильмы', 'фильмов', 'кино', 'посмотреть', 'смотреть', 'какой', 'какое', 'какую', 'интересное', 'интересный', 'хороший', 'хорошее', 'мне', 'нам', 'вечер', 'сегодня'])
+  function parse(q: string): { rule: ((e: Entry) => boolean) | null; rest: string } {
     const t = q.toLowerCase().trim();
-    if (!t) return null;
+    if (!t) return { rule: null, rest: '' };
     const rules: ((e: Entry) => boolean)[] = [];
+    let rest = t;
+    const eat = (re: RegExp) => (rest = rest.replace(new RegExp(re.source, 'g'), ' '));
     const m = /(\d{2,3})\s*мин/.exec(t);
-    if (m) rules.push((e) => !!e.runtime && e.runtime <= Number(m[1]));
-    else if (/коротк|быстр/.test(t)) rules.push((e) => !!e.runtime && e.runtime <= 100);
-    if (/длинн|эпичн/.test(t)) rules.push((e) => !!e.runtime && e.runtime >= 140);
-    if (/смеш|комед|весел/.test(t)) rules.push((e) => has(e, 'комед'));
-    if (/подума|умн|головоломк/.test(t)) rules.push((e) => has(e, 'фантаст', 'детектив', 'триллер'));
-    if (/страш|ужас|жутк/.test(t)) rules.push((e) => has(e, 'ужас'));
-    if (/космос|фантаст/.test(t)) rules.push((e) => has(e, 'фантаст'));
-    if (/драм|груст|трогат/.test(t)) rules.push((e) => has(e, 'драм'));
-    if (/боевик|экшен|драк/.test(t)) rules.push((e) => has(e, 'боевик'));
-    if (/мульт|дет(ям|ск)/.test(t)) rules.push((e) => has(e, 'мульт', 'семейн'));
-    if (/аниме/.test(t)) rules.push((e) => (e.card ? isAnime(e.card) : has(e, 'аниме')));
-    if (/сериал/.test(t)) rules.push((e) => e.kind === 'series');
-    if (!rules.length) return (e) => e.title.toLowerCase().includes(t) || (e.card?.originalTitle ?? e.ext?.original ?? '').toLowerCase().includes(t);
-    return (e) => rules.every((r) => r(e));
+    if (m) { rules.push((e) => !!e.runtime && e.runtime <= Number(m[1])); eat(/\d{2,3}\s*мин\S*|не больше|до/); }
+    else if (/коротк|быстр/.test(t)) { rules.push((e) => !e.runtime || e.runtime <= 100); eat(/коротк\S*|быстр\S*/); }
+    if (/длинн|эпичн/.test(t)) { rules.push((e) => !!e.runtime && e.runtime >= 140); eat(/длинн\S*|эпичн\S*/); }
+    const dec = /(\d0)-?х/.exec(t);
+    if (dec) { const d = Number(dec[1]); const from = d >= 30 ? 1900 + d : 2000 + d; rules.push((e) => !!e.year && e.year >= from && e.year < from + 10); eat(/\d0-?х\S*/); }
+    const yr = /\b(19\d\d|20\d\d)\b/.exec(t);
+    if (yr) { rules.push((e) => e.year === Number(yr[1])); eat(/\b(19|20)\d\d\b/); }
+    if (/нов(ое|инк|ый)|свеж/.test(t)) { const y = new Date().getFullYear() - 2; rules.push((e) => !!e.year && e.year >= y); eat(/нов\S*|свеж\S*/); }
+    if (/классик|стар(ое|ый)/.test(t)) { rules.push((e) => !!e.year && e.year <= 1995); eat(/классик\S*|стар\S*/); }
+    for (const [re, stems] of GENRES) if (re.test(t)) { rules.push((e) => has(e, ...stems)); eat(re); }
+    if (/аниме/.test(t)) { rules.push((e) => (e.card ? isAnime(e.card) : has(e, 'аниме'))); eat(/аниме/); }
+    if (/сериал/.test(t)) { rules.push((e) => e.kind === 'series'); eat(/сериал\S*/); }
+    const words = rest.replace(/[^\p{L}\p{N}\s-]/gu, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w));
+    rest = words.join(' ');
+    if (words.length) {
+      const name = (e: Entry) => `${e.title} ${e.card?.originalTitle ?? e.ext?.original ?? ''}`.toLowerCase();
+      rules.push((e) => words.every((w) => name(e).includes(w)));
+    }
+    return { rule: rules.length ? (e) => rules.every((r) => r(e)) : null, rest };
   }
+  const parsed = $derived(parse(ask));
   const found = $derived.by(() => {
-    const rule = parse(ask);
-    if (rule) return { title: `По запросу «${ask.trim()}»`, list: entries.filter(rule).sort(best).slice(0, 18) };
+    if (parsed.rule) return { title: `По запросу «${ask.trim()}»`, list: entries.filter(parsed.rule).sort(best).slice(0, 18) };
     const i = ideas.find((x) => x.id === idea);
     return i ? { title: i.name, list: i.list.slice(0, 18) } : null;
+  });
+
+  // Своих мало или в запросе есть название - ищем ещё по всему IMDb (через полсекунды после ввода).
+  let web = $state<ExtCard[]>([]);
+  let webBusy = $state(false);
+  $effect(() => {
+    const q = (parsed.rest || ask).trim();
+    const need = ask.trim().length >= 2 && (!!parsed.rest || (found?.list.length ?? 0) < 6);
+    if (!need || q.length < 2) { web = []; return; }
+    let live = true;
+    webBusy = true;
+    const t = setTimeout(() => {
+      api<ExtCard[]>(`/api/discover/search?q=${encodeURIComponent(q)}`).then(
+        (r) => { if (live) web = r.filter((e) => e.poster); },
+        () => { if (live) web = []; },
+      ).finally(() => { if (live) webBusy = false; });
+    }, 450);
+    return () => { live = false; clearTimeout(t); };
   });
 
   // ---------- ряды ----------
@@ -129,6 +181,22 @@
   const collage = (list: Entry[]) => list.slice(0, 3).map((e) => e.card?.poster ?? e.ext?.poster ?? null);
 </script>
 
+{#snippet results()}
+  {#key found?.title}
+    <section class="found" aria-label="Подобрано" in:fade={{ duration: 320, easing: cubicOut }}>
+      {#if found?.list.length}
+        <PosterRow title={found.title} items={tiles(found.list)} />
+      {/if}
+      {#if web.length}
+        <PosterRow title="Ещё на IMDb" items={web.slice(0, 18)} />
+      {/if}
+      {#if !found?.list.length && !web.length}
+        <p class="none">{webBusy ? 'Ищем по IMDb…' : `По запросу «${ask.trim()}» ничего не нашли. Попробуйте жанр, год или название: «комедия 90-х», «до 90 минут».`}</p>
+      {/if}
+    </section>
+  {/key}
+{/snippet}
+
 <div class="af">
   <form class="ask" role="search" aria-label="Спросите Nova" onsubmit={(e) => (e.preventDefault(), (idea = ''))}>
     <span class="spark"><Icon name="sparkle" size={20} /></span>
@@ -136,14 +204,8 @@
     <span class="chips">{#each CHIPS as c (c)}<button type="button" onclick={() => ((ask = c), (idea = ''))}>{c}</button>{/each}</span>
   </form>
 
-  {#if found}
-    <section class="found" aria-label="Подобрано">
-      {#if found.list.length}
-        <PosterRow title={found.title} items={tiles(found.list)} />
-      {:else}
-        <p class="none">По запросу «{ask.trim()}» ничего не нашли. Попробуйте жанр или длину: «комедия», «до 90 минут».</p>
-      {/if}
-    </section>
+  {#if found && !fromIdea}
+    {@render results()}
   {/if}
 
   {#if day}
@@ -181,6 +243,7 @@
         {/each}
       </ul>
     </section>
+    {#if found && fromIdea}{@render results()}{/if}
   {/if}
 
   {#if resume.length}<PosterRow title="Вы не досмотрели" items={tiles(resume)} />{/if}
@@ -199,8 +262,8 @@
   .chips button { padding: 9px 16px; border: 1px solid #ffffff24; border-radius: 999px; background: #17171a; color: #fff; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background 0.2s; }
   .chips button:hover { background: #26262a; }
   .none { margin: 0; color: var(--muted); }
-  .day { position: relative; min-height: clamp(340px, 34vw, 460px); overflow: hidden; border: 1px solid #ffffff1a; border-radius: 40px; background: #05070d; }
-  .day img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .day { position: relative; min-height: clamp(380px, 40vw, 620px); overflow: hidden; border: 1px solid #ffffff1a; border-radius: 40px; background: #05070d; }
+  .day img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 60% 22%; }
   .shade { position: absolute; inset: 0; background: linear-gradient(90deg, #05070dee 0%, #05070db3 38%, #05070d33 70%, transparent 100%), linear-gradient(180deg, transparent 55%, #05070d 100%); }
   .txt { position: absolute; left: clamp(22px, 4vw, 56px); right: 22px; bottom: clamp(24px, 3.4vw, 46px); max-width: 660px; }
   .tag { display: inline-block; padding: 8px 16px; border-radius: 999px; background: #ffffff1f; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }

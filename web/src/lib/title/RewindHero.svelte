@@ -457,6 +457,82 @@
     padding: 0;
   }
 
+  /* Плашка действий заново (просьба владельца, 21.11): значки в кругах, включённое - белый круг с чёрным значком,
+     оценка строкой под чертой, «Смотреть вместе» - главная белая капсула. Рамка фокуса - только с клавиатуры. */
+  .plate :global(.rw-box) {
+    gap: calc(14 * var(--s));
+    padding: calc(18 * var(--s)) calc(16 * var(--s));
+    border-radius: calc(28 * var(--s));
+    background: #141416e6;
+    box-shadow: inset 0 0 0 1px #ffffff1a, 0 24px 60px -24px #000;
+  }
+  .plate :global(.rw-tri button) {
+    gap: calc(10 * var(--s));
+    padding: calc(4 * var(--s)) 0;
+    background: none !important;
+    color: #c4c4cc;
+    font-size: max(11px, calc(13 * var(--s)));
+    font-weight: 600;
+  }
+  .plate :global(.rw-tri button svg) {
+    box-sizing: content-box;
+    padding: calc(13 * var(--s));
+    border-radius: 50%;
+    background: #ffffff12;
+    box-shadow: inset 0 0 0 1px #ffffff14;
+    transition: background 0.2s, color 0.2s, transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  }
+  .plate :global(.rw-tri button:hover:not(:disabled) svg) {
+    background: #ffffff24;
+    transform: translate3d(0, -2px, 0);
+  }
+  .plate :global(.rw-tri button.on) {
+    color: #fff;
+  }
+  .plate :global(.rw-tri button.on svg) {
+    background: #fff;
+    color: #0a0a0b;
+    fill: currentColor;
+  }
+  .plate :global(.rw-tri button:focus) {
+    outline: none;
+  }
+  .plate :global(.rw-tri button:focus-visible svg) {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+  .plate :global(.rw-rate) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: calc(14 * var(--s));
+    border-top: 1px solid #ffffff14;
+    color: #a1a1aa;
+    font-size: max(11px, calc(13 * var(--s)));
+    font-weight: 600;
+  }
+  .plate :global(.rw-btn) {
+    background: #1c1c1fe6;
+    box-shadow: inset 0 0 0 1px #ffffff1a;
+    font-weight: 600;
+  }
+  .plate :global(.rw-btn.together) {
+    background: #fff;
+    color: #0a0a0b;
+    box-shadow: 0 12px 30px -12px #ffffff66;
+  }
+  .plate :global(.rw-btn.together:hover) {
+    background: #e9e9ec;
+  }
+  .plate :global(.rw-btn:focus) {
+    outline: none;
+  }
+  .plate :global(.rw-btn:focus-visible) {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+
   .mbar {
     display: none;
   }

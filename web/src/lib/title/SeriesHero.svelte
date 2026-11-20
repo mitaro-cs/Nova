@@ -852,4 +852,10 @@
     .sh.slim .body { padding:10px; }
     .sh.slim .body .row2 { display:block; }
   }
+  /* Строка серии целиком - одна плитка одной ширины у всех серий (просмотренных и нет): фон и рамка у строки,
+     галочка «посмотрел» внутри неё. Раньше фон был у карточки, и строки с разным состоянием выглядели разной ширины. */
+  .ep { background: #0b0b0d; box-shadow: inset 0 0 0 1px #ffffff12; }
+  .ep .card, .cur .card, .cur .card:hover { background: transparent; outline: none; border-radius: 0; box-shadow: none; }
+  .ep.cur { box-shadow: inset 0 0 0 1px #ffffff70; }
+  .ep .seen { margin: 0 14px 0 6px; }
 </style>

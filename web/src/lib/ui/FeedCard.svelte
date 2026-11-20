@@ -37,13 +37,17 @@
   let root = $state<HTMLElement>();
   let near = $state(false);
   let detail = $state<ExtDetail | null>(null);
+  // Описание сбрасываем только при смене фильма, а не при каждом обновлении ленты (отметка «Хочу» перезагружает
+  // ленту новыми объектами - карточка на секунду теряла кадр и «пропадала»).
+  const extId = $derived(ext?.id ?? null);
   $effect(() => {
-    detail = ext ? peekDetail(ext.id) : null;
+    const id = extId;
+    detail = id ? (peekDetail(id) ?? (detail && detail.card.id === id ? detail : null)) : null;
   });
   $effect(() => {
-    if (!ext || !near || detail) return;
+    if (!extId || !near || detail) return;
     let live = true;
-    getDetail(ext.id).then(
+    getDetail(extId).then(
       (d) => live && (detail = d),
       () => {},
     );
@@ -55,6 +59,17 @@
   // Кадра ещё нет (у фильма из ленты - пока не пришли подробности): показываем постер целиком, не обрезая.
   const shot = $derived(big ?? small ?? c.poster ?? null);
   const framed = $derived(!!(big ?? small));
+  // Без кадра из фильма карточку не показываем (постер посреди широкой рамки смотрелся плохо): своя - сразу,
+  // из ленты - когда описание загрузилось и кадра в нём нет.
+  let gone = false;
+  $effect(() => {
+    if (gone) return;
+    const noFrame = card ? !card.backdrop && !card.backdropSmall : !!detail && !detail.refreshing && !framed;
+    if (noFrame) {
+      gone = true;
+      ongone();
+    }
+  });
   const overview = $derived(localized(card?.overview ?? detail?.overview));
   const minutes = $derived(card?.runtime ?? detail?.runtime ?? null);
   const facts = $derived(

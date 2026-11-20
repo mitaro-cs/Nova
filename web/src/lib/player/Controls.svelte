@@ -95,6 +95,22 @@
   let topH = $state(80);
   let bottomH = $state(120);
   $effect(() => onheight(topH, bottomH));
+  // Перемотка на паузе: крупное название прячется, пока тянут полосу, и на секунду после прыжка.
+  let scrub = $state(false);
+  let moved = $state(false);
+  let movedTimer: ReturnType<typeof setTimeout> | undefined;
+  function nudge() {
+    moved = true;
+    clearTimeout(movedTimer);
+    movedTimer = setTimeout(() => (moved = false), 1200);
+  }
+  // Прыжок клавишами или кнопками ±10 на паузе - тоже прячем название на секунду.
+  let lastT = 0;
+  $effect(() => {
+    const t = time;
+    if (paused && Math.abs(t - lastT) > 1) nudge();
+    lastT = t;
+  });
   // «Закончится в»: время конца при обычной скорости, пересчитывается с каждым шагом ролика.
   const endsAt = $derived(
     duration > 0 && time >= 0 ? new Date(Date.now() + Math.max(0, duration - time) * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '',
@@ -128,7 +144,8 @@
 {/if}
 
 {#if paused && !busy && !panel}
-  <div class="paused" aria-label="Пауза">
+  <!-- Пока перематывают, крупное название уходит: виден кадр, на который встаёт видео. -->
+  <div class="paused" class:away={scrub || moved} aria-label="Пауза">
     <small>Пауза</small>
     <h2>{title}</h2>
     {#if episode}<p>{episode}</p>{/if}
@@ -138,7 +155,7 @@
 
 <div class="bottom" class:hide={!shown} bind:clientHeight={bottomH} role="group" aria-label="Управление просмотром">
   <div class="cap">
-  <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} {onseek} {ondrag} />
+  <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} onseek={(t) => { onseek(t); nudge(); }} ondrag={(d) => { scrub = d; ondrag(d); }} />
   <div class="row">
     <span class="time">{clock(time)} <span class="faint">/ {clock(duration)}</span></span>
     <span class="grow"></span>
@@ -373,10 +390,13 @@
     .paused {
       position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: flex-end;
       padding: 0 clamp(28px, 4.5vw, 72px) 150px; pointer-events: none;
-      background: linear-gradient(90deg, #000000b8 0%, #00000040 55%, transparent 100%), linear-gradient(0deg, #000000cc 0%, transparent 45%);
+      background: linear-gradient(90deg, #00000099 0%, #00000026 55%, transparent 100%), linear-gradient(0deg, #000000a6 0%, transparent 40%);
       animation: swap 0.25s ease-out;
     }
     .paused * { pointer-events: auto; }
+    .paused { transition: opacity 0.25s; }
+    .paused.away { opacity: 0; }
+    .paused.away * { pointer-events: none; }
     .paused small { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }
     .paused h2 { margin: 10px 0 0; max-width: 18ch; font-size: clamp(34px, 4.4vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 1; overflow-wrap: anywhere; }
     .paused p { margin: 12px 0 0; font-size: 18px; opacity: 0.75; }

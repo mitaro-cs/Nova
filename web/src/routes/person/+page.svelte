@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hideBroken } from '$lib/ui/hideBroken';
   import { fadeIn } from '$lib/ui/fade';
   import { page } from '$app/state';
   import { api, errorText, patch, put } from '$lib/api';
@@ -121,12 +122,12 @@
   {:else}
     <header class="hero">
       <div class="wall" aria-hidden="true">
-        {#each mosaic as w (w.id)}<img src={artW(w.poster, 342)} alt="" loading="lazy" decoding="async" />{/each}
+        {#each mosaic as w (w.id)}<img use:hideBroken src={artW(w.poster, 342)} alt="" loading="lazy" decoding="async" />{/each}
       </div>
       <div class="veil" aria-hidden="true"></div>
       <div class="head">
         <span class="ph" style:background={d?.photo ? undefined : placeholder(name)}>
-          {#if d?.photo}<img use:fadeIn src={artW(d.photo, 640)} alt={d?.info?.nameRu ?? nameRuLink ?? name} width="400" height="400" decoding="async" />{:else if d}{initials(name)}{/if}
+          {#if d?.photo}<img use:fadeIn src={artW(d.photo, 640)} alt={d?.info?.nameRu ?? nameRuLink ?? name} width="400" height="400" decoding="async" />{:else if d}{initials(d?.info?.nameRu ?? nameRuLink ?? name)}{/if}
         </span>
         <div class="who">
           <small>{role === 'actor' ? 'Актёр' : 'Режиссёр'}</small>
@@ -380,6 +381,10 @@
     position: relative;
     animation: rise-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
     animation-delay: calc(var(--i) * 40ms);
+  }
+  /* Номер места не закрывает оценку: оценку сдвигаем вправо от номера. */
+  .best :global(.rate) {
+    left: 34px;
   }
   .rank {
     position: absolute;
