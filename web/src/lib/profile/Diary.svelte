@@ -67,6 +67,7 @@
 
 <div class="dy">
   <div class="main">
+    <div class="favrow" class:pair={movies.length > 0 && series.length > 0}>
     {#each [{ list: movies, label: 'Любимые фильмы', id: 'dy-m' }, { list: series, label: 'Любимые сериалы', id: 'dy-s' }] as g (g.id)}
       {#if g.list.length || (p.me && g.id === 'dy-m')}
         <section aria-labelledby={g.id}>
@@ -87,12 +88,13 @@
         </section>
       {/if}
     {/each}
+    </div>
 
     {#if recent.length}
       <section aria-labelledby="dy-r">
         <div class="h2"><h2 id="dy-r">Недавно</h2><a href="/people/{p.person.id}/watched?kind=movie">Все</a></div>
         <ul class="recent">
-          {#each recent.slice(0, 6) as c, i (c.id)}
+          {#each recent.slice(0, 16) as c, i (c.id)}
             <li class="rise" style:--i={i}>
               <a class="po" href="/title/{c.id}" title={c.title} style:background={placeholder(c.title)}>
                 {#if c.poster}<img use:fadeIn src={c.poster} alt={c.title} loading="lazy" decoding="async" width="342" height="513" />{:else}<span>{c.title}</span>{/if}
@@ -286,5 +288,16 @@
     .recent { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .favs { gap: 10px; }
     .side { grid-template-columns: minmax(0, 1fr); }
+  }
+  /* Вся ширина окна (владелец, 21.11): на широком экране любимые фильмы и сериалы - рядом, «Недавно» - на весь ряд
+     (лишние постеры прячутся, а не переносятся), отзывы - в две колонки. */
+  .favrow { display: grid; gap: 40px; }
+  .recent { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-template-rows: auto; grid-auto-rows: 0; row-gap: 0; overflow: hidden; margin-top: -8px; padding-top: 8px; }
+  .recent li { min-height: 0; overflow: hidden; }
+  @media (min-width: 1400px) {
+    .dy { grid-template-columns: minmax(0, 1fr) 340px; gap: 64px; }
+    .favrow.pair { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
+    .revs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; }
+    .revs li:nth-child(2) { padding-top: 0; }
   }
 </style>

@@ -187,8 +187,8 @@
 {/if}
 
 <style>
-  /* Профиль «Дневник» (макет Y, 21.11): шапка на кадре, ниже одна колонка до 1100 px с вкладками текстом. */
-  .pf { --pf-side: max(var(--gutter), calc((100vw - 1100px) / 2)); padding-bottom: calc(48px + var(--tabbar)); background: #0b0b0d; }
+  /* Профиль «Дневник» (макет Y, 21.11): шапка на кадре, ниже вкладки текстом; занимает всю ширину окна. */
+  .pf { --pf-side: max(var(--gutter), 3.5vw); padding-bottom: calc(48px + var(--tabbar)); background: #0b0b0d; }
   .body { padding-inline: var(--pf-side); }
   .tabbar { position: relative; display: flex; align-items: center; gap: 20px; margin-top: 30px; border-block: 1px solid #ffffff1a; }
   .tabs { position: relative; display: flex; gap: 28px; min-width: 0; overflow-x: auto; scrollbar-width: none; }

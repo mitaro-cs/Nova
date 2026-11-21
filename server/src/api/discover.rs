@@ -235,20 +235,30 @@ pub async fn search(
     // «Dukhless»). Из латинских находок берём лишь совпавшие по названию (ниже), остальное - шум.
     let latin = (query.chars().any(|c| matches!(c, 'а'..='я' | 'А'..='Я' | 'ё' | 'Ё')) && query.chars().count() >= 4)
         .then(|| cyr_to_lat(query));
-    let latin_search = async {
-        match &latin {
-            Some(l) => crate::catalog_search::search(&app, l).await.unwrap_or_default(),
-            None => vec![],
-        }
-    };
-    let ((by_genre, by_title), by_latin) = match genre {
+    let (by_genre, by_title) = match genre {
         Some((g, _, types)) => {
-            (tokio::join!(discover::genre_search(&app, g, types), crate::catalog_search::search(&app, query)), vec![])
+            tokio::join!(discover::genre_search(&app, g, types), crate::catalog_search::search(&app, query))
         }
-        None => {
-            let (t, l) = tokio::join!(crate::catalog_search::search(&app, query), latin_search);
-            ((Ok(vec![]), t), l)
-        }
+        None => (Ok(vec![]), crate::catalog_search::search(&app, query).await),
+    };
+    // Латиницей ищем, только если русский поиск не нашёл фильма с таким названием, и не дольше 2,5 с: найденное в кэше
+    // не ждёт сеть.
+    let norm_q = crate::util::norm(query);
+    let titled = by_title.as_ref().is_ok_and(|ids| {
+        ids.iter().filter_map(|id| ext_card(&app, &v, id).ok()).any(|c| {
+            [Some(c.title.as_str()), c.original.as_deref()]
+                .into_iter()
+                .flatten()
+                .any(|n| crate::util::norm(n).contains(&norm_q))
+        })
+    });
+    let by_latin = match (&latin, titled) {
+        (Some(l), false) => tokio::time::timeout(Duration::from_millis(2500), crate::catalog_search::search(&app, l))
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_default(),
+        _ => vec![],
     };
     // Ничего не нашли - пробуем, как набрал бы человек с опечаткой: другая раскладка («vtldtlm»), «ё» как «е»,
     // лишняя или неверная последняя буква («медведб»).
