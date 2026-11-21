@@ -157,15 +157,21 @@ pub async fn create(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<Create
             }
             (0, 0)
         }
-        _ => return Err(ApiError::bad("no_video", "Что смотреть вместе: файл или ссылка")),
+        // Пустая комната (21.11): сначала комната, видео потом добавляют в очередь.
+        (None, None) => (0, 0),
     };
     let who = me(&app, &v)?;
     let name = who["name"].as_str().unwrap_or_default().to_string();
     let link = b.file_id.is_none().then_some(b.link_id).flatten();
-    let mut first = item_for(&app, &v, b.file_id, b.link_id)?;
-    first.id = 1;
-    first.approved = true;
-    let id = app.rooms.create(v.profile.id, title, file, link, b.position.max(0.0), name, Some(first));
+    let first = if b.file_id.is_none() && b.link_id.is_none() {
+        None
+    } else {
+        let mut first = item_for(&app, &v, b.file_id, b.link_id)?;
+        first.id = 1;
+        first.approved = true;
+        Some(first)
+    };
+    let id = app.rooms.create(v.profile.id, title, file, link, b.position.max(0.0), name, first);
     Ok(Json(json!({"id": id})))
 }
 

@@ -485,3 +485,38 @@ async fn room_is_closed_to_strangers_and_queue_belongs_to_the_owner() {
     assert!(host.send("POST", &url("/invite"), json!({"profileId": id})).await.status().is_success());
     assert_eq!(stranger.get(&url("")).await.status(), 200);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn empty_room_starts_with_the_first_video_in_the_queue() {
+    // Сначала комната, потом видео (21.11): «Комната по ссылке» создаёт пустую, первое добавленное хозяином включается.
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let file = dir.path().join("e.mp4");
+    std::fs::write(&file, vec![1u8; 1024]).unwrap();
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO titles(id,kind,key,title,added_at,updated_at) VALUES(9960,'movie','Пустая','Пустая',0,0)",
+                [],
+            )?;
+            c.execute(
+                "INSERT INTO files(id,title_id,path,size,mtime,added_at) VALUES(9960,9960,?1,1024,0,0)",
+                [file.to_string_lossy().as_ref()],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let res = host.send("POST", "/api/rooms", json!({})).await;
+    assert!(res.status().is_success(), "пустая комната создаётся");
+    let room = res.json::<Value>().await.unwrap()["id"].as_str().unwrap().to_owned();
+    let info = host.json(&format!("/api/rooms/{room}")).await;
+    assert!(info["current"].is_null());
+    assert_eq!(info["queue"], json!([]));
+    assert!(host.send("POST", &format!("/api/rooms/{room}/queue"), json!({"fileId":9960})).await.status().is_success());
+    let info = host.json(&format!("/api/rooms/{room}")).await;
+    assert_eq!(info["state"]["fileId"], 9960, "первое видео хозяина сразу текущее");
+    assert_eq!(info["state"]["playing"], false);
+    running.shutdown().await;
+}

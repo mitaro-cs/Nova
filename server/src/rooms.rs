@@ -108,6 +108,22 @@ impl Room {
         })
     }
 
+    /// Включить видео из очереди у всех с начала, на паузе (в пустой комнате - первое добавленное).
+    fn start(&mut self, i: &Item) {
+        self.title_id = i.title_id;
+        self.current = Some(i.id);
+        self.state = State {
+            revision: self.state.revision.saturating_add(1),
+            file_id: i.file_id,
+            link_id: i.link_id,
+            playing: false,
+            position: 0.0,
+            at: now_ms(),
+            by: self.state.by.clone(),
+        };
+        self.send(json!({"type": "now", "titleId": self.title_id, "state": self.state, "current": self.current}));
+    }
+
     fn send(&self, v: Value) {
         let _ = self.tx.send(v.to_string());
     }
@@ -177,7 +193,7 @@ impl Rooms {
             item.approved = owner;
             r.queue.push(item.clone());
             if r.current.is_none() && owner {
-                r.current = Some(item.id);
+                r.start(&item);
             }
             r.queue_event();
             Ok(item)
@@ -189,6 +205,11 @@ impl Rooms {
         self.with(id, |r| {
             let Some(i) = r.queue.iter_mut().find(|i| i.id == item) else { return false };
             i.approved = true;
+            let first = i.clone();
+            // Пустая комната: первое принятое видео сразу становится текущим.
+            if r.current.is_none() {
+                r.start(&first);
+            }
             r.queue_event();
             true
         })

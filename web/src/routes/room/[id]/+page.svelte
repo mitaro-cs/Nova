@@ -265,6 +265,31 @@
     <p>{error}</p>
     <a class="btn" href="/">На главную</a>
   </div>
+{:else if room && !room.fileId && !room.linkId}
+  <!-- Пустая комната (21.11): сначала комната, видео потом. Первое видео создателя включается у всех. -->
+  <main class="emptyroom">
+    <section class="er-card" aria-labelledby="er-h">
+      <span class="er-ic"><Icon name="party" size={26} /></span>
+      <h1 id="er-h">Комната готова</h1>
+      <p class="muted">{owner ? 'Позовите друзей и добавьте, что смотреть: видео пойдёт у всех одновременно, есть чат и голос.' : 'Ждём, когда создатель комнаты включит видео. Можно предложить своё.'}</p>
+      <div class="er-row">
+        <button class="btn" type="button" onclick={copy}><Icon name={copied ? 'check' : 'link'} size={15} /> {copied ? 'Ссылка скопирована' : 'Скопировать ссылку'}</button>
+      </div>
+      {#if showRoomLink}<label class="room-link">Ссылка для приглашения <input class="input" readonly value={location.href} onclick={(e) => e.currentTarget.select()} /></label>{/if}
+      <form class="er-add" onsubmit={addLink}>
+        <label for="er-url">{owner ? 'Добавить видео' : 'Предложить видео'}</label>
+        <div class="er-in">
+          <input id="er-url" class="input" bind:value={newUrl} placeholder="Ссылка: Rutube, VK, YouTube, файл .mp4 или .m3u8" maxlength="500" autocomplete="off" />
+          <button class="btn primary" disabled={adding || !newUrl.trim()}>{adding ? 'Проверяем…' : owner ? 'Включить' : 'Предложить'}</button>
+        </div>
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+        <small class="muted">Фильм с Nova - откройте его и нажмите «Смотреть вместе» в плеере.</small>
+      </form>
+      {#if members.length}
+        <ul class="er-who" aria-label="В комнате">{#each members as m (m.id)}<li>{m.name}</li>{/each}</ul>
+      {/if}
+    </section>
+  </main>
 {:else if room}
   {#key `${id}:${room.linkId ?? room.fileId}`}
     {#if room.linkId && (!linkSrc || linkSrc.linkId !== room.linkId)}
@@ -784,4 +809,19 @@
   .addq { display: flex; gap: 6px; margin-top: 8px; }
   .addq .input { flex: 1; min-width: 0; }
   .safe { margin: 4px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+  /* Пустая комната. */
+  .emptyroom { display: grid; place-items: center; min-height: 100dvh; padding: calc(var(--header) + 24px) var(--gutter) calc(40px + var(--tabbar)); background: #000; }
+  .er-card { display: grid; gap: 16px; width: min(560px, 100%); padding: clamp(24px, 4vw, 40px); border: 1px solid #ffffff1a; border-radius: 32px; background: #0d0d10; }
+  .er-ic { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #ffffff12; }
+  .er-card h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.03em; }
+  .er-card > p { margin: 0; line-height: 1.5; }
+  .er-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .er-add { display: grid; gap: 8px; margin-top: 6px; padding-top: 18px; border-top: 1px solid #ffffff14; }
+  .er-add label { font-size: 13px; font-weight: 700; }
+  .er-in { display: flex; gap: 8px; }
+  .er-in .input { flex: 1; min-width: 0; }
+  .er-add small { font-size: 12px; }
+  .er-who { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .er-who li { padding: 6px 12px; border-radius: 999px; background: #ffffff12; font-size: 12.5px; font-weight: 600; }
+  @media (max-width: 480px) { .er-in { flex-direction: column; } }
 </style>

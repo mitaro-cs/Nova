@@ -194,7 +194,7 @@
         <a href="/people"><Icon name="users" size={15} /> Друзья{#if unseen.requests}<em>{unseen.requests}</em>{/if}</a>
         <a href="/lists"><Icon name="grid" size={15} /> Подборки</a>
         {#if session.me?.manage}<a href="/admin"><Icon name="sliders" size={15} /> Управление</a>{/if}
-        <button type="button" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={15} /> Комната по ссылке</button>
+        <button type="button" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={15} /> Создать комнату</button>
         <button type="button" onclick={() => window.dispatchEvent(new Event('nova-tour'))}><Icon name="sparkle" size={15} /> Экскурсия</button>
         {#if !session.me?.window}<button type="button" class="out" onclick={logout}><Icon name="logout" size={15} /> Выйти</button>{/if}
       </nav>
