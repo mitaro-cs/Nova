@@ -4,6 +4,8 @@
   import { count, plural } from '$lib/fmt';
   import type { Card, ExtCard } from '$lib/types';
   import { placeholder } from '$lib/ui/art';
+  import { getDetail, peekDetail } from '$lib/discover/details';
+  import { artW } from '$lib/ui/art';
   import { countUp } from '$lib/ui/countUp';
   import { fadeIn } from '$lib/ui/fade';
   import Icon from '$lib/ui/Icon.svelte';
@@ -33,7 +35,19 @@
 
   // «Сейчас смотрит»: первое из начатого, с кадром и местом в серии.
   const now = $derived(p.watching[0]);
-  const nowArt = $derived(now?.card?.backdrop ?? now?.card?.backdropSmall ?? now?.ext?.poster ?? null);
+  // Кадр 16:9: у своего фильма - backdrop, у фильма из ленты IMDb - из подробностей (грузим отдельно). Постер на
+  // всю ширину не растягиваем (342 px давали мыло): без кадра постер стоит справа целиком.
+  let extFrame = $state<string | null>(null);
+  $effect(() => {
+    const id = now?.card ? null : now?.ext?.id;
+    extFrame = id ? (peekDetail(id)?.backdrop ?? null) : null;
+    if (!id || extFrame) return;
+    let live = true;
+    getDetail(id).then((d) => live && (extFrame = d.backdrop ?? null), () => {});
+    return () => (live = false);
+  });
+  const nowArt = $derived(now?.card?.backdrop ?? now?.card?.backdropSmall ?? (extFrame ? artW(extFrame, 1920) : null) ?? null);
+  const nowPoster = $derived(nowArt ? null : (now?.card?.poster ?? now?.ext?.poster ?? null));
   const nowHref = $derived(now?.card ? `/title/${now.card.id}` : now?.ext ? `/ext/${now.ext.id}` : '/');
   const resume = $derived(p.me ? now?.card?.resume ?? null : null);
   const nowMeta = $derived.by(() => {
@@ -116,7 +130,7 @@
 
 {#if now}
   <section class="now" aria-labelledby="ov-now">
-    {#if nowArt}<img use:fadeIn src={nowArt} alt="" decoding="async" />{/if}
+    {#if nowArt}<img class="frame" use:fadeIn src={nowArt} alt="" decoding="async" />{:else if nowPoster}<img class="side" use:fadeIn src={artW(nowPoster, 342)} alt="" decoding="async" />{/if}
     <div class="nb">
       <p class="eye"><i></i>Сейчас смотрит</p>
       <h3 id="ov-now"><a href={nowHref}>{now.card?.title ?? now.ext?.title}</a></h3>
@@ -239,7 +253,9 @@
   .eye { display: flex; align-items: center; gap: 8px; margin: 0; color: #d4d4d8; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
   .eye i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
   .now { position: relative; display: grid; align-content: end; min-height: 230px; margin-bottom: 30px; overflow: hidden; border: 1px solid #ffffff14; border-radius: 26px; background: #101012; isolation: isolate; }
-  .now img { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+  .now img.frame { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+  .now img.side { position: absolute; top: 18px; right: 18px; bottom: 18px; z-index: 1; height: calc(100% - 36px); aspect-ratio: 2 / 3; border-radius: 14px; object-fit: cover; box-shadow: 0 18px 40px -16px #000; }
+  @media (max-width: 640px) { .now img.side { display: none; } }
   .now::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #0a0a0bf2 0%, #0a0a0bcc 42%, #0a0a0b33 100%); }
   .nb { padding: 26px 26px 24px; }
   .now h3 { margin: 10px 0 0; font-size: clamp(26px, 2.6vw, 36px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
