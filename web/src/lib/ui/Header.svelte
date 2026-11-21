@@ -290,7 +290,8 @@
     backface-visibility: hidden;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding: 8px max(4px, calc((100% - 640px) / 2)) calc(6px + env(safe-area-inset-bottom));
+    /* На iPhone значки ближе к краю: полоска жеста сама даёт отступ (раньше снизу оставалась пустая чёрная полоса). */
+    padding: 8px max(4px, calc((100% - 640px) / 2)) max(6px, calc(env(safe-area-inset-bottom) - 18px));
     /* Единая панель до нижнего края; безопасная область жеста входит в её фон. */
     background: #000;
     border: 0;

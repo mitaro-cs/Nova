@@ -476,7 +476,7 @@ export interface Visibility {
 
 export interface ProfileDecor {
   /** Актёры и режиссёры, которым человек поставил «нравится». */
-  likedPeople?: { name: string; role: string; photo: string | null }[];
+  likedPeople?: { name: string; nameRu?: string; role: string; photo: string | null }[];
   cover: string | null;
   /** Обложка: лента просмотренного или своя картинка. */
   coverKind: 'ribbon' | 'image';

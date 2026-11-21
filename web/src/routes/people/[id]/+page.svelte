@@ -241,9 +241,9 @@
                       <li class="rise" style:--i={i}>
                         <a class="dir" href="/person?name={encodeURIComponent(lp.name)}&role={lp.role}">
                           <span class="dph" style:background={lp.photo ? undefined : placeholder(lp.name)}>
-                            {#if lp.photo}<img use:fadeIn src={lp.photo} alt="" loading="lazy" decoding="async" width="96" height="96" />{:else}{lp.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}{/if}
+                            {#if lp.photo}<img use:fadeIn src={lp.photo} alt="" loading="lazy" decoding="async" width="96" height="96" />{:else}{(lp.nameRu ?? lp.name).split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}{/if}
                           </span>
-                          <span class="dn">{lp.name}<small class="faint">{lp.role === 'actor' ? 'Актёр' : 'Режиссёр'}</small></span>
+                          <span class="dn">{lp.nameRu ?? lp.name}<small class="faint lprole">{lp.role === 'actor' ? 'Актёр' : 'Режиссёр'}</small></span>
                         </a>
                       </li>
                     {/each}
@@ -719,4 +719,6 @@
     .side { grid-column: 2; grid-row: 1; position: static; }
     .main, .main.solo { grid-column: 2; grid-row: 2; }
   }
+  /* Роль - отдельной строкой под именем (раньше слипалась: «NolanРежиссёр»). */
+  .lprole { display: block; margin-top: 2px; }
 </style>

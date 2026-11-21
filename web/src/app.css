@@ -59,7 +59,7 @@
   --fw: clamp(250px, calc(170px + 12vw), 520px);
   --header: 64px;
   /* Высота нижней панели разделов (одна на всех экранах), чтобы ничего под ней не пряталось. */
-  --tabbar: calc(64px + env(safe-area-inset-bottom));
+  --tabbar: calc(64px + max(0px, env(safe-area-inset-bottom) - 24px));
   /* Ширина колонки слева на компьютере (на телефоне её нет). */
   --rail: 0px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;

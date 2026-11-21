@@ -447,7 +447,8 @@ pub fn liked_people(app: &App, id: i64) -> ApiResult<Vec<Value>> {
         .into_iter()
         .map(|(name, role)| {
             let photo = crate::directors::cached(app, &name).and_then(|c| c.1);
-            json!({"name": name, "role": role, "photo": super::img(photo)})
+            // `name` - как сохранено (по нему ищется страница человека), `nameRu` - для подписи.
+            json!({"name": name, "nameRu": crate::names::ru_director(&app.db, &name), "role": role, "photo": super::img(photo)})
         })
         .collect())
 }
