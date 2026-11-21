@@ -712,4 +712,11 @@
     .tabs button[aria-selected='true'] sup { color: #52525b; }
     .ink { top: 5px; bottom: 5px; height: auto; border-radius: 999px; }
   }
+  /* Профиль W: слева пульт (треть экрана, закреплён), справа жанры и вкладки с блоками. */
+  @media (min-width: 1001px) {
+    .pf { grid-template-columns: minmax(380px, 32%) minmax(0, 1fr); }
+    .hero { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: calc(var(--header) + 14px); align-self: start; max-height: calc(100vh - var(--header) - 28px); overflow-y: auto; scrollbar-width: none; border-radius: 40px; }
+    .side { grid-column: 2; grid-row: 1; position: static; }
+    .main, .main.solo { grid-column: 2; grid-row: 2; }
+  }
 </style>

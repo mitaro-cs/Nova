@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { post } from '$lib/api';
+  import { api, post } from '$lib/api';
   import { count, plural } from '$lib/fmt';
   import FriendButton from '$lib/social/FriendButton.svelte';
   import PosterWall from '$lib/social/PosterWall.svelte';
@@ -45,6 +45,38 @@
     return open ? `до «${open.label}» - ${count(Math.ceil(open.need - open.of(s)), ...open.word)}` : null;
   });
   const topTitle = $derived(names[0]?.label ?? '');
+
+  // Уровень зрителя: опыт за часы, фильмы, серии, отзывы и друзей; кольцо вокруг портрета - путь до следующего.
+  const xp = $derived(s ? s.hours * 10 + s.movies * 6 + s.episodes * 2 + s.reviews * 15 + s.friends * 10 + s.outside * 2 : 0);
+  const level = $derived(Math.floor(Math.sqrt(xp / 25)) + 1);
+  const toNext = $derived.by(() => {
+    const from = 25 * (level - 1) ** 2;
+    const to = 25 * level ** 2;
+    return Math.max(0, Math.min(1, (xp - from) / Math.max(1, to - from)));
+  });
+  const RING = 2 * Math.PI * 69;
+
+  // Бегущая строка у владельца: что сейчас делают друзья.
+  let ticker = $state<{ who: string; what: string }[]>([]);
+  $effect(() => {
+    if (!p.me) return;
+    let live = true;
+    api<{ person?: { name: string }; label: string; card?: { title: string }; ext?: { title: string } }[]>('/api/friends/activity').then(
+      (r) => live && (ticker = r.filter((a) => a.person).slice(0, 8).map((a) => ({ who: a.person!.name, what: `${a.label.toLowerCase()} «${a.card?.title ?? a.ext?.title ?? ''}»` }))),
+      () => {},
+    );
+    return () => (live = false);
+  });
+  let shared = $state(false);
+  async function share() {
+    try {
+      await navigator.clipboard.writeText(location.origin + `/people/${p.person.id}`);
+      shared = true;
+      setTimeout(() => (shared = false), 1800);
+    } catch {
+      /* без буфера обмена - ничего */
+    }
+  }
 </script>
 
 <aside class="card" aria-label="Человек">
@@ -58,10 +90,16 @@
 
     <div class="who" style:--acc={p.decor.accent ?? '#4a4a53'}>
     <div class="ring">
+      {#if s}
+        <svg class="lvl" viewBox="0 0 146 146" aria-hidden="true"><circle cx="73" cy="73" r="69" class="track" /><circle cx="73" cy="73" r="69" class="bar" style:stroke-dasharray={RING} style:stroke-dashoffset={RING * (1 - toNext)} /></svg>
+        <span class="orbit" aria-hidden="true"></span>
+      {/if}
       <Avatar avatar={p.person.avatar} photo={p.person.photo} size={108} />
       {#if now}<i class="live" title="Сейчас смотрит"></i>{/if}
     </div>
+    {#if s}<span class="lvl-chip">Уровень {level}{topTitle ? ` · ${topTitle}` : ''}</span>{/if}
     <h1>{p.person.name}</h1>
+    {#if s}<p class="lvl-note">до {level + 1} уровня - {Math.round(toNext * 100)}%</p>{/if}
     {#if now}<p class="now"><Icon name="play" size={12} /> Сейчас смотрит · {nowTitle}</p>{/if}
 
     {#if s}
@@ -102,9 +140,17 @@
 
     {#if p.me}
       <div class="social-actions" aria-label="Общение и просмотр">
-        <a class="btn" href="/chats"><Icon name="mail" size={15} /> Чаты</a>
+        <a class="btn" href="/chats"><Icon name="mail" size={15} /> Чаты{#if unseen.unread}<em class="cnt">{unseen.unread}</em>{/if}</a>
+        <a class="btn tl" href="/people"><Icon name="users" size={15} /> Друзья{#if unseen.requests}<em class="cnt">{unseen.requests}</em>{/if}</a>
+        <a class="btn tl" href="/lists"><Icon name="list" size={15} /> Подборки</a>
+        <a class="btn tl" href="/profile"><Icon name="edit" size={15} /> Оформление</a>
         <button class="btn" type="button" onclick={() => window.dispatchEvent(new Event('nova-room-link'))}><Icon name="party" size={15} /> Смотреть вместе</button>
+        <a class="btn tl" href="/profile?tab=account"><Icon name="sliders" size={15} /> Настройки</a>
       </div>
+      {#if ticker.length}
+        <div class="ticker" aria-label="Что делают друзья"><div class="run">{#each [...ticker, ...ticker] as t, k (k)}<span><b>{t.who}</b> {t.what}</span>{/each}</div></div>
+      {/if}
+      <button class="btn share" type="button" onclick={share}><Icon name={shared ? 'check' : 'link'} size={15} /> {shared ? 'Ссылка скопирована' : 'Поделиться профилем'}</button>
     {/if}
 
     {#if s && names.length}
@@ -507,4 +553,47 @@
     .now { margin-top: 6px; }
     .live { width: 26px; height: 26px; right: 8px; bottom: 8px; }
   }
+  /* Профиль W «Пульт» (21.11): на компьютере карточка - левая колонка на всю высоту: стена постеров, портрет в кольце
+     уровня с медленной орбитой, имя, значки-медали, плитки разделов, бегущая строка друзей. */
+  .lvl, .orbit, .lvl-chip, .lvl-note, .ticker, .share, .tl { display: none; }
+  @media (min-width: 1001px) {
+    .card { position: relative; top: 0; border-radius: 40px; border: 1px solid #ffffff1f; background: #0b0b0e; }
+    .cover { height: 230px; }
+    .cover::after { background: linear-gradient(180deg, #0b0b0e20, #0b0b0e); }
+    .who { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 0 26px 24px; text-align: center; }
+    .ring { align-self: center; width: 146px; height: 146px; margin-top: -88px; background: none; box-shadow: none; }
+    /* Звание - в плашке уровня, цифры - справа в итогах: тут не повторяем. */
+    .bdg, .box { display: none; }
+    .ring :global(.ava) { width: 118px; height: 118px; }
+    .lvl { display: block; position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+    .lvl circle { fill: none; stroke-width: 5; }
+    .lvl .track { stroke: #ffffff1f; }
+    .lvl .bar { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset 1.4s cubic-bezier(0.2, 0.8, 0.2, 1); animation: lvl-draw 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    .orbit { display: block; position: absolute; inset: -10px; border: 1px dashed #ffffff33; border-radius: 50%; animation: orbit 30s linear infinite; }
+    .live { right: 12px; bottom: 12px; width: 22px; height: 22px; }
+    .lvl-chip { display: inline-block; order: 0; margin-top: 14px; padding: 6px 13px; border-radius: 999px; border: 1px solid #ffffff33; background: #ffffff0d; font-size: 12px; font-weight: 700; }
+    h1 { margin: 10px 0 0; font-size: 40px; letter-spacing: -0.05em; line-height: 1; }
+    .lvl-note { display: block; margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+    .now { margin-top: 8px; justify-content: center; }
+    .caps, .bdg, .genres { justify-content: center; margin-top: 12px; }
+    .box { width: 100%; margin-top: 16px; padding: 12px 6px; border: 1px solid #ffffff14; border-radius: 18px; text-align: center; }
+    .box div + div { padding-left: 0; }
+    .box b { font-size: 22px; }
+    .meds { order: 1; justify-content: space-between; width: 100%; margin-top: 16px; padding: 12px 14px; border-radius: 20px; background: #17171a; box-sizing: border-box; }
+    .m :global(.medal) { width: 40px; height: 40px; }
+    .btns { order: 2; width: 100%; margin-top: 14px; }
+    .social-actions { order: 3; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; margin-top: 14px; }
+    .social-actions .btn { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px; min-height: 84px; padding: 12px 14px; border-radius: 20px; border: 1px solid #ffffff12; background: #17171a; font-size: 13px; font-weight: 700; text-align: left; transition: transform 0.25s, background 0.2s; }
+    .social-actions .btn:hover { transform: translate3d(0, -3px, 0); background: #1f1f23; }
+    .tl { display: flex; }
+    .cnt { position: absolute; right: 10px; top: 10px; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: #fff; color: #0a0a0b; font-size: 11px; font-style: normal; font-weight: 800; line-height: 20px; text-align: center; }
+    .ticker { order: 4; display: block; width: calc(100% + 52px); margin: 14px -26px 0; padding: 10px 0; overflow: hidden; white-space: nowrap; border-block: 1px solid #ffffff12; }
+    .run { display: inline-flex; gap: 28px; animation: marquee 30s linear infinite; font-size: 13px; color: #c4c4cc; }
+    .run b { color: #fff; }
+    .share { order: 5; display: flex; justify-content: center; width: 100%; margin-top: 14px; border-radius: 999px; }
+    .bio, .locked { margin-top: 12px; }
+  }
+  @keyframes orbit { to { transform: rotate(360deg); } }
+  @keyframes marquee { to { transform: translate3d(-50%, 0, 0); } }
+  @keyframes lvl-draw { from { stroke-dashoffset: 434; } }
 </style>

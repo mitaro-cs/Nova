@@ -23,7 +23,9 @@ test('профиль по макету: показатели, ободок, ме
   await expect(card.getByLabel('Значки')).toContainText('Марафонец');
   await expect(card.getByLabel('Значки')).toContainText('Исследователь');
   await expect.poll(()=>card.locator('.box b').first().textContent()).toBe('521');
-  expect(await card.locator('.ring').evaluate(el=>getComputedStyle(el).boxShadow)).toContain('255, 255, 255');
+  // Компьютер: вокруг портрета кольцо уровня (профиль «Пульт»); телефон и планшет - белый ободок.
+  if((page.viewportSize()?.width??0)>1000) await expect(card.locator('.lvl')).toBeVisible();
+  else expect(await card.locator('.ring').evaluate(el=>getComputedStyle(el).boxShadow)).toContain('255, 255, 255');
   const shortcuts=card.getByLabel('Быстрые разделы').first();
   await shortcuts.click();
   await expect(card.locator('.quick a[href="/chats"]')).toBeVisible();
