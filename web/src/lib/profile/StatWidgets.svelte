@@ -286,4 +286,12 @@
     .w:last-child { border-bottom:0; }
     .bars { justify-content:flex-start; }
   }
+  /* Карточки по макету Figma 21.11: каждый показатель - своя плитка, ведущий столбик белый, остальные приглушены. */
+  .grid { gap: 12px; border: 0; }
+  .w, .w:nth-child(odd), .w:not(:nth-child(3n)), .w:nth-child(-n+6), .w:not(:nth-last-child(-n+2)), .w:last-child {
+    padding: 20px 22px; border: 1px solid #ffffff14; border-radius: 22px; background: #101012;
+  }
+  .bars b { border-radius: 8px 8px 3px 3px; background: #ffffff2e; }
+  .bars b.h { background: #fff; }
+  @media (max-width: 420px) { .w, .w:nth-child(odd) { padding: 18px; } }
 </style>
