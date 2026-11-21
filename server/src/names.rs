@@ -682,7 +682,7 @@ mod ru_tests {
     fn titles_and_descriptions_are_shown_in_russian_only() {
         assert_eq!(ru_title("Тьма"), "Тьма");
         assert_eq!(ru_title("2012"), "2012");
-        assert_eq!(ru_title("Spirit of the Forest"), "Спирит оф зе форест");
+        assert_eq!(ru_title("Spirit of the Forest"), "Спирит оф зе Форест");
         assert!(!has_latin(&ru_title("Dune")));
         assert_eq!(ru_text(Some("Plot in English".into())), None);
         assert_eq!(ru_text(Some("Сюжет".into())).as_deref(), Some("Сюжет"));

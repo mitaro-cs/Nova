@@ -27,7 +27,8 @@ async fn russian_episodes_include_old_fresh_seasons_without_replacing_source() {
     }
     let response = host.json("/api/discover/title/tt3543502/episodes?season=1").await;
     assert_eq!(response["items"][0]["name"], "Пан или пропал");
-    assert_eq!(response["items"][1]["name"], "Серия");
+    // Нет русского названия - номер серии, а не одно слово «Серия».
+    assert_eq!(response["items"][1]["name"], "2 серия");
     assert!(response["items"][0]["overview"].is_null());
     let source: String = app
         .db
