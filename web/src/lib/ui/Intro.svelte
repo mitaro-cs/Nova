@@ -1,20 +1,19 @@
 <script lang="ts">
   import { motionOn } from '$lib/motion';
-  import { logoBox, logoPaths, longestSubpath } from './introLogo';
+  import { logoBox, logoPaths } from './introLogo';
+  import { sound, unlock } from './novaSound';
 
-  // Заставка при входе в сервис (выбор владельца, 2 ноября): на чёрном светящейся линией рисуется контур
-  // нашего знака, заливается, по нему проходит свет, ниже проявляется NOVA; всё это чуть-чуть «дышит»
-  // (медленный наезд), в конце экран плавно уходит. Идёт 5,25 секунды. Знак берётся из `/logo.svg`
-  // (в сборку не входит), не загрузился - заставки нет. Только прозрачность и сдвиг (их считает
-  // видеокарта): без размытия и фильтров. Раз за сессию вкладки; анимации выключены - сразу. Клики не
-  // держит (pointer-events: none).
+  // Заставка при входе - вариант A «Тишина» (выбор владельца, 21 ноября; как у Apple TV+): на чёрном мягкий свет
+  // проходит сквозь знак Nova, знак остаётся белым, буквы NOVA спокойно собираются, звучит мягкий аккорд и звон блика
+  // (если браузер уже разрешил звук - вход только что нажали). Знак берётся из `/logo.svg` (в сборку не входит), не
+  // загрузился - заставки нет. Только прозрачность и сдвиг. Раз за сессию вкладки; анимации выключены - сразу.
+  // Клики не держит (pointer-events: none).
   const KEY = 'nova-intro';
   const LETTERS = ['N', 'O', 'V', 'A'];
-  const TOTAL = 5250;
+  const TOTAL = 5200;
   let show = $state(false);
   let d = $state('');
   let box = $state({ w: 100, h: 50.91 });
-  let len = $state(400);
 
   $effect(() => {
     let seen = false;
@@ -27,46 +26,52 @@
     // Автотесты (Playwright) - без заставки: она на пару секунд закрывает страницу от проверок вёрстки.
     if (seen || !motionOn() || navigator.webdriver) return;
     let live = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     fetch('/logo.svg')
       .then((r) => (r.ok ? r.text() : ''))
       .then((svg) => {
         const paths = logoPaths(svg);
         if (!live || !paths.length) return;
         d = paths.join(' ');
-        len = longestSubpath(d);
         box = logoBox(svg) ?? box;
         show = true;
-        timer = setTimeout(() => (show = false), TOTAL);
+        unlock();
+        timers.push(setTimeout(() => sound('swell'), 60), setTimeout(() => sound('shimmer'), 1500), setTimeout(() => (show = false), TOTAL));
       })
       .catch(() => {});
     return () => {
       live = false;
-      clearTimeout(timer);
+      timers.forEach(clearTimeout);
     };
   });
 </script>
 
 {#if show}
   <div class="intro" aria-hidden="true">
-    <div class="drift">
-      <svg class="mark" viewBox="0 0 {box.w} {box.h}" style:--len="{len}px">
-        <defs>
-          <clipPath id="intro-clip"><path {d} clip-rule="evenodd" /></clipPath>
-          <linearGradient id="intro-sweep" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" stop-color="#fff" stop-opacity="0" />
-            <stop offset="0.5" stop-color="#cfd6e4" stop-opacity="0.9" />
-            <stop offset="1" stop-color="#fff" stop-opacity="0" />
-          </linearGradient>
-        </defs>
-        <path class="line" {d} />
-        <path class="fill" {d} fill-rule="evenodd" />
-        <g clip-path="url(#intro-clip)"><rect class="sweep" x="-30" y="-2" width="30" height={box.h + 4} fill="url(#intro-sweep)" /></g>
-      </svg>
-      <div class="word">
-        {#each LETTERS as l, i (i)}<span style:--i={i}>{l}</span>{/each}
-      </div>
-    </div>
+    <svg class="mark" viewBox="0 0 {box.w} {box.h}">
+      <defs>
+        <clipPath id="intro-clip"><path {d} clip-rule="evenodd" /></clipPath>
+        <linearGradient id="intro-light" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0" />
+          <stop offset="0.3" stop-color="#fff" stop-opacity="0" />
+          <stop offset="0.46" stop-color="#fff" />
+          <stop offset="0.5" stop-color="#dcdce2" />
+          <stop offset="0.54" stop-color="#fff" />
+          <stop offset="0.7" stop-color="#fff" stop-opacity="0" />
+          <stop offset="1" stop-color="#fff" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="intro-solid" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="#fff" />
+          <stop offset="1" stop-color="#d2d2d8" />
+        </linearGradient>
+      </defs>
+      <g clip-path="url(#intro-clip)">
+        <!-- Свет проходит сквозь знак слева направо, потом знак проявляется целиком. -->
+        <rect class="sweep" x="0" y="0" width={box.w * 3} height={box.h} fill="url(#intro-light)" />
+        <rect class="solid" x="0" y="0" width={box.w} height={box.h} fill="url(#intro-solid)" />
+      </g>
+    </svg>
+    <p class="word">{#each LETTERS as l, i (l)}<span style:--i={i} style:--o={i - 1.5}>{l}</span>{/each}</p>
   </div>
 {/if}
 
@@ -74,98 +79,65 @@
   .intro {
     position: fixed;
     inset: 0;
-    z-index: 2000;
+    z-index: 3000;
     display: grid;
-    place-items: center;
+    place-content: center;
+    justify-items: center;
+    gap: clamp(26px, 4vh, 44px);
     background: #000;
     pointer-events: none;
-    will-change: opacity;
-    animation: intro-out 0.5s cubic-bezier(0.45, 0, 0.55, 1) 4.75s both;
-  }
-  .drift {
-    position: relative;
-    display: grid;
-    justify-items: center;
-    gap: clamp(18px, 4.5vw, 56px);
-    will-change: transform;
-    animation: drift 5.25s cubic-bezier(0.37, 0, 0.63, 1) both;
+    animation: out 0.9s ease-in 4.3s both;
   }
   .mark {
-    width: clamp(240px, 42vw, 640px);
+    width: clamp(200px, 26vw, 340px);
     height: auto;
-    overflow: visible;
-  }
-  .line {
-    fill: none;
-    stroke-linejoin: round;
-    stroke-linecap: round;
-    stroke-dasharray: var(--len) calc(var(--len) * 3);
-    stroke-dashoffset: var(--len);
-    stroke: #fff;
-    stroke-width: 0.26;
-    animation-name: draw, line-out;
-    animation-duration: 1.8s, 1.1s;
-    animation-delay: 0.35s, 1.7s;
-    animation-fill-mode: both, both;
-  }
-  .fill {
-    fill: #fff;
-    will-change: opacity;
-    animation: fill-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1.7s both;
+    animation: settle 4.2s cubic-bezier(0.25, 0.1, 0.25, 1) both;
   }
   .sweep {
-    will-change: transform;
-    animation: sweep 1.1s cubic-bezier(0.65, 0, 0.35, 1) 2.4s both;
+    transform: translateX(-66.6%);
+    animation: sweep 2.6s cubic-bezier(0.45, 0, 0.25, 1) 0.3s both;
+  }
+  .solid {
+    opacity: 0;
+    animation: fade 1.4s ease-in-out 1.7s both;
   }
   .word {
     display: flex;
-    gap: 0.42em;
+    gap: 0.55em;
+    margin: 0;
     color: #fff;
-    font-size: clamp(22px, 3.9vw, 52px);
+    font-size: clamp(26px, 3vw, 40px);
     font-weight: 700;
-    line-height: 1;
+    letter-spacing: 0.08em;
   }
   .word span {
-    display: inline-block;
-    will-change: transform, opacity;
-    animation: letter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
-    animation-delay: calc(2.6s + var(--i) * 100ms);
+    opacity: 0;
+    transform: translateX(calc(var(--o) * 10px));
+    animation: letter 1.5s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+    animation-delay: calc(2.5s + var(--i) * 110ms);
   }
-  @keyframes draw {
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-  @keyframes line-out {
-    to {
-      opacity: 0.45;
-    }
-  }
-  @keyframes fill-in {
+  @keyframes settle {
     from {
-      opacity: 0;
+      transform: scale(1.06);
     }
   }
   @keyframes sweep {
-    from {
+    to {
       transform: translateX(0);
     }
+  }
+  @keyframes fade {
     to {
-      transform: translateX(160px);
+      opacity: 1;
     }
   }
   @keyframes letter {
-    from {
-      opacity: 0;
-      transform: translateY(14px);
-    }
-  }
-  @keyframes drift {
     to {
-      transform: scale(1.045);
+      opacity: 1;
+      transform: none;
     }
   }
-  @keyframes intro-out {
+  @keyframes out {
     to {
       opacity: 0;
     }

@@ -5,6 +5,7 @@
   import { session } from '$lib/session.svelte';
   import type { ExtCard } from '$lib/types';
   import Icon from './Icon.svelte';
+  import { sound, unlock } from './novaSound';
 
   // Знакомство после регистрации: три экрана и «кинотитр» в конце. Фильмы для любимого можно выбрать из подборки
   // или найти любой через поиск (тот же каталог, что и в «Поиске»). Экраны плавно сменяют друг друга, на фоне
@@ -71,12 +72,33 @@
     };
   });
 
-  const toggleGenre = (g: string) => (genres = genres.includes(g) ? genres.filter((x) => x !== g) : [...genres, g]);
-  const toggleFilm = (card: ExtCard) => {
-    if (chosen(card)) picked = picked.filter((p) => p.id !== card.id);
-    else if (picked.length < 5) picked = [...picked, card];
-    else error = 'Можно выбрать до пяти любимых произведений.';
+  // Звук выбора: каждый следующий жанр - нота выше (мелодия), снять - та же нота ниже и тише.
+  const toggleGenre = (g: string) => {
+    unlock();
+    if (genres.includes(g)) {
+      sound('unselect', { k: genres.length - 1 });
+      genres = genres.filter((x) => x !== g);
+    } else {
+      sound('select', { k: genres.length });
+      genres = [...genres, g];
+    }
   };
+  const toggleFilm = (card: ExtCard) => {
+    unlock();
+    if (chosen(card)) {
+      sound('unselect', { k: picked.length - 1 });
+      picked = picked.filter((p) => p.id !== card.id);
+    } else if (picked.length < 5) {
+      sound('fave', { k: picked.length });
+      picked = [...picked, card];
+    } else error = 'Можно выбрать до пяти любимых произведений.';
+  };
+  // После знакомства - обучающий синематик (подгружается только тут). В автотестах - прежняя экскурсия.
+  let CinematicView = $state<typeof import('./Cinematic.svelte').default | null>(null);
+  function startCinematic() {
+    if (navigator.webdriver || !motionOn()) return startTour();
+    import('./Cinematic.svelte').then((m) => (CinematicView = m.default), startTour);
+  }
   function go(to: number) {
     dir = to > step ? 1 : -1;
     step = to;
@@ -109,7 +131,7 @@
         () => {
           open = false;
           finale = false;
-          startTour();
+          startCinematic();
         },
         motionOn() ? 1700 : 300,
       );
@@ -127,6 +149,9 @@
   }
 </script>
 
+{#if CinematicView}
+  <CinematicView onclose={() => (CinematicView = null)} />
+{/if}
 {#if open}
   <div class="veil" transition:fade={{ duration: d }}>
     <div class="aurora" aria-hidden="true"></div>
