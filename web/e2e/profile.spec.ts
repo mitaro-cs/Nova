@@ -22,15 +22,20 @@ test('профиль по макету: показатели, ободок, ме
   await expect(card.getByText('Сейчас смотрит · Медведь')).toBeVisible();
   await expect(card.getByLabel('Значки')).toContainText('Марафонец');
   await expect(card.getByLabel('Значки')).toContainText('Исследователь');
-  await expect.poll(()=>card.locator('.box b').first().textContent()).toBe('521');
-  // Компьютер: вокруг портрета кольцо уровня (профиль «Пульт»); телефон и планшет - белый ободок.
-  if((page.viewportSize()?.width??0)>1000) await expect(card.locator('.lvl')).toBeVisible();
-  else expect(await card.locator('.ring').evaluate(el=>getComputedStyle(el).boxShadow)).toContain('255, 255, 255');
-  const shortcuts=card.getByLabel('Быстрые разделы').first();
-  await shortcuts.click();
-  await expect(card.locator('.quick a[href="/chats"]')).toBeVisible();
-  await shortcuts.click();
-  await expect(card.locator('.quick a[href="/chats"]')).toBeHidden();
+  // Компьютер - «Пульт» по макету Figma: цифры сеткой, полоса уровня, меню «Ещё»; телефон и планшет - карточка с ободком.
+  if((page.viewportSize()?.width??0)>1000) {
+    await expect.poll(()=>card.getByLabel('Цифры').locator('b').nth(3).textContent()).toBe('521');
+    await expect(card.getByRole('progressbar',{name:'До следующего уровня'})).toBeVisible();
+    await expect(card.getByRole('navigation',{name:'Ещё'}).getByRole('button',{name:'Экскурсия'})).toBeVisible();
+  } else {
+    await expect.poll(()=>card.locator('.box b').first().textContent()).toBe('521');
+    expect(await card.locator('.ring').evaluate(el=>getComputedStyle(el).boxShadow)).toContain('255, 255, 255');
+    const shortcuts=card.getByLabel('Быстрые разделы').first();
+    await shortcuts.click();
+    await expect(card.locator('.quick a[href="/chats"]')).toBeVisible();
+    await shortcuts.click();
+    await expect(card.locator('.quick a[href="/chats"]')).toBeHidden();
+  }
   await expectClean(page,'профиль по макету');
   const shots=resolve('../docs/design/profile');mkdirSync(shots,{recursive:true});
   await page.screenshot({path:resolve(shots,`${info.project.name}.png`),fullPage:true});
@@ -86,7 +91,7 @@ test('профиль: вкладки, статистика и переключа
 
   await page.getByRole('tab', { name: /Просмотрено/ }).click();
   await expect(page).toHaveURL(/tab=watched/);
-  await expect(page.getByRole('region', { name: 'Лента просмотренного' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Просмотренное' })).toBeVisible();
   await page.getByRole('tab', { name: /Отзывы/ }).click();
   await expect(page).toHaveURL(/tab=reviews/);
   await expectClean(page, 'профиль: отзывы');

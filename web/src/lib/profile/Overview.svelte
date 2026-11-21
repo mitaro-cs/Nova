@@ -80,7 +80,6 @@
   // Люди: любимый режиссёр (сколько его фильмов смотрел) и актёры.
   const director = $derived(p.decor.directors[0] ?? null);
   const dirInfo = $derived(p.decor.directorsInfo?.find((d) => d.name === director) ?? null);
-  let editActors = $state(false);
 
   const genres = $derived.by(() => {
     const g = (s?.genres ?? []).slice(0, 4);
@@ -189,14 +188,8 @@
         {:else if p.me}
           <p class="muted sm">Любимого режиссёра можно выбрать в оформлении профиля. <a class="lnk" href="/profile">Выбрать</a></p>
         {/if}
-        <div class="ah">
-          <p class="eye">Любимые актёры</p>
-          {#if p.me}<button type="button" class="lnk" aria-expanded={editActors} onclick={() => (editActors = !editActors)}>{editActors ? 'Готово' : 'Изменить'}</button>{/if}
-        </div>
-        {#if p.decor.actors?.length}
-          <p class="names">{#each p.decor.actors as a, i (a.name)}{#if i}<span class="dot">·</span>{/if}<a href="/person?name={encodeURIComponent(a.name)}&role=actor">{a.name}</a>{/each}</p>
-        {:else}
-          <p class="muted sm">Пока никого.</p>
+        {#if p.me || p.decor.actors?.length}
+          <div class="actors"><FavActors bind:actors={p.decor.actors} suggest={(p.stats?.actors ?? []).map((a) => a.name)} editable={p.me} /></div>
         {/if}
       </section>
     {/if}
@@ -212,10 +205,6 @@
       </section>
     {/if}
   </div>
-{/if}
-
-{#if editActors && p.me}
-  <div class="sec"><FavActors bind:actors={p.decor.actors} suggest={(p.stats?.actors ?? []).map((a) => a.name)} editable /></div>
 {/if}
 
 {#if recent.length}
@@ -290,11 +279,8 @@
   .dir em { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px; background: #ffffff12; font-size: 12px; font-style: normal; font-weight: 700; }
   .sm { margin: 0 0 8px; font-size: 12.5px; }
   .top { margin-top: -10px; }
-  .ah { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+  .actors { margin-top: 20px; }
   .lnk { padding: 0; border: 0; background: none; color: #fff; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-  .names { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 8px 0 0; font-size: 13.5px; }
-  .names a:hover { text-decoration: underline; }
-  .dot { color: var(--muted); }
   .gen { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
   .gen li { display: grid; grid-template-columns: 96px minmax(0, 1fr) 28px; align-items: center; gap: 12px; font-size: 13px; }
   .gen span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

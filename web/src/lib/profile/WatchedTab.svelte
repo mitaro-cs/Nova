@@ -73,7 +73,7 @@
 </div>
 
 {#if list.length}
-  <ul class="grid">
+  <ul class="grid" aria-label="Просмотренное">
     {#each list.slice(0, limit) as r, i (r.key)}
       <li class="rise" style:--i={i % 12}>
         <a href={r.href}>

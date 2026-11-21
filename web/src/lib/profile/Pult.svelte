@@ -134,7 +134,7 @@
     {#if s}
       <section class="part" aria-labelledby="pult-ach">
         <div class="ph"><h2 id="pult-ach">Достижения</h2><small>{got} из {goals.length}</small></div>
-        <ul class="ach">
+        <ul class="ach" aria-label="Значки">
           {#each goals as g, i (g.label)}
             <li class:got={g.got} style:--i={i} title={g.got ? g.label : `${g.label}: ${g.hint}`}>
               <span class="ic"><Icon name={g.icon} size={18} /></span><small>{g.label}</small>
