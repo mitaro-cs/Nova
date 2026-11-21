@@ -1020,10 +1020,10 @@ pub fn card_sql(kids: bool) -> String {
              ELSE (SELECT m.status FROM ext_marks m WHERE m.ext_id = e.id AND m.profile_id = ?1) END,
            EXISTS (SELECT 1 FROM wishes w WHERE w.ext_id = e.id AND w.profile_id = ?1 AND w.dismissed_at IS NULL AND w.done_at IS NULL),
            e.release, e.soon,
-           (e.genres LIKE '%Аниме%' OR e.genres LIKE '%Anime%'
+           COALESCE(e.genres LIKE '%Аниме%' OR e.genres LIKE '%Anime%'
              OR ((e.genres LIKE '%Мульт%' OR e.genres LIKE '%Анимац%' OR e.genres LIKE '%Animation%')
-                 AND (e.extra LIKE '%Япония%' OR e.extra LIKE '%Japan%'))
-             OR EXISTS (SELECT 1 FROM ext_charts c WHERE c.ext_id = e.id AND c.chart LIKE 'anime%'))
+                 AND (COALESCE(e.extra, '') LIKE '%Япония%' OR COALESCE(e.extra, '') LIKE '%Japan%'))
+             OR EXISTS (SELECT 1 FROM ext_charts c WHERE c.ext_id = e.id AND c.chart LIKE 'anime%'), 0)
          FROM ext_titles e",
         crate::api::visible(kids)
     )
@@ -1063,7 +1063,8 @@ pub fn card(r: &rusqlite::Row) -> rusqlite::Result<ExtCard> {
         wished: r.get(10)?,
         release: r.get(11)?,
         soon: r.get(12)?,
-        anime: r.get(13)?,
+        // NULL (нет жанров или описания) - не аниме: иначе вся выдача падала с ошибкой типа.
+        anime: r.get::<_, Option<bool>>(13)?.unwrap_or(false),
     })
 }
 
@@ -1079,6 +1080,40 @@ mod tests {
             )
         })
         .unwrap();
+    }
+
+    /// Карточка ленты читается и у записи без описания и жанров (раньше признак «аниме» был NULL - и вся выдача
+    /// «Что смотреть», «Коллекции» и «Сериалов» падала с ошибкой).
+    #[test]
+    fn card_reads_rows_without_extra_or_genres() {
+        let db = crate::db::Db::memory().unwrap();
+        add_ext(&db, "tt9100001", "Без описания", None);
+        db.with(|c| {
+            c.execute(
+                "INSERT INTO ext_titles (id, kind, title, genres, extra, updated_at) VALUES ('tt9100002', 'series', 'Дороро', '[\"Мультфильм\"]', '{\"countries\":[\"Япония\"]}', 0)",
+                [],
+            )
+        })
+        .unwrap();
+        db.with(|c| {
+            c.execute(
+                "INSERT INTO ext_titles (id, kind, title, genres, updated_at) VALUES ('tt9100003', 'movie', 'Мульт', '[\"Мультфильм\"]', 0)",
+                [],
+            )
+        })
+        .unwrap();
+        let cards: Vec<ExtCard> = db
+            .with(|c| {
+                let mut st = c.prepare(&format!("{} ORDER BY e.id", card_sql(false)))?;
+                let r = st.query_map([1i64], card)?;
+                r.collect()
+            })
+            .unwrap();
+        assert_eq!(cards.len(), 3);
+        assert!(!cards[0].anime);
+        assert!(cards[1].anime);
+        // Мультфильм без описания: страна неизвестна - не аниме (именно тут раньше выходил NULL).
+        assert!(!cards[2].anime);
     }
 
     #[test]
