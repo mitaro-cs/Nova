@@ -21,7 +21,7 @@
   import { api, del, errorText, patch, post, put } from '$lib/api';
   import { clock, count, date, kindLabel, runtime, votes } from '$lib/fmt';
   import { session } from '$lib/session.svelte';
-  import { extChanged, extSheet, remember } from '$lib/discover/sheet.svelte';
+  import { marksChanged, extSheet, remember } from '$lib/discover/sheet.svelte';
   import LinkCard from '$lib/links/LinkCard.svelte';
   import LinkFinder from '$lib/links/LinkFinder.svelte';
   import FriendsStrip from '$lib/social/FriendsStrip.svelte';
@@ -280,7 +280,7 @@
     try {
       const r = await put<{ mark: ExtCard['mark'] }>(`/api/discover/title/${d.card.id}/seen`, { season: e.season, episode: e.episode, value });
       d.card.mark = r.mark;
-      extChanged();
+      marksChanged();
     } catch (x) {
       episodes = before;
       toast(errorText(x));
@@ -400,7 +400,7 @@
     d.card.mark = next;
     try {
       await put(`/api/discover/title/${d.card.id}/mark`, { status: next });
-      extChanged();
+      marksChanged();
     } catch {
       d.card.mark = before;
     }
@@ -424,7 +424,7 @@
     try {
       await put(`/api/lists/${l.id}/ext/${d.card.id}`, { value: l.has });
       toast(l.has ? `Добавили в «${l.name}»` : `Убрали из «${l.name}»`);
-      extChanged();
+      marksChanged();
     } catch (x) {
       l.has = !l.has;
       toast(errorText(x));
@@ -434,7 +434,7 @@
   async function created(list: number) {
     if (!d) return;
     await put(`/api/lists/${list}/ext/${d.card.id}`, { value: true }).catch(() => {});
-    extChanged();
+    marksChanged();
     load(d.card.id);
   }
 

@@ -30,7 +30,17 @@
   // Запасной адрес тоже не дал картинку: остаётся заглушка с названием, без битого <img>.
   let failed = $state(false);
   const source = $derived(failed ? null : (replacement ?? c.poster));
-  $effect(() => { void c.poster; void card?.id; replacement = null; loaded = false; failed = false; });
+  // Сброс - только когда сменилась сама картинка: после отметки приходит новый объект с тем же постером, и сброс
+  // оставлял название поверх уже загруженной картинки (onload второй раз не приходит).
+  let shownFor = '';
+  $effect(() => {
+    const k = `${card?.id ?? local?.id}|${c.poster}`;
+    if (k === shownFor) return;
+    shownFor = k;
+    replacement = null;
+    loaded = false;
+    failed = false;
+  });
   // Картинка из кэша браузера бывает готова раньше, чем навешан onload: тогда заглушка с названием висела поверх постера.
   function ready(img: HTMLImageElement) {
     if (img.complete && img.naturalWidth > 0) loaded = true;

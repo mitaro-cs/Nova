@@ -4,7 +4,7 @@ import { extSheet } from './sheet.svelte';
 import type { ExtDetail } from '$lib/types';
 const cache = new Map<string, { at: number; data: ExtDetail }>();
 const pending = new Map<string, Promise<ExtDetail>>();
-const key = (id: string) => `${session.me?.user.profile?.id}:${extSheet.version}:${id}`;
+const key = (id: string) => `${session.me?.user.profile?.id}:${extSheet.version}.${extSheet.marks}:${id}`;
 export const peekDetail = (id: string) => cache.get(key(id))?.data ?? null;
 export function getDetail(id: string): Promise<ExtDetail> {
   const k = key(id), saved = cache.get(k);

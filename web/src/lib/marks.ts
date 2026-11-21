@@ -1,5 +1,5 @@
 import { errorText, put } from './api';
-import { extChanged } from './discover/sheet.svelte';
+import { marksChanged } from './discover/sheet.svelte';
 import type { Card, ExtCard } from './types';
 import { toast } from './ui/toast.svelte';
 import { catalog } from './catalog.svelte';
@@ -22,7 +22,7 @@ export async function setStatus(card: Local, next: Mark | 'dropped' | null) {
     Object.assign(card, { status: c.status, inList: c.inList, watchedAt: c.watchedAt, resume: c.resume });
     const cached = catalog.items?.find((item) => item.id === card.id);
     if (cached) Object.assign(cached, c);
-    extChanged();
+    marksChanged();
   } catch (x) {
     Object.assign(card, before);
     toast(errorText(x));
@@ -34,7 +34,7 @@ export async function setMark(card: Pick<ExtCard, 'id' | 'mark'>, next: Mark | '
   card.mark = next;
   try {
     await put(`/api/discover/title/${card.id}/mark`, { status: next });
-    extChanged();
+    marksChanged();
   } catch (x) {
     card.mark = before;
     toast(errorText(x));

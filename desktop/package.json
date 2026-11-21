@@ -1,7 +1,7 @@
 {
   "name": "fsfy-desktop",
   "private": true,
-  "version": "2.1.1-beta",
+  "version": "2.1.2-beta",
   "scripts": {
     "tauri": "tauri",
     "icons": "tauri icon icon-src/icon.png -o src-tauri/icons"

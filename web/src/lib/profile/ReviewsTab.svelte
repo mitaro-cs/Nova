@@ -3,6 +3,7 @@
   import { placeholder } from '$lib/ui/art';
   import { fadeIn } from '$lib/ui/fade';
   import Icon from '$lib/ui/Icon.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import type { ProfilePage } from './types';
 
   // Вкладка «Отзывы» (макет в Figma 21.11): отбор, порядок, карточки с постером, звёздами, датой и текстом.
@@ -10,13 +11,13 @@
 
   type R = ProfilePage['reviews'][number];
   let filter = $state<'all' | 'text' | 'stars'>('all');
-  let order = $state<'new' | 'high' | 'low'>('new');
+  let order = $state<string>('new');
   let limit = $state(5);
   const n = $derived({ all: reviews.length, text: reviews.filter((r) => r.body.trim()).length, stars: reviews.filter((r) => !r.body.trim() && r.stars).length });
   const list = $derived.by(() => {
     const out = reviews.filter((r) => filter === 'all' || (filter === 'text' ? r.body.trim() : !r.body.trim() && r.stars));
     const by = { new: (a: R, b: R) => b.createdAt - a.createdAt, high: (a: R, b: R) => (b.stars ?? 0) - (a.stars ?? 0), low: (a: R, b: R) => (a.stars ?? 99) - (b.stars ?? 99) };
-    return out.sort(by[order]);
+    return out.sort(by[order as keyof typeof by]);
   });
   $effect(() => {
     void filter;
@@ -33,14 +34,7 @@
     <h2>{me ? 'Мои отзывы' : 'Отзывы'}</h2>
     <p class="muted">{n.all} {plural(n.all)} о том, что осталось после титров</p>
   </div>
-  <label class="sort"><span class="sr">Порядок</span>
-    <select bind:value={order}>
-      <option value="new">Сначала новые</option>
-      <option value="high">Высокие оценки</option>
-      <option value="low">Низкие оценки</option>
-    </select>
-    <Icon name="down" size={14} />
-  </label>
+  <div class="sort"><Select label="Порядок" variant="sm" fit bind:value={order} options={[{ value: 'new', label: 'Сначала новые' }, { value: 'high', label: 'Высокие оценки' }, { value: 'low', label: 'Низкие оценки' }]} /></div>
 </div>
 
 <div class="seg" role="radiogroup" aria-label="Какие отзывы">
@@ -91,12 +85,6 @@
   .rh { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
   .rh h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
   .rh p { margin: 4px 0 0; font-size: 13px; }
-  .sort { position: relative; display: flex; align-items: center; height: 42px; padding: 0 16px; border: 1px solid #ffffff1a; border-radius: 999px; background: #101012; color: var(--muted); }
-  .sort:focus-within { border-color: #fff; }
-  .sort select { appearance: none; height: 100%; padding: 0 22px 0 0; border: 0; background: none; color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; outline: none; }
-  .sort select option { background: #101012; }
-  .sort :global(svg) { position: absolute; right: 14px; pointer-events: none; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-bottom: 20px; padding: 4px; border: 1px solid #ffffff1a; border-radius: 999px; background: #101012; }
   .seg button { min-height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: none; color: #c4c4cc; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s, color 0.2s; }
   .seg button.on { background: #fff; color: #0a0a0b; }

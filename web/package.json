@@ -1,7 +1,7 @@
 {
   "name": "fsfy-web",
   "private": true,
-  "version": "2.1.1-beta",
+  "version": "2.1.2-beta",
   "type": "module",
   "scripts": {
     "dev": "vite dev",

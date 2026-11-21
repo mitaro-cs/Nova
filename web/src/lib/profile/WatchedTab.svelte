@@ -3,6 +3,7 @@
   import { placeholder } from '$lib/ui/art';
   import { fadeIn } from '$lib/ui/fade';
   import Icon from '$lib/ui/Icon.svelte';
+  import Select from '$lib/ui/Select.svelte';
 
   // Вкладка «Просмотрено» (макет в Figma 21.11): поиск, «Все / Фильмы / Сериалы», порядок, сетка карточек с оценкой и
   // датой, «Показать ещё». Фильмы с сервиса и из ленты IMDb - вместе.
@@ -23,19 +24,19 @@
 
   let q = $state('');
   let kind = $state<'all' | 'movie' | 'series'>('all');
-  let order = $state<'recent' | 'rating' | 'title' | 'year'>('recent');
+  let order = $state<string>('recent');
   let limit = $state(12);
   const n = $derived({ all: rows.length, movie: rows.filter((r) => r.kind === 'movie').length, series: rows.filter((r) => r.kind === 'series').length });
   const list = $derived.by(() => {
     const needle = q.trim().toLowerCase().replaceAll('ё', 'е');
     const out = rows.filter((r) => (kind === 'all' || r.kind === kind) && (!needle || r.title.toLowerCase().replaceAll('ё', 'е').includes(needle)));
-    const by: Record<typeof order, (a: Row, b: Row) => number> = {
+    const by: Record<'recent' | 'rating' | 'title' | 'year', (a: Row, b: Row) => number> = {
       recent: (a, b) => (b.at ?? 0) - (a.at ?? 0),
       rating: (a, b) => (b.rating ?? 0) - (a.rating ?? 0),
       title: (a, b) => a.title.localeCompare(b.title, 'ru'),
       year: (a, b) => (b.year ?? 0) - (a.year ?? 0),
     };
-    return out.sort(by[order]);
+    return out.sort(by[order as keyof typeof by]);
   });
   $effect(() => {
     void q;
@@ -61,15 +62,7 @@
       <button type="button" role="radio" aria-checked={kind === k.id} class:on={kind === k.id} onclick={() => (kind = k.id as typeof kind)}>{k.id === 'all' ? k.l : `${k.l} · ${k.c}`}</button>
     {/each}
   </div>
-  <label class="sort"><span class="sr">Порядок</span>
-    <select bind:value={order}>
-      <option value="recent">Сначала недавние</option>
-      <option value="rating">По оценке IMDb</option>
-      <option value="year">Сначала новые фильмы</option>
-      <option value="title">По названию</option>
-    </select>
-    <Icon name="down" size={14} />
-  </label>
+  <div class="sort"><Select label="Порядок" variant="sm" fit bind:value={order} options={[{ value: 'recent', label: 'Сначала недавние' }, { value: 'rating', label: 'По оценке IMDb' }, { value: 'year', label: 'Сначала новые фильмы' }, { value: 'title', label: 'По названию' }]} /></div>
 </div>
 
 {#if list.length}
@@ -116,13 +109,9 @@
   .wh h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
   .wh p { margin: 4px 0 0; font-size: 13px; }
   .tools { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; margin-bottom: 20px; }
-  .find, .sort { position: relative; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; border: 1px solid #ffffff1a; border-radius: 999px; background: #101012; color: var(--muted); }
-  .find:focus-within, .sort:focus-within { border-color: #fff; }
+  .find { position: relative; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; border: 1px solid #ffffff1a; border-radius: 999px; background: #101012; color: var(--muted); }
+  .find:focus-within { border-color: #fff; }
   .find input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; color: #fff; font: inherit; font-size: 14px; outline: none; }
-  .sort select { appearance: none; height: 100%; padding: 0 22px 0 0; border: 0; background: none; color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; outline: none; }
-  .sort select option { background: #101012; }
-  .sort :global(svg) { position: absolute; right: 14px; pointer-events: none; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .seg { display: flex; gap: 4px; padding: 4px; border: 1px solid #ffffff1a; border-radius: 999px; background: #101012; }
   .seg button { padding: 0 14px; border: 0; border-radius: 999px; background: none; color: #c4c4cc; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background 0.2s, color 0.2s; }
   .seg button.on { background: #fff; color: #0a0a0b; }

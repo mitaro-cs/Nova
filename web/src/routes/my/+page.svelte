@@ -11,6 +11,7 @@
   let failed = $state(false);
   $effect(() => {
     void extSheet.version;
+    void extSheet.marks;
     let live = true;
     api<Marks>('/api/me/marks').then(
       (m) => live && ((marks = m), (failed = false)),
