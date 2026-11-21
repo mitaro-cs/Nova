@@ -308,7 +308,17 @@ pub async fn search(
     });
     titles.retain(|c| !by_genre.contains(&c.id));
     out.extend(titles);
-    dedupe_cards(&mut out);
+    dedupe_cards(&mut out, |id| {
+        app.db
+            .with(|c| {
+                c.query_row(
+                    "SELECT COALESCE(NULLIF(poster,''), poster_url) IS NOT NULL FROM ext_titles WHERE id = ?",
+                    [id],
+                    |r| r.get::<_, bool>(0),
+                )
+            })
+            .unwrap_or(false)
+    });
     let mut response = axum::response::IntoResponse::into_response(Json(json!(out)));
     if let Some((_, ru, _)) = genre {
         let value = url::form_urlencoded::byte_serialize(ru.as_bytes()).collect::<String>();
@@ -324,7 +334,7 @@ pub async fn search(
 
 /// Без дублей: старые карточки импорта с сайтов (`nv…`) не показываем, а запись без постера и оценки с тем же
 /// названием, что у настоящего фильма выше, - тоже («Гарри Поттер и Тайная комната, 2020» рядом с фильмом 2002 года).
-fn dedupe_cards(cards: &mut Vec<discover::ExtCard>) {
+fn dedupe_cards(cards: &mut Vec<discover::ExtCard>, has_image: impl Fn(&str) -> bool) {
     let key = |t: &str| {
         crate::util::norm(t)
             .replace(" часть i", " часть 1")
@@ -337,7 +347,11 @@ fn dedupe_cards(cards: &mut Vec<discover::ExtCard>) {
     // «Настоящий» - с оценкой IMDb: у пустых записей (фанатские ролики, ошибки базы) оценки нет.
     let solid: std::collections::HashSet<String> =
         cards.iter().filter(|c| c.rating.is_some()).map(|c| key(&c.title)).collect();
-    cards.retain(|c| !c.id.starts_with("nv") && (c.rating.is_some() || !solid.contains(&key(&c.title))));
+    // Мусор - без оценки И без картинки на IMDb. Ремейк с тем же названием («Таинственный сад», 2020) остаётся: у
+    // свежей находки оценки ещё может не быть, но постер есть.
+    cards.retain(|c| {
+        !c.id.starts_with("nv") && (c.rating.is_some() || has_image(&c.id) || !solid.contains(&key(&c.title)))
+    });
 }
 
 /// Страница источника определяется по тому же устойчивому id, что и при импорте.
@@ -1301,9 +1315,11 @@ mod typo_tests {
             card("tt4", "Гарри Поттер и Дары Смерти: Часть I", None),
             card("tt5", "Гарри Поттер и Дары Смерти. Часть 1", Some(7.7)),
             card("tt6", "Редкий фильм", None),
+            card("tt7", "Гарри Поттер и Тайная комната", None),
         ];
-        super::dedupe_cards(&mut v);
-        assert_eq!(v.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["tt1", "tt5", "tt6"]);
+        super::dedupe_cards(&mut v, |id| id == "tt7");
+        // tt7 - ремейк с тем же названием: без оценки, но с постером - остаётся.
+        assert_eq!(v.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["tt1", "tt5", "tt6", "tt7"]);
     }
 
     #[test]
