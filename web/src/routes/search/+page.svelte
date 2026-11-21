@@ -286,4 +286,19 @@
     .tune { display: grid; place-items: center; width: 40px; height: 32px; padding: 0 0 0 8px; border: 0; border-left: 1px solid #ffffff2e; border-radius: 0; background: none; color: #c7c7cc; cursor: pointer; }
     .filters:not(.open), .refine:not(.open) { display: none; }
   }
+  /* Поиск в стиле афиши (21.11): поле - капсула со значком в белом круге, как «Спросите Nova»; типы и фильтры - одной
+     строкой под полем, без отдельной плиты; на узком окне строка переносится. */
+  @media (min-width: 641px) {
+    .panel { padding: 0; border: 0; background: none; }
+    .big { height: 68px; padding: 0 10px 0 10px; gap: 14px; border-radius: 999px; border: 1px solid #ffffff33; background: #101012; }
+    .big:focus-within { border-color: #fff; }
+    .big > :global(svg:first-child) { box-sizing: content-box; flex: none; padding: 12px; border-radius: 50%; background: #fff; color: #0a0a0b; }
+    .big input { font-size: 18px; }
+    .filters { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 0 10px 12px 0; padding: 5px; border-radius: 999px; border: 1px solid #ffffff1a; background: #0c0c0e; vertical-align: middle; }
+    .filters :global(.chip) { border: 0; background: none; color: #c4c4cc; }
+    .filters :global(.chip.on) { background: #fff; color: #0a0a0b; }
+    .refine { display: inline-flex; flex-wrap: wrap; gap: 8px; vertical-align: middle; margin-bottom: 12px; }
+    .refine label { padding: 6px 8px 6px 14px; }
+    .refine input { height: 30px; padding: 0 12px; border-radius: 999px; background: #ffffff14; }
+  }
 </style>

@@ -139,6 +139,36 @@ pub struct SearchQuery {
 }
 
 /// Поиск по всему IMDb: найденное сохраняется в ленту, постеры - скачиваются сразу (до 6 с).
+/// Запасные написания запроса с опечаткой (не больше трёх, без повторов и без исходного).
+pub fn typo_variants(q: &str) -> Vec<String> {
+    const EN: &str = "qwertyuiop[]asdfghjkl;'zxcvbnm,.`";
+    const RU: &str = "йцукенгшщзхъфывапролджэячсмитьбюё";
+    let swap = |from: &str, to: &str| -> String {
+        let (f, t): (Vec<char>, Vec<char>) = (from.chars().collect(), to.chars().collect());
+        q.to_lowercase().chars().map(|c| f.iter().position(|x| *x == c).map_or(c, |i| t[i])).collect()
+    };
+    let lower = q.to_lowercase();
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |v: String| {
+        let v = v.trim().to_string();
+        if v.chars().count() >= 2 && v != lower && !out.contains(&v) {
+            out.push(v);
+        }
+    };
+    if lower.chars().all(|c| c.is_ascii() || c.is_whitespace()) {
+        push(swap(EN, RU));
+    } else if lower.chars().any(|c| matches!(c, 'а'..='я' | 'ё')) {
+        push(lower.replace('ё', "е"));
+    }
+    if lower.chars().count() >= 5 {
+        let mut cut: Vec<char> = lower.chars().collect();
+        cut.pop();
+        push(cut.into_iter().collect());
+    }
+    out.truncate(3);
+    out
+}
+
 pub async fn search(
     State(app): State<Arc<App>>,
     v: Viewer,
@@ -164,6 +194,23 @@ pub async fn search(
             tokio::join!(discover::genre_search(&app, g, types), crate::catalog_search::search(&app, query))
         }
         None => (Ok(vec![]), crate::catalog_search::search(&app, query).await),
+    };
+    // Ничего не нашли - пробуем, как набрал бы человек с опечаткой: другая раскладка («vtldtlm»), «ё» как «е»,
+    // лишняя или неверная последняя буква («медведб»).
+    let by_title = match by_title {
+        Ok(ids) if ids.is_empty() && by_genre.as_ref().map_or(true, |g| g.is_empty()) => {
+            let mut found = Ok(ids);
+            for alt in typo_variants(query) {
+                if let Ok(more) = crate::catalog_search::search(&app, &alt).await
+                    && !more.is_empty()
+                {
+                    found = Ok(more);
+                    break;
+                }
+            }
+            found
+        }
+        other => other,
     };
     let by_genre = by_genre.unwrap_or_else(|e| {
         tracing::debug!("жанр с IMDb: {e:#}");
@@ -1133,5 +1180,18 @@ mod rank_tests {
         let better = search_rank(&q, "Fight Club", None, Some(9.0));
         let worse = search_rank(&q, "Fight Club", None, Some(5.0));
         assert!(better < worse, "при равенстве - выше оценка");
+    }
+}
+
+#[cfg(test)]
+mod typo_tests {
+    use super::typo_variants;
+
+    #[test]
+    fn variants_cover_layout_yo_and_last_letter() {
+        assert!(typo_variants("vtldtlm").contains(&"медведь".to_string()));
+        assert!(typo_variants("медведб").contains(&"медвед".to_string()));
+        assert!(typo_variants("Ёлки").contains(&"елки".to_string()));
+        assert!(typo_variants("ab").len() <= 1);
     }
 }
