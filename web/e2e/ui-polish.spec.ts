@@ -35,10 +35,9 @@ test('единая нижняя панель находится у края и �
     if(shape)expect(metrics.shape).toBe(shape);shape=metrics.shape;
   }
   await page.goto(url(`/people/${env().people.me}`));
-  const menu=page.locator('.shortcuts summary');
-  if((await page.viewportSize())!.width<=600)expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(50);
-  await menu.click();await expect(page.getByRole('navigation',{name:'Быстрые разделы'})).toBeVisible();
-  await menu.click();
+  // Профиль «Дневник»: быстрые разделы всегда на виду (без свёрнутого меню).
+  const quick=page.getByRole('navigation',{name:'Быстрые разделы'});
+  await quick.scrollIntoViewIfNeeded();await expect(quick.getByRole('link',{name:/Чаты/})).toBeVisible();
   const shots=resolve('../docs/design/ui-polish');mkdirSync(shots,{recursive:true});await page.screenshot({path:resolve(shots,`navigation-${info.project.name}.png`)});
 });
 
