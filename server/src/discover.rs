@@ -934,7 +934,8 @@ pub async fn season_data(app: &Arc<App>, id: &str, season: i32) -> anyhow::Resul
     }
     let imdb = Imdb::new(app.http.clone());
     let v = imdb.data(crate::meta::imdb::EPISODES, json!({ "id": id, "season": season.to_string() }), "title").await?;
-    let eps = crate::meta::imdb::parse_episodes(&v);
+    // Серия 0 - невыпущенный пилот («Южный парк»): страница выбирала её первой, а видео для серии 0 не ищется.
+    let eps: Vec<_> = crate::meta::imdb::parse_episodes(&v).into_iter().filter(|e| e.episode > 0).collect();
     app.db.tx(|tx| {
         for e in &eps {
             tx.execute(
@@ -985,7 +986,7 @@ pub async fn stills(app: &Arc<App>, id: &str, season: i32) {
 }
 
 /// Карточка фильма из ленты для интерфейса.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtCard {
     pub id: String,

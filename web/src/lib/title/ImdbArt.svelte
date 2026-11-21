@@ -16,8 +16,7 @@
   let picked = $state<Art | null>(null);
   let width = $state(1000);
   let busy = $state('');
-  // Картинки IMDb грузим только по просьбе: загрузка своего файла не ждёт IMDb и не ходит к нему вовсе.
-  let wanted = $state(false);
+  // Картинки IMDb грузим сразу при открытии (просьба владельца 21.11); своя картинка - кнопкой внизу, она IMDb не ждёт.
 
   const QUALITY = [
     { w: 500, label: 'Обычное', note: 'быстро, до 500 px' },
@@ -28,7 +27,7 @@
   const real = $derived(picked ? Math.min(width, picked.width) : 0);
 
   $effect(() => {
-    if (!open || !wanted || items) return;
+    if (!open || items) return;
     let live = true;
     error = '';
     api<{ items: Art[] }>(`${base}/imdb-art`).then(
@@ -87,8 +86,6 @@
     </div>
     {#if error}
       <p class="error" role="alert">{error}</p>
-    {:else if !wanted}
-      <div class="ask"><p class="muted">Своя картинка - кнопкой внизу. Или подберите готовую с IMDb.</p><button class="btn" type="button" onclick={() => (wanted = true)}><Icon name="search" size={16} /> Показать картинки с IMDb</button></div>
     {:else if items === null}
       <p class="muted">Загружаем картинки с IMDb…</p>
     {:else if !items.length}
@@ -117,7 +114,7 @@
 </Modal>
 
 <style>
-.ask{display:grid;justify-items:start;gap:12px;padding:8px 0}.upload{position:relative;overflow:hidden}.upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.upload:focus-within{outline:2px solid var(--text);outline-offset:3px}
+.upload{position:relative;overflow:hidden}.upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.upload:focus-within{outline:2px solid var(--text);outline-offset:3px}
   .art {
     display: grid;
     gap: 16px;

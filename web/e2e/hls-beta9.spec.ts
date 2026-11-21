@@ -22,6 +22,7 @@ test('HLS: ручное качество и кадр сохраняются на
    return route.fulfill({contentType:name.endsWith('.m3u8')?'application/vnd.apple.mpegurl':'video/mp4',body:readFileSync(join(temp,name))});
   });
   await page.route('**/api/links/989897',route=>route.fulfill({json:{id:989897,kind:'direct',url:'/hls-beta9/master.m3u8',label:'Проверка HLS',progress:null}}));
+  await page.route('**/api/links/989897/stream/source',route=>route.fulfill({json:{url:'/hls-beta9/master.m3u8',hls:true}}));
   await page.goto(url('/watch/link/989897'));
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.readyState)).toBeGreaterThanOrEqual(2);
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(0);

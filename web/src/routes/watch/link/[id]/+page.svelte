@@ -36,7 +36,8 @@
   $effect(() => {
     const want = id;
     link = null;
-    src = null;
+    // Плеер не убираем до прихода нового источника: следующая серия играет в том же <video>, и полный экран
+    // браузера не сбрасывается (убрать плеер - значит выйти из полного экрана).
     fetchedTitle='';
     nextSource=null;nextLoading=false;nextChecked=false;finished=false;
     own = false;

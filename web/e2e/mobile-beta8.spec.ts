@@ -59,8 +59,9 @@ for (const kind of ['rutube','direct']) test(`Safari ${kind}: качества �
  const settings=page.getByRole('button',{name:'Настройки плеера',exact:true});
  await settings.click(); await page.getByRole('menuitem',{name:/Качество/}).click();
  await page.getByRole('menuitemradio',{name:'720p',exact:true}).click();
- await expect(page.locator('video')).toHaveAttribute('src',/height=720/);
+ // Ручное качество - номер варианта в плейлисте (`level`), 720p - первый.
+ await expect(page.locator('video')).toHaveAttribute('src',/level=0/);
  await settings.click();await page.getByRole('menuitem',{name:/Качество/}).click();
  await page.getByRole('menuitemradio',{name:/Авто/}).click();
- await expect(page.locator('video')).not.toHaveAttribute('src',/height=/);
+ await expect(page.locator('video')).not.toHaveAttribute('src',/level=/);
 });

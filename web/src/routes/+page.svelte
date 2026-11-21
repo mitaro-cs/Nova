@@ -86,16 +86,25 @@
   // тема недели и популярное IMDb - без повторов и брошенного.
   // Пока не пришли «Смотрю/Хочу» и тема недели, первым слайдом был бы случайный фильм, а через
   // мгновение - другой (слайд «перескакивал»): ждём, чтобы порядок сразу был окончательным.
-  const heroReady = $derived(marks !== null && themeSettled);
+  // Не дольше 3 с: не пришло - собираем из того, что есть.
+  let heroTimeout = $state(false);
+  $effect(() => {
+    const t = setTimeout(() => (heroTimeout = true), 3000);
+    return () => clearTimeout(t);
+  });
+  const heroReady = $derived((marks !== null && themeSettled) || heroTimeout);
+  // Слайдов - шесть: меньше выглядело пустой витриной (владелец, 21.11). Пока данные не пришли, показываем только
+  // полную шестёрку своих фильмов, иначе - заставку; после - своё, отметки, тема, популярное и снова своё до шести.
   const showcase = $derived.by(() => {
-    const local = hero.slice(0, 3).map((card) => ({ card }));
-    if (!heroReady) return local;
+    if (!heroReady) return hero.length >= 6 ? hero.slice(0, 6).map((card) => ({ card })) : [];
     const ok = (e: ExtCard) => e.mark !== 'dropped' && !e.local;
     const saved = marks ? [...marks.watching, ...marks.want].flatMap((m) => (m.ext && ok(m.ext) ? [m.ext] : [])) : [];
-    const themed = (theme?.items ?? []).filter(ok).slice(0, 2);
+    const themed = (theme?.items ?? []).filter(ok);
     const popular = imdb.flatMap((r) => r.items).filter(ok);
-    const ext = [...new Map([...saved.slice(0, 3), ...themed, ...popular].map((e) => [e.id, e])).values()];
-    return [...local, ...ext.map((e) => ({ ext: e }))].slice(0, 6);
+    const ext = [...new Map([...saved.slice(0, 3), ...themed.slice(0, 2), ...popular, ...themed.slice(2)].map((e) => [e.id, e])).values()];
+    const first = hero.slice(0, 3).map((card) => ({ card }));
+    const rest = hero.slice(3).map((card) => ({ card }));
+    return [...first, ...ext.map((e) => ({ ext: e })), ...rest].slice(0, 6);
   });
   const animeIds = $derived(new Set(feed?.rows.filter((r) => r.key.startsWith('anime_')).flatMap((r) => r.items.map((c) => c.id)) ?? []));
   const animeOf = (m: Pick<Marks['want'][number], 'card' | 'ext'>) =>

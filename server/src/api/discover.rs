@@ -140,6 +140,48 @@ pub struct SearchQuery {
 
 /// Поиск по всему IMDb: найденное сохраняется в ленту, постеры - скачиваются сразу (до 6 с).
 /// Запасные написания запроса с опечаткой (не больше трёх, без повторов и без исходного).
+/// Русские буквы - латиницей, как их пишет IMDb: «духлесс» → «dukhless» (у фильма «Духless» на IMDb только латиница).
+pub fn cyr_to_lat(q: &str) -> String {
+    q.to_lowercase()
+        .chars()
+        .map(|c| {
+            match c {
+                'а' => "a",
+                'б' => "b",
+                'в' => "v",
+                'г' => "g",
+                'д' => "d",
+                'е' | 'ё' | 'э' => "e",
+                'ж' => "zh",
+                'з' => "z",
+                'и' => "i",
+                'й' | 'ы' => "y",
+                'к' => "k",
+                'л' => "l",
+                'м' => "m",
+                'н' => "n",
+                'о' => "o",
+                'п' => "p",
+                'р' => "r",
+                'с' => "s",
+                'т' => "t",
+                'у' => "u",
+                'ф' => "f",
+                'х' => "kh",
+                'ц' => "ts",
+                'ч' => "ch",
+                'ш' => "sh",
+                'щ' => "shch",
+                'ъ' | 'ь' => "",
+                'ю' => "yu",
+                'я' => "ya",
+                other => return other.to_string(),
+            }
+            .to_string()
+        })
+        .collect()
+}
+
 pub fn typo_variants(q: &str) -> Vec<String> {
     const EN: &str = "qwertyuiop[]asdfghjkl;'zxcvbnm,.`";
     const RU: &str = "йцукенгшщзхъфывапролджэячсмитьбюё";
@@ -189,11 +231,24 @@ pub async fn search(
     }
     // «Фантастика», «комедии», «сериалы ужасы» - сначала популярное в жанре, потом совпадения названий.
     let genre = discover::genre_query(query);
-    let (by_genre, by_title) = match genre {
-        Some((g, _, types)) => {
-            tokio::join!(discover::genre_search(&app, g, types), crate::catalog_search::search(&app, query))
+    // Русский запрос ищем ещё и латиницей: у части русских фильмов на IMDb только латинское название («Духless» -
+    // «Dukhless»). Из латинских находок берём лишь совпавшие по названию (ниже), остальное - шум.
+    let latin = (query.chars().any(|c| matches!(c, 'а'..='я' | 'А'..='Я' | 'ё' | 'Ё')) && query.chars().count() >= 4)
+        .then(|| cyr_to_lat(query));
+    let latin_search = async {
+        match &latin {
+            Some(l) => crate::catalog_search::search(&app, l).await.unwrap_or_default(),
+            None => vec![],
         }
-        None => (Ok(vec![]), crate::catalog_search::search(&app, query).await),
+    };
+    let ((by_genre, by_title), by_latin) = match genre {
+        Some((g, _, types)) => {
+            (tokio::join!(discover::genre_search(&app, g, types), crate::catalog_search::search(&app, query)), vec![])
+        }
+        None => {
+            let (t, l) = tokio::join!(crate::catalog_search::search(&app, query), latin_search);
+            ((Ok(vec![]), t), l)
+        }
     };
     // Ничего не нашли - пробуем, как набрал бы человек с опечаткой: другая раскладка («vtldtlm»), «ё» как «е»,
     // лишняя или неверная последняя буква («медведб»).
@@ -225,9 +280,25 @@ pub async fn search(
     let mut out = cards(&by_genre);
     let mut titles = cards(&ids);
     let norm = crate::util::norm(query);
-    titles.sort_by_key(|c| search_rank(&norm, &c.title, c.original.as_deref(), c.rating));
+    let latin_norm = latin.as_deref().map(crate::util::norm);
+    if let Some(l) = &latin_norm {
+        for c in cards(&by_latin) {
+            let hit = [Some(c.title.as_str()), c.original.as_deref()]
+                .into_iter()
+                .flatten()
+                .any(|n| crate::util::norm(n).contains(l.as_str()));
+            if hit && !titles.iter().any(|t| t.id == c.id) {
+                titles.push(c);
+            }
+        }
+    }
+    titles.sort_by_key(|c| {
+        let a = search_rank(&norm, &c.title, c.original.as_deref(), c.rating);
+        latin_norm.as_deref().map_or(a, |l| a.min(search_rank(l, &c.title, c.original.as_deref(), c.rating)))
+    });
     titles.retain(|c| !by_genre.contains(&c.id));
     out.extend(titles);
+    dedupe_cards(&mut out);
     let mut response = axum::response::IntoResponse::into_response(Json(json!(out)));
     if let Some((_, ru, _)) = genre {
         let value = url::form_urlencoded::byte_serialize(ru.as_bytes()).collect::<String>();
@@ -239,6 +310,24 @@ pub async fn search(
         response.headers_mut().insert("x-nova-refreshing", axum::http::HeaderValue::from_static("1"));
     }
     Ok(response)
+}
+
+/// Без дублей: старые карточки импорта с сайтов (`nv…`) не показываем, а запись без постера и оценки с тем же
+/// названием, что у настоящего фильма выше, - тоже («Гарри Поттер и Тайная комната, 2020» рядом с фильмом 2002 года).
+fn dedupe_cards(cards: &mut Vec<discover::ExtCard>) {
+    let key = |t: &str| {
+        crate::util::norm(t)
+            .replace(" часть i", " часть 1")
+            .replace(" часть ii", " часть 2")
+            .replace([':', '.', ','], "")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    // «Настоящий» - с оценкой IMDb: у пустых записей (фанатские ролики, ошибки базы) оценки нет.
+    let solid: std::collections::HashSet<String> =
+        cards.iter().filter(|c| c.rating.is_some()).map(|c| key(&c.title)).collect();
+    cards.retain(|c| !c.id.starts_with("nv") && (c.rating.is_some() || !solid.contains(&key(&c.title))));
 }
 
 /// Страница источника определяется по тому же устойчивому id, что и при импорте.
@@ -586,7 +675,7 @@ pub async fn episodes(
             "SELECT e.episode, e.name, e.overview, COALESCE(NULLIF(e.still, ''),e.still_url), e.air_date, e.runtime, e.rating,
                     EXISTS (SELECT 1 FROM ext_seen s WHERE s.profile_id = ?3 AND s.ext_id = e.ext_id
                               AND s.season = e.season AND s.episode = e.episode)
-             FROM ext_episodes e WHERE e.ext_id = ?1 AND e.season = ?2 ORDER BY e.episode",
+             FROM ext_episodes e WHERE e.ext_id = ?1 AND e.season = ?2 AND e.episode > 0 ORDER BY e.episode",
         )?;
         let r = st.query_map(params![id, season, v.profile.id], |r| {
             Ok(json!({
@@ -603,8 +692,10 @@ pub async fn episodes(
     crate::episode_locale::queue(&app, texts.clone());
     let localizing = texts.iter().any(|text| app.detail_jobs.lock().contains(&crate::episode_locale::key(text)));
     for episode in &mut items {
-        episode["name"] =
-            json!(crate::episode_locale::localized(&app, episode["name"].as_str()).unwrap_or_else(|| "Серия".into()));
+        let n = episode["episode"].as_i64().unwrap_or(0);
+        episode["name"] = json!(
+            crate::episode_locale::localized(&app, episode["name"].as_str()).unwrap_or_else(|| format!("{n} серия"))
+        );
         episode["overview"] = json!(crate::episode_locale::localized(&app, episode["overview"].as_str()));
     }
     Ok(Json(
@@ -658,7 +749,7 @@ pub async fn ratings(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<Str
     let _ = tokio::time::timeout(Duration::from_secs(30), work).await;
     let rows: Vec<(i32, i32, Option<f64>, Option<String>)> = app.db.with(|c| {
         let mut st = c.prepare(
-            "SELECT season, episode, rating, name FROM ext_episodes WHERE ext_id = ? AND season > 0 ORDER BY season, episode",
+            "SELECT season, episode, rating, name FROM ext_episodes WHERE ext_id = ? AND season > 0 AND episode > 0 ORDER BY season, episode",
         )?;
         let r = st.query_map([&id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
         r.collect()
@@ -668,7 +759,7 @@ pub async fn ratings(State(app): State<Arc<App>>, _v: Viewer, Path(id): Path<Str
         let eps: Vec<Value> = rows
             .iter()
             .filter(|r| r.0 == *s && r.1 > 0)
-            .map(|r| json!({"episode": r.1, "rating": r.2, "name": crate::episode_locale::localized(&app, r.3.as_deref()).unwrap_or_else(|| "Серия".into())}))
+            .map(|r| json!({"episode": r.1, "rating": r.2, "name": crate::episode_locale::localized(&app, r.3.as_deref()).unwrap_or_else(|| format!("{} серия", r.1))}))
             .collect();
         if !eps.is_empty() {
             out.push(json!({"season": s, "episodes": eps}));
@@ -1185,6 +1276,32 @@ mod rank_tests {
 
 #[cfg(test)]
 mod typo_tests {
+    #[test]
+    fn duplicates_without_rating_drop() {
+        let card = |id: &str, title: &str, rating: Option<f64>| crate::discover::ExtCard {
+            id: id.into(),
+            title: title.into(),
+            rating,
+            ..Default::default()
+        };
+        let mut v = vec![
+            card("tt1", "Гарри Поттер и Тайная комната", Some(7.5)),
+            card("tt2", "Гарри Поттер и тайная комната", None),
+            card("nv3", "Гарри Поттер", Some(5.0)),
+            card("tt4", "Гарри Поттер и Дары Смерти: Часть I", None),
+            card("tt5", "Гарри Поттер и Дары Смерти. Часть 1", Some(7.7)),
+            card("tt6", "Редкий фильм", None),
+        ];
+        super::dedupe_cards(&mut v);
+        assert_eq!(v.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["tt1", "tt5", "tt6"]);
+    }
+
+    #[test]
+    fn cyrillic_to_imdb_latin() {
+        assert_eq!(super::cyr_to_lat("Духлесс"), "dukhless");
+        assert_eq!(super::cyr_to_lat("щука 2"), "shchuka 2");
+    }
+
     use super::typo_variants;
 
     #[test]

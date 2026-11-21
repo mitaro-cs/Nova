@@ -22,6 +22,8 @@ test('десять зрителей: реальные плееры приним�
    expect((await page.request.post(url('/api/admin/users'),{headers:{'x-fsfy':'1'},data:{login,password,name:`Зритель ${i+1}`,role:'viewer'}})).ok()).toBe(true);
    const ctx=await browser.newContext();contexts.push(ctx);
    expect((await ctx.request.post(env().publicURL+'/api/auth/login',{headers:{'x-fsfy':'1'},data:{login,password}})).ok()).toBe(true);
+   // Новый аккаунт сначала принимает политику и правила (окно согласия), иначе сервис закрыт.
+   expect((await ctx.request.post(env().publicURL+'/api/me/consent',{headers:{'x-fsfy':'1'},data:{version:1}})).ok()).toBe(true);
    // Комната закрыта для чужих: создатель (хост) зовёт каждого зрителя.
    const profileId=(await (await ctx.request.get(env().publicURL+'/api/me')).json()).user.profile.id;
    expect((await page.request.post(url(`/api/rooms/${room}/invite`),{headers:{'x-fsfy':'1'},data:{profileId}})).ok()).toBe(true);
@@ -132,6 +134,7 @@ test('два плеера: поздний вход, пауза без перез
 test('совместный просмотр создаётся из плеера с текущего места',async({page})=>{
  await page.route('**/api/links/989899',route=>route.fulfill({json:{id:989899,kind:'direct',url:'/party.mp4',label:'Фильм',progress:null}}));
  await page.route('**/party.mp4',route=>route.abort());
+ await page.route('**/api/links/989899/stream/source',route=>route.fulfill({json:{url:'/party.mp4',hls:false}}));
  let body:any;
  await page.route('**/api/rooms',route=>{body=route.request().postDataJSON();return route.fulfill({json:{id:'partyroom'}})});
  await page.route('**/api/rooms/partyroom/events',route=>route.abort());

@@ -1,5 +1,13 @@
 <script lang="ts">
+  import { artW } from './art';
   import Icon from './Icon.svelte';
+
+  // Просмотр кадра на весь экран. Картинка - уменьшенная копия 1920 px через сервер: оригинал IMDb (до 3800 px)
+  // сервер не отдавал, и открывалось одно затемнение. Слой переносится в <body>: внутри страницы шапка была выше.
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return { destroy: () => node.remove() };
+  }
 
   let { images, index = $bindable<number | null>() }: { images: string[]; index: number | null } = $props();
 
@@ -19,9 +27,9 @@
 <svelte:window onkeydown={key} />
 
 {#if index !== null}
-  <div class="lb" role="dialog" aria-modal="true" aria-label="Галерея">
+  <div class="lb" use:portal role="dialog" aria-modal="true" aria-label="Галерея">
     <button class="bg" aria-label="Закрыть" onclick={() => (index = null)}></button>
-    <img src={images[index]} alt="" />
+    <img src={artW(images[index], 1920)} alt="" decoding="async" />
     <button class="btn icon close" aria-label="Закрыть" onclick={() => (index = null)}><Icon name="close" /></button>
     {#if images.length > 1}
       <button class="btn icon nav l" aria-label="Назад" onclick={() => go(-1)}><Icon name="back" /></button>
@@ -35,7 +43,7 @@
   .lb {
     position: fixed;
     inset: 0;
-    z-index: 200;
+    z-index: 1000;
     display: grid;
     place-items: center;
     animation: in 0.2s ease;

@@ -11,10 +11,14 @@ test('медленный интернет: старт с автокачеств�
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 40, downloadThroughput: 38_000, uploadThroughput: 200_000 });
+  // Минималистичный плеер не пишет подсказку о скорости: проверяем сам выбор - замер сохранён и поток пошёл
+  // через адаптивный HLS (`/hls/`), а не «Оригинал».
+  const asked: string[] = [];
+  page.on('request', (r) => asked.push(new URL(r.url()).pathname));
   await page.goto(url(`/watch/${title.files[0].id}`));
-  await expect(page.getByText(/Мбит\/с - включили автокачество/)).toBeVisible({ timeout: 15_000 });
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('nova-speed') ?? 'null'));
-  expect(saved?.mbit).toBeLessThan(1);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('nova-speed') ?? 'null')?.mbit ?? null), { timeout: 15_000 }).toBeLessThan(1);
+  await expect.poll(() => asked.some((p) => p.includes('/hls/')), { timeout: 15_000 }).toBe(true);
+  expect(asked.some((p) => /\/copy\//.test(p))).toBe(false);
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
 
   // Отчёт плеера хосту (скорость, качество, остановки) проверяет server/tests/speed.rs: здешний

@@ -6,10 +6,14 @@
     {label:'Триллеры',hue:165,chart:'thriller_movies',icon:'eye'}, {label:'Боевики',hue:8,chart:'action_movies',icon:'play'},
     {label:'Драмы',hue:268,chart:'drama_movies',icon:'film'}, {label:'Анимация',hue:192,chart:'animation_movies',icon:'star'},
   ];
-  const franchises = ['Гарри Поттер','Властелин колец','Звёздные войны','Матрица','Мстители'];
+  // Киновселенные - своей страницей порядка просмотра (`/franchise/<id IMDb первого фильма>`), а не поиском.
+  const franchises = [
+    { title: 'Гарри Поттер', imdb: 'tt0241527' }, { title: 'Властелин колец', imdb: 'tt0120737' },
+    { title: 'Звёздные войны', imdb: 'tt0076759' }, { title: 'Матрица', imdb: 'tt0133093' }, { title: 'Мстители', imdb: 'tt0848228' },
+  ];
 </script>
 <section class="browse" aria-label="Жанры"><h2>Под настроение</h2><div class="genres">{#each genres as genre}<a href="/discover?chart={genre.chart}" style:background="linear-gradient(160deg, hsl({genre.hue} 34% 22%), hsl({genre.hue + 18} 24% 8%))"><span class="ico"><Icon name={genre.icon} size={22} /></span><b>{genre.label}</b><span class="go">Открыть подборку <Icon name="right" size={14} /></span></a>{/each}</div></section>
-<section class="browse" aria-label="Франшизы"><h2>Любимые киновселенные</h2><div class="franchises">{#each franchises as title}<a href="/search?q={encodeURIComponent(title)}"><Icon name="film" size={18} />{title}<Icon name="right" size={14} /></a>{/each}</div></section>
+<section class="browse" aria-label="Франшизы"><h2>Любимые киновселенные</h2><div class="franchises">{#each franchises as f (f.imdb)}<a href="/franchise/{f.imdb}"><Icon name="film" size={18} />{f.title}<Icon name="right" size={14} /></a>{/each}</div></section>
 <style>
   .browse {
     margin: 30px 0 38px;

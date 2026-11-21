@@ -481,7 +481,15 @@ pub fn translit(name: &str) -> String {
             Some(known) => known.to_string(),
             None => {
                 let lower: Vec<char> = word.to_ascii_lowercase().chars().collect();
-                let mapped = map_word(&lower);
+                // Служебные слова названий читаются по-своему: «the» - «зе», а не «т» («Спирит оф т форест»).
+                let mapped = match word.to_ascii_lowercase().as_str() {
+                    "the" => "зе".to_string(),
+                    "a" => "э".to_string(),
+                    "and" => "энд".to_string(),
+                    "of" => "оф".to_string(),
+                    "to" => "ту".to_string(),
+                    _ => map_word(&lower),
+                };
                 if word.len() > 1 && word.chars().all(|c| c.is_ascii_uppercase()) {
                     mapped.to_uppercase()
                 } else if chars[a].is_ascii_uppercase() {
@@ -674,6 +682,7 @@ mod ru_tests {
     fn titles_and_descriptions_are_shown_in_russian_only() {
         assert_eq!(ru_title("Тьма"), "Тьма");
         assert_eq!(ru_title("2012"), "2012");
+        assert_eq!(ru_title("Spirit of the Forest"), "Спирит оф зе форест");
         assert!(!has_latin(&ru_title("Dune")));
         assert_eq!(ru_text(Some("Plot in English".into())), None);
         assert_eq!(ru_text(Some("Сюжет".into())).as_deref(), Some("Сюжет"));

@@ -55,9 +55,12 @@ test('F скрывает оболочку, внешние серии перек�
   const clip=execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=320x180:rate=12:duration=4','-c:v','libvpx','-deadline','realtime','-f','webm','pipe:1']);
   test.skip(!await canDecodeWebm(page,clip),'VP8 WebM не декодируется этой тестовой средой');
   await page.route('**/episode-test.webm',route=>route.fulfill({contentType:'video/webm',body:clip}));
-  await page.route(/\/api\/links\/9900[12](?:\/(?:next|progress))?$/,route=>{
+  await page.route(/\/api\/links\/9900[12](?:\/(?:next|progress|resume|stream\/source))?$/,route=>{
     const path=new URL(route.request().url()).pathname,id=path.includes('99001')?99001:99002;
     if(path.endsWith('/progress'))return route.fulfill({json:{ok:true}});
+    // Плеер спрашивает у сервера адрес потока и место, где остановились (с 0.1.3-beta).
+    if(path.endsWith('/stream/source'))return route.fulfill({json:{url:'/episode-test.webm',hls:false}});
+    if(path.endsWith('/resume'))return route.fulfill({json:{position:null,duration:null}});
     if(path.endsWith('/next'))return route.fulfill({json:{next:id===99001?{id:99002,title:'Вторая серия'}:null}});
     return route.fulfill({json:{id,kind:'direct',url:'/episode-test.webm',embed:null,label:id===99001?'Первая серия':'Вторая серия',titleId:null,extId:null,season:1,episode:id===99001?1:2,progress:null}});
   });
@@ -74,7 +77,8 @@ test('F скрывает оболочку, внешние серии перек�
   await page.locator('video').evaluate(v=>(window as any).__sameVideo=v);
   await expect(page.getByText('Следующая серия',{exact:true})).toBeVisible();
   await expect(page).toHaveURL(/\/watch\/link\/99002$/, {timeout:12000});
-  await expect(player.getByText('Вторая серия',{exact:true})).toBeVisible();
+  // На телефоне к названию добавляется «1 сезон, 2 серия» - ищем по началу.
+  await expect(player.getByText(/^Вторая серия/).first()).toBeVisible();
   expect(await page.locator('video').evaluate(v=>v===(window as any).__sameVideo)).toBe(true);
   expect(native.at(-1)).toBe(true);
   await page.keyboard.press('Escape');
