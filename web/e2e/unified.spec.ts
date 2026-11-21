@@ -64,19 +64,10 @@ test('разделы ведут на свои страницы', async ({ page }
   await goTo(page, 'Профиль');
   await expect(page).toHaveURL(/\/people\/\d+$/);
   // Чаты, подборки и выход - на странице профиля (в меню аватара их больше нет).
-  // Компьютер - «Пульт» (Figma 21.11): плитки разделов на виду; телефон и планшет - свёрнутое меню быстрых разделов.
-  const menu = page.locator('details.shortcuts');
-  if (await menu.count()) {
-    if (!(await menu.evaluate((d) => (d as HTMLDetailsElement).open))) await menu.locator('summary').click();
-    const quick = page.getByRole('navigation', { name: 'Быстрые разделы' });
-    await expect(quick.getByRole('link', { name: /Чаты/ })).toBeVisible();
-    await expect(quick.getByRole('link', { name: /Подборки/ })).toBeVisible();
-  } else {
-    const pult = page.getByRole('complementary', { name: 'Человек' });
-    await expect(pult.locator('.tiles a[href="/chats"]')).toBeVisible();
-    await expect(pult.locator('.tiles a[href="/lists"]')).toBeVisible();
-    await expect(pult.getByRole('navigation', { name: 'Ещё' }).getByRole('button', { name: 'Экскурсия' })).toBeVisible();
-  }
+  // Чаты, подборки и экскурсия - в быстрых разделах на странице профиля (на всех ширинах).
+  const quick = page.getByRole('navigation', { name: 'Быстрые разделы' });
+  await expect(quick.getByRole('link', { name: /Чаты/ })).toBeVisible();
+  await expect(quick.getByRole('link', { name: /Подборки/ })).toBeVisible();
 });
 test('полоса разделов и кнопки героя - на всех ширинах', async ({ page }) => {
   await offline(page);

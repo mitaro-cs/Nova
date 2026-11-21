@@ -1,12 +1,10 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { MediaQuery } from 'svelte/reactivity';
   import { replaceState } from '$app/navigation';
   import { api, errorText, patch } from '$lib/api';
   import LockBox from '$lib/profile/LockBox.svelte';
-  import Overview from '$lib/profile/Overview.svelte';
-  import ProfileCard from '$lib/profile/ProfileCard.svelte';
-  import Pult from '$lib/profile/Pult.svelte';
+  import Diary from '$lib/profile/Diary.svelte';
+  import ProfileHead from '$lib/profile/ProfileHead.svelte';
   import ReviewsTab from '$lib/profile/ReviewsTab.svelte';
   import StatWidgets from '$lib/profile/StatWidgets.svelte';
   import { TABS, type ProfilePage, type ProfileTab } from '$lib/profile/types';
@@ -84,7 +82,7 @@
   });
   const isHidden = (t: ProfileTab) => t !== 'home' && (t === 'stats' ? hidden.stats : t === 'watched' ? hidden.watched : hidden.reviews);
   const defs = $derived<{ id: ProfileTab; label: string; n: number | null }[]>([
-    { id: 'home', label: 'Обзор', n: null },
+    { id: 'home', label: 'Профиль', n: null },
     { id: 'stats', label: 'Статистика', n: null },
     { id: 'watched', label: 'Просмотрено', n: hidden.watched ? null : (p?.stats?.watched ?? p?.watched.length ?? null) },
     { id: 'reviews', label: 'Отзывы', n: hidden.reviews ? null : (p?.stats?.reviews ?? p?.reviews.length ?? null) },
@@ -132,38 +130,31 @@
     const all = [v.stats, v.watched, v.reviews];
     return all.every((x) => x === 'all') ? 'Профиль виден всем' : all.every((x) => x === 'me') ? 'Разделы видны только вам' : 'Часть разделов скрыта';
   });
-  // Компьютер - «Пульт» по макету Figma, телефон и планшет - прежняя карточка.
-  const wide = new MediaQuery('(min-width: 1001px)');
 </script>
 
 {#if error}
   <div class="page empty"><Icon name="info" size={36} /> {error}</div>
 {:else if p}
   <div class="pf">
-    <div class="hero" class:pult-col={wide.current}>{#if wide.current}<Pult bind:p />{:else}<ProfileCard bind:p />{/if}</div>
+    <ProfileHead bind:p />
 
-    <main class="main">
-      <header class="uh">
-        <div>
-          <h2 class="ut">{p.me ? 'Моя киновселенная' : `Киновселенная: ${p.person.name}`}</h2>
-          <p class="muted">{p.me ? 'Всё, что смотришь, любишь и советуешь друзьям.' : 'Что смотрит, любит и советует друзьям.'}</p>
+    <div class="body">
+      <div class="tabbar">
+        <div class="tabs" role="tablist" aria-label="Разделы профиля">
+          {#each defs as t (t.id)}
+            <button
+              type="button"
+              role="tab"
+              id="tab-{t.id}"
+              bind:this={btns[t.id]}
+              aria-selected={tab === t.id}
+              aria-controls="pane"
+              onclick={() => choose(t.id)}
+            >{t.label}{#if t.n != null}<sup>{t.n}</sup>{/if}{#if isHidden(t.id)}<Icon name="lock" size={12} />{/if}</button>
+          {/each}
+          <i class="ink" aria-hidden="true" style:transform="translate3d({ink.x}px, 0, 0)" style:width="{ink.w}px"></i>
         </div>
-        {#if p.me}<a class="vis" href="/profile?tab=account">{visText} <Icon name="right" size={13} /></a>{/if}
-      </header>
-
-      <div class="tabs" role="tablist" aria-label="Разделы профиля">
-        {#each defs as t (t.id)}
-          <button
-            type="button"
-            role="tab"
-            id="tab-{t.id}"
-            bind:this={btns[t.id]}
-            aria-selected={tab === t.id}
-            aria-controls="pane"
-            onclick={() => choose(t.id)}
-          >{t.label}{#if t.n != null}<sup>{t.n}</sup>{/if}{#if isHidden(t.id)}<Icon name="lock" size={13} />{/if}</button>
-        {/each}
-        <i class="ink" aria-hidden="true" style:transform="translate3d({ink.x}px, 0, 0)" style:width="{ink.w}px"></i>
+        {#if p.me}<a class="vis" href="/profile?tab=account">{visText}</a>{/if}
       </div>
 
       {#if p.me && tab !== 'home'}<div class="vp"><VisPick level={level} pick={setVis} /></div>{/if}
@@ -172,13 +163,9 @@
         {#key shown}
           <div class="in in-{dir}">
             {#if shown === 'home'}
-              <Overview bind:p />
+              <Diary bind:p toReviews={() => choose('reviews')} />
             {:else if shown === 'stats'}
-              {#if hidden.stats || !p.stats}
-                <LockBox />
-              {:else}
-                <StatWidgets stats={p.stats} />
-              {/if}
+              {#if hidden.stats || !p.stats}<LockBox />{:else}<StatWidgets stats={p.stats} />{/if}
             {:else if shown === 'watched'}
               {#if hidden.watched}
                 <LockBox />
@@ -193,36 +180,31 @@
           </div>
         {/key}
       </div>
-    </main>
+    </div>
   </div>
 {:else}
   <div class="sk-hero skeleton" aria-busy="true"></div>
 {/if}
 
 <style>
-  .pf {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-    align-items: start;
-    margin: 0 auto;
-    padding: calc(var(--header) + 18px) var(--gutter) calc(40px + var(--tabbar));
-  }
-  .main { min-width: 0; }
-  .uh { display: none; }
-
-  /* ---------- вкладки ---------- */
-  .tabs { position: relative; display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #ffffff1f; }
-  .tabs button { display: flex; align-items: center; gap: 4px; padding: 14px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: color 0.25s; }
+  /* Профиль «Дневник» (макет Y, 21.11): шапка на кадре, ниже одна колонка до 1100 px с вкладками текстом. */
+  .pf { --pf-side: max(var(--gutter), calc((100vw - 1100px) / 2)); padding-bottom: calc(48px + var(--tabbar)); background: #0b0b0d; }
+  .body { padding-inline: var(--pf-side); }
+  .tabbar { position: relative; display: flex; align-items: center; gap: 20px; margin-top: 30px; border-block: 1px solid #ffffff1a; }
+  .tabs { position: relative; display: flex; gap: 28px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { display: flex; align-items: center; gap: 4px; padding: 14px 0; border: 0; background: none; color: #8c8c96; font: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; cursor: pointer; transition: color 0.25s; }
   .tabs button:hover { color: #dcdcdf; }
   .tabs button[aria-selected='true'] { color: #fff; }
   .tabs button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  .tabs sup { color: var(--muted); font-size: 10.5px; font-weight: 500; }
-  .ink { position: absolute; left: 0; bottom: -1px; height: 2px; border-radius: 2px; background: #fff; transition: transform 0.5s cubic-bezier(0.34, 1.3, 0.64, 1), width 0.5s cubic-bezier(0.34, 1.3, 0.64, 1); }
-  .vp { margin-top: 14px; }
+  .tabs sup { color: #8c8c96; font-size: 10px; letter-spacing: 0; }
+  .ink { position: absolute; left: 0; bottom: 0; height: 2px; background: #fff; transition: transform 0.45s cubic-bezier(0.34, 1.3, 0.64, 1), width 0.45s cubic-bezier(0.34, 1.3, 0.64, 1); }
+  .vis { flex: none; margin-left: auto; color: #8c8c96; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .vis:hover { color: #fff; }
+  .vp { margin-top: 16px; }
 
   /* Раздел уезжает и въезжает с той стороны, куда переключили; обрезка по ширине - страница не растёт. */
-  .pf-pane { padding-top: 22px; overflow-x: clip; }
+  .pf-pane { padding-top: 34px; overflow-x: clip; }
   .pf-pane.out-r { animation: out-r 0.2s ease-in both; }
   .pf-pane.out-l { animation: out-l 0.2s ease-in both; }
   .in-r { animation: in-r 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
@@ -233,31 +215,9 @@
   @keyframes out-l { to { opacity: 0; transform: translate3d(40px, 0, 0); } }
   .sk-hero { height: 70vh; }
 
-  @media (max-width: 600px) {
-    .pf { padding-top: 0; padding-inline: 0; gap: 10px; }
-    .main { padding-inline: 16px; }
-    .tabs { gap: 8px; }
-    .tabs button { font-size: 12px; }
-  }
-  @media (max-width: 360px) {
-    .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
-    .tabs button { justify-content: center; }
-    .tabs button[aria-selected='true'] { box-shadow: inset 0 -2px 0 #fff; }
-    .ink { display: none; }
-  }
-  @media (min-width: 601px) {
-    .tabs { justify-content: flex-start; gap: 34px; }
-    .tabs button { font-size: 14px; }
-  }
-  /* Компьютер (Figma 21.11): «Пульт» 304-340 px закреплён слева и прокручивается сам; справа заголовок и вкладки. */
-  @media (min-width: 1001px) {
-    .pf { grid-template-columns: clamp(304px, 23vw, 340px) minmax(0, 1fr); gap: 32px; padding-top: calc(var(--header) + 24px); }
-    .hero { position: sticky; top: calc(var(--header) + 16px); max-height: calc(100vh - var(--header) - 32px); overflow-y: auto; scrollbar-width: none; border-radius: 28px; }
-    .hero::-webkit-scrollbar { display: none; }
-    .uh { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
-    .ut { margin: 0; font-size: clamp(30px, 2.6vw, 40px); font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; }
-    .uh p { margin: 8px 0 0; font-size: 14px; }
-    .vis { display: inline-flex; flex: none; align-items: center; gap: 4px; margin-top: 8px; color: var(--muted); font-size: 13px; }
-    .vis:hover { color: #fff; }
+  @media (max-width: 640px) {
+    .tabbar { margin-top: 22px; }
+    .tabs { gap: 20px; }
+    .vis { display: none; }
   }
 </style>

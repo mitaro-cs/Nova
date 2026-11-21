@@ -17,25 +17,16 @@ test('профиль по макету: показатели, ободок, ме
   profile.watching=[{at:Date.now(),label:'Сезон 1 · серия 1',ext:watching}];
   await page.route(`**/api/members/${id}?*`,r=>r.fulfill({json:profile}));
   await page.goto(url(`/people/${id}`));
-  const card=page.getByRole('complementary',{name:'Человек'});
-  await expect(card.getByRole('heading',{name:'Омар'})).toBeVisible();
-  await expect(card.getByText('Сейчас смотрит · Медведь')).toBeVisible();
-  await expect(card.getByLabel('Значки')).toContainText('Марафонец');
-  await expect(card.getByLabel('Значки')).toContainText('Исследователь');
-  // Компьютер - «Пульт» по макету Figma: цифры сеткой, полоса уровня, меню «Ещё»; телефон и планшет - карточка с ободком.
-  if((page.viewportSize()?.width??0)>1000) {
-    await expect.poll(()=>card.getByLabel('Цифры').locator('b').nth(3).textContent()).toBe('521');
-    await expect(card.getByRole('progressbar',{name:'До следующего уровня'})).toBeVisible();
-    await expect(card.getByRole('navigation',{name:'Ещё'}).getByRole('button',{name:'Экскурсия'})).toBeVisible();
-  } else {
-    await expect.poll(()=>card.locator('.box b').first().textContent()).toBe('521');
-    expect(await card.locator('.ring').evaluate(el=>getComputedStyle(el).boxShadow)).toContain('255, 255, 255');
-    const shortcuts=card.getByLabel('Быстрые разделы').first();
-    await shortcuts.click();
-    await expect(card.locator('.quick a[href="/chats"]')).toBeVisible();
-    await shortcuts.click();
-    await expect(card.locator('.quick a[href="/chats"]')).toBeHidden();
-  }
+  // Профиль «Дневник» (макет Y, 21.11): шапка с именем и цифрами, справа - сейчас смотрит, достижения, быстрые разделы.
+  await expect(page.getByRole('heading',{name:'Омар',level:1})).toBeVisible();
+  await expect.poll(()=>page.getByLabel('Цифры').locator('b').first().textContent()).toBe('63');
+  const side=page.getByRole('complementary',{name:'Коротко'});
+  await expect(side.getByRole('region',{name:'Сейчас смотрит'})).toContainText('Медведь');
+  await expect(side.getByLabel('Значки')).toContainText('Марафонец');
+  await expect(side.getByLabel('Значки')).toContainText('Исследователь');
+  const quick=side.getByRole('navigation',{name:'Быстрые разделы'});
+  await expect(quick.getByRole('link',{name:/Чаты/})).toBeVisible();
+  await expect(quick.getByRole('button',{name:/Экскурсия/})).toBeVisible();
   await expectClean(page,'профиль по макету');
   const shots=resolve('../docs/design/profile');mkdirSync(shots,{recursive:true});
   await page.screenshot({path:resolve(shots,`${info.project.name}.png`),fullPage:true});
@@ -68,7 +59,7 @@ test('аватар-персонаж выбирается и сохраняетс
 test('профиль: вкладки, статистика и переключатель «кто видит»', async ({ page }) => {
   await page.goto(url(`/people/${env().people.me}`));
   const tabs = page.getByRole('tablist', { name: 'Разделы профиля' });
-  await expect(tabs.getByRole('tab', { name: /Обзор/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.getByRole('tab', { name: /Профиль/ })).toHaveAttribute('aria-selected', 'true');
   // На «Обзоре» переключателя нет: он только у закрываемых разделов.
   await expect(page.getByRole('radiogroup', { name: 'Кто видит этот раздел' })).toHaveCount(0);
 
