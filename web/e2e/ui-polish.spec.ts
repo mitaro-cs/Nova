@@ -43,7 +43,10 @@ test('единая нижняя панель находится у края и �
 });
 
 test('постер загружается с устройства без ожидания IMDb',async({page},info)=>{
-  let imdbRequests=0;page.on('request',r=>{if(r.url().includes('/imdb-art'))imdbRequests++;});
+  // Картинки IMDb подгружаются сразу при открытии (21.11), но своя загрузка их не ждёт: ответ IMDb держим, пока
+  // свой постер не загрузится.
+  let release=()=>{};const held=new Promise<void>(r=>(release=r));
+  await page.route('**/imdb-art',async route=>{await held;await route.fulfill({json:{items:[]}}).catch(()=>{});});
   const library=await(await page.request.get(url('/api/library'))).json();
   const image=library.items.find((c:{poster:string})=>c.poster)?.poster;
   expect(image).toBeTruthy();const bytes=await(await page.request.get(url(image))).body();
@@ -57,7 +60,7 @@ test('постер загружается с устройства без ожи�
   const dialog=page.getByRole('dialog',{name:'Постер и фон'});await expect(dialog).toBeVisible();
   const uploaded=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/image/poster'));
   await dialog.getByLabel('Загрузить постер',{exact:true}).setInputFiles({name:'my-poster.jpg',mimeType:'image/jpeg',buffer:bytes});
-  expect((await uploaded).ok()).toBe(true);await expect(dialog).toBeHidden();expect(imdbRequests).toBe(0);
+  expect((await uploaded).ok()).toBe(true);await expect(dialog).toBeHidden();release();
   await expectClean(page,'свой постер');
   const shots=resolve('../docs/design/ui-polish');mkdirSync(shots,{recursive:true});await page.screenshot({path:resolve(shots,`title-${info.project.name}.png`)});
 });
