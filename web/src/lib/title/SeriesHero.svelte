@@ -111,13 +111,18 @@
       <b class="name">{e.upcomingYear ? `Выйдет в ${e.upcomingYear} году` : `${e.episode !== null ? `${e.episode}. ` : ''}${localized(e.name, 'Серия')}`}</b>
       <small class="len">{e.left ?? (e.minutes ? `${e.minutes} мин` : '')}</small>
     </span>
-    {#if e.done}<span class="watch-state"><Icon name="check" size={12} stroke={3}/> Просмотрено</span>{/if}
     {#if e.pct > 0 && !e.done}<span class="pbar"><i style:width="{e.pct}%"></i></span>{/if}
     <span class="row2">
       {#if localized(e.overview)}<span class="ov">{localized(e.overview)}</span>{:else if e.rating}<span class="star"><Icon name="star" size={12} /> {e.rating.toFixed(1)}</span>{:else}<span></span>{/if}
       <small class="when">{fmtDate(e.date)}</small>
     </span>
-    {#if localized(e.overview) && e.rating}<span class="star small"><Icon name="star" size={11} /> {e.rating.toFixed(1)}</span>{/if}
+    <!-- Оценка и «Просмотрено» - одной строкой внизу: у просмотренной серии больше нет лишней строки, все одной высоты. -->
+    {#if (localized(e.overview) && e.rating) || e.done}
+      <span class="foot">
+        {#if localized(e.overview) && e.rating}<span class="star small"><Icon name="star" size={11} /> {e.rating.toFixed(1)}</span>{/if}
+        {#if e.done}<span class="watch-state"><Icon name="check" size={12} stroke={3}/> Просмотрено</span>{/if}
+      </span>
+    {/if}
   </span>
 {/snippet}
 
@@ -714,6 +719,7 @@
   .still-label { position: absolute; inset: 0; display: grid; place-content: center; gap: 4px; font-size: 12px; color: var(--brand); text-align: center; }
 
   .watch-state{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#9ce5b8;}
+  .foot{display:flex;align-items:center;gap:14px;}
   .done .still img{opacity:.5;filter:grayscale(.6);}
   .done .tick,.seen.on{background:#fff;color:#000;border-color:#fff;outline:0;}
   .viewing-progress { padding: 10px 0; border: 0; border-radius: 0; background: transparent; max-width: 430px; }

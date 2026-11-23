@@ -3,7 +3,7 @@
   import { replaceState } from '$app/navigation';
   import { api, errorText, patch } from '$lib/api';
   import LockBox from '$lib/profile/LockBox.svelte';
-  import Diary from '$lib/profile/Diary.svelte';
+  import Kassa from '$lib/profile/Kassa.svelte';
   import ProfileHead from '$lib/profile/ProfileHead.svelte';
   import ReviewsTab from '$lib/profile/ReviewsTab.svelte';
   import StatWidgets from '$lib/profile/StatWidgets.svelte';
@@ -163,7 +163,7 @@
         {#key shown}
           <div class="in in-{dir}">
             {#if shown === 'home'}
-              <Diary bind:p toReviews={() => choose('reviews')} />
+              <Kassa bind:p toReviews={() => choose('reviews')} />
             {:else if shown === 'stats'}
               {#if hidden.stats || !p.stats}<LockBox />{:else}<StatWidgets stats={p.stats} />{/if}
             {:else if shown === 'watched'}
@@ -187,7 +187,7 @@
 {/if}
 
 <style>
-  /* Профиль «Дневник» (макет Y, 21.11): шапка на кадре, ниже вкладки текстом; занимает всю ширину окна. */
+  /* Профиль (шапка «Дневника», вкладка «Касса кинотеатра» с 23.11): шапка на кадре, ниже вкладки текстом; занимает всю ширину окна. */
   .pf { --pf-side: max(var(--gutter), 3.5vw); padding-bottom: calc(48px + var(--tabbar)); background: #0b0b0d; }
   .body { padding-inline: var(--pf-side); }
   .tabbar { position: relative; display: flex; align-items: center; gap: 20px; margin-top: 30px; border-block: 1px solid #ffffff1a; }

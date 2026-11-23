@@ -90,6 +90,17 @@ export async function expectClean(page: Page, what: string) {
       return `<${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : ''}> «${t}»`;
     };
 
+    const turned = new Map<Element, Element | null>();
+    const turnedOf = (el: Element | null): Element | null => {
+      if (!el || el === document.body) return null;
+      const known = turned.get(el);
+      if (known !== undefined) return known;
+      const t = getComputedStyle(el).transform;
+      const m = t && t !== 'none' ? new DOMMatrix(t) : null;
+      const v = m && (Math.abs(m.b) > 0.01 || Math.abs(m.c) > 0.01) ? el : turnedOf(el.parentElement);
+      turned.set(el, v);
+      return v;
+    };
     type Box = { el: Element; r: { left: number; top: number; right: number; bottom: number }; kind: 'text' | 'ctl' };
     const boxes: Box[] = [];
     // Строки текста - по прямоугольникам самих текстовых узлов.
@@ -139,6 +150,10 @@ export async function expectClean(page: Page, what: string) {
         const a = boxes[i];
         const b = boxes[j];
         if (a.el === b.el || a.el.contains(b.el) || b.el.contains(a.el)) continue;
+        // Строки внутри одного повёрнутого элемента (веер билетов в профиле): прямоугольники по осям у наклонённого
+        // текста задевают друг друга, хотя сами строки - нет.
+        const ra = turnedOf(a.el);
+        if (ra && ra === turnedOf(b.el)) continue;
         const fa = fixedOf(a.el);
         const fb = fixedOf(b.el);
         // Нижние плавающие панели и прокручиваемое содержимое: пересечение зависит от прокрутки.

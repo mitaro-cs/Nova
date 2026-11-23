@@ -99,7 +99,8 @@
   .cap { position: absolute; z-index: 1; right: var(--pf-side); top: calc(var(--header) + 18px); color: #ffffffa6; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
 
   .id { position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px 22px; padding-inline: var(--pf-side); }
-  .face { flex: none; border-radius: 50%; box-shadow: 0 0 0 3px #0b0b0d, 0 0 0 4px #ffffff40; }
+  /* Портрет без обводки, как раньше (просьба владельца, 23.11). */
+  .face { flex: none; border-radius: 50%; }
   .face :global(img), .face :global(.avatar) { border-radius: 50%; }
   .who { flex: 1 1 280px; min-width: 0; padding-bottom: 4px; }
   .nm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }

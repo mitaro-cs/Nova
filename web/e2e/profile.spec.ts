@@ -17,14 +17,14 @@ test('профиль по макету: показатели, ободок, ме
   profile.watching=[{at:Date.now(),label:'Сезон 1 · серия 1',ext:watching}];
   await page.route(`**/api/members/${id}?*`,r=>r.fulfill({json:profile}));
   await page.goto(url(`/people/${id}`));
-  // Профиль «Дневник» (макет Y, 21.11): шапка с именем и цифрами, справа - сейчас смотрит, достижения, быстрые разделы.
+  // Профиль «Касса кинотеатра» (23.11): шапка с именем и цифрами, значки в ряд, билеты недавних сеансов, быстрые разделы.
   await expect(page.getByRole('heading',{name:'Омар',level:1})).toBeVisible();
   await expect.poll(()=>page.getByLabel('Цифры').locator('b').first().textContent()).toBe('63');
-  const side=page.getByRole('complementary',{name:'Коротко'});
-  await expect(side.getByRole('region',{name:'Сейчас смотрит'})).toContainText('Медведь');
-  await expect(side.getByLabel('Значки')).toContainText('Марафонец');
-  await expect(side.getByLabel('Значки')).toContainText('Исследователь');
-  const quick=side.getByRole('navigation',{name:'Быстрые разделы'});
+  await expect(page.getByRole('region',{name:'Вы недавно смотрели'})).toContainText('Медведь');
+  await expect(page.getByRole('region',{name:'Вы недавно смотрели'})).toContainText('Сейчас на экране');
+  await expect(page.getByLabel('Значки', { exact: true })).toContainText('Марафонец');
+  await expect(page.getByLabel('Значки', { exact: true })).toContainText('Исследователь');
+  const quick=page.getByRole('navigation',{name:'Быстрые разделы'});
   await expect(quick.getByRole('link',{name:/Чаты/})).toBeVisible();
   await expect(quick.getByRole('button',{name:/Экскурсия/})).toBeVisible();
   await expectClean(page,'профиль по макету');
