@@ -5,8 +5,10 @@
   import Seekbar from './Seekbar.svelte';
   import { playbackHeading } from './title';
 
-  // Органы управления - вариант C: сверху название, по центру крупные «назад 10 с», пауза и «вперёд 10 с»,
-  // снизу тонкая полоса перемотки, время слева и значки справа. Всё скрывается без движения.
+  // Органы управления - вариант A «Кинотеатр» (выбор владельца, 23.11): сверху всегда название, снизу тонкая полоса
+  // перемотки; под ней слева пауза, ±10 с и время, справа одна строка значков с подписями при наведении (звук, озвучка,
+  // субтитры, качество текстом, настройки, картинка в картинке, полный экран). Крупные кнопки по центру кадра - только
+  // на сенсорных экранах (палец), с мышью их нет. Всё скрывается без движения, кроме паузы.
   let {
     title = '',
     episode = '',
@@ -157,20 +159,31 @@
   <div class="cap">
   <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} onseek={(t) => { onseek(t); nudge(); }} ondrag={(d) => { scrub = d; ondrag(d); }} />
   <div class="row">
+    <button class="ibtn tip mouse" data-tip={paused ? 'Смотреть (пробел)' : 'Пауза (пробел)'} aria-label={paused ? 'Смотреть' : 'Пауза'} onclick={ontoggle}><Icon name={paused ? 'play' : 'pause'} size={22} /></button>
+    <button class="ibtn tip mouse" data-tip="Назад 10 с (←)" aria-label="Назад на 10 секунд" onclick={() => onskip(-10)}>
+      <svg class="skip sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.62 5.25A8 8 0 1 0 15.38 5.25M16.54 8.45 15.38 5.25 18.58 4.09" /><text x="12" y="15.5">10</text></svg>
+    </button>
+    <button class="ibtn tip mouse" data-tip="Вперёд 10 с (→)" aria-label="Вперёд на 10 секунд" onclick={() => onskip(10)}>
+      <svg class="skip sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.38 5.25A8 8 0 1 1 8.62 5.25M7.46 8.45 8.62 5.25 5.42 4.09" /><text x="12" y="15.5">10</text></svg>
+    </button>
     <span class="time">{clock(time)} <span class="faint">/ {clock(duration)}</span></span>
     <span class="grow"></span>
+    {#if canNext}<button class="ibtn tip" data-tip="Следующая серия (N)" aria-label="Следующая серия" onclick={onnext}><Icon name="next" size={22} /></button>{/if}
+    {#if showEpisodes}<button class="ibtn tip" class:on={panel === 'episodes'} data-tip="Серии" aria-label="Серии" onclick={() => onpanel('episodes')}><Icon name="tv" size={21} /></button>{/if}
     <div class="vol">
-      <button class="ibtn" aria-label={muted ? 'Включить звук' : 'Выключить звук'} onclick={() => onvolume(muted ? -1 : 0)}>
+      <button class="ibtn tip" data-tip={muted ? 'Включить звук (M)' : 'Звук (M)'} aria-label={muted ? 'Включить звук' : 'Выключить звук'} onclick={() => onvolume(muted ? -1 : 0)}>
         <Icon name={muted || volume === 0 ? 'mute' : 'volume'} size={22} />
       </button>
       <input type="range" min="0" max="2" step="0.02" value={muted ? 0 : volume} oninput={(e) => onvolume(Number((e.target as HTMLInputElement).value))} aria-label="Громкость" aria-valuetext={`${Math.round(volume*100)}%`} />
       <span class="volume-label">{Math.round((muted?0:volume)*100)}%</span>
     </div>
-    {#if showAudio}<button class="ibtn" class:on={panel === 'audio'} aria-label="Озвучка" title="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
-    {#if showQuality}<button class="ibtn q" class:on={panel === 'quality'} aria-label="Качество" title="Качество" onclick={() => onpanel('quality')}><span class="qicon"><Icon name="sliders" size={20} /></span><span class="qtext">{qualityLabel}</span></button>{/if}
-    <button class="ibtn" class:on={panel === 'settings'} aria-label="Настройки плеера" title="Настройки" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
-    {#if pipOk}<button class="ibtn" aria-label="Картинка в картинке" title="Картинка в картинке (P)" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
-    <button class="ibtn" aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
+    {#if showAudio}<button class="ibtn tip" class:on={panel === 'audio'} data-tip="Озвучка" aria-label="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
+    {#if showSubs}<button class="ibtn tip" class:on={panel === 'subs' || subsOn} data-tip="Субтитры (C)" aria-label="Субтитры" onclick={() => onpanel('subs')}><Icon name="captions" size={22} /></button>{/if}
+    <!-- Качество - текстом («1080p», «Авто»), а не вторым значком «ползунки»: раньше их было два одинаковых рядом. -->
+    {#if showQuality}<button class="ibtn tip q" class:on={panel === 'quality'} data-tip="Качество" aria-label="Качество" onclick={() => onpanel('quality')}><span class="qtext">{qualityLabel || 'Авто'}</span></button>{/if}
+    <button class="ibtn tip" class:on={panel === 'settings'} data-tip="Настройки" aria-label="Настройки плеера" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
+    {#if pipOk}<button class="ibtn tip" data-tip="Картинка в картинке (P)" aria-label="Картинка в картинке" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
+    <button class="ibtn tip" data-tip={full ? 'Выйти из полного экрана (F)' : 'Во весь экран (F)'} aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
   </div>
   </div>
 </div>
@@ -353,24 +366,33 @@
       transform: scale(0.8);
     }
   }
-  .q { gap: 6px; }
-  .qicon { display: none; }
+  .q { min-width: 52px; padding-inline: 10px; border: 1px solid #ffffff38; height: 30px; font-size: 13px; font-weight: 700; letter-spacing: 0.01em; }
+  .skip.sm { width: 24px; height: 24px; }
+  /* Подписи при наведении: белая капсула над значком (у крайних справа - прижата к правому краю). */
+  .tip { position: relative; }
+  .tip::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 10px); left: 50%; z-index: 4;
+    padding: 6px 10px; border-radius: 8px; background: #fff; color: #0a0a0b; font-size: 12px; font-weight: 600; white-space: nowrap;
+    opacity: 0; transform: translate(-50%, 4px); transition: opacity 0.15s, transform 0.15s; pointer-events: none;
+  }
+  .row > :last-child.tip::after, .row > .tip:nth-last-child(2)::after { left: auto; right: 0; transform: translateY(4px); }
+  @media (hover: hover) and (pointer: fine) {
+    .tip:hover::after { opacity: 1; transform: translate(-50%, 0); }
+    .row > :last-child.tip:hover::after, .row > .tip:nth-last-child(2):hover::after { transform: none; }
+    /* С мышью крупных кнопок по центру нет: пауза и ±10 - в строке внизу. */
+    .center { display: none; }
+  }
+  /* Пальцем: крупные кнопки по центру, в строке внизу их не дублируем. */
+  @media not ((hover: hover) and (pointer: fine)) {
+    .mouse { display: none; }
+  }
   /* Мини-плеер: только значки и название, цифры и подписи не теснят экран. */
   @media (max-width: 700px) {
     .ibtn{min-width:32px;padding-inline:4px}.row{gap:2px}.volume-label{display:none}.time{font-size:11px}
-    .skip text{display:none}
-    .q .qtext{display:none}
-    .q .qicon{display:inline-grid}
+
     .vol input {
       display: none;
     }
-  }
-  @media (min-width: 1000px) {
-    .center { inset: auto 35% 13px; height: 44px; gap: 8px; z-index: 2; }
-    .cbig, .cbig.main { width: 42px; height: 42px; }
-    .cbig:not(.main) { background: transparent; }
-    .cbig.main :global(svg) { width: 22px; height: 22px; }
-    .skip { width: 24px; height: 24px; }
   }
   /* Минимализм (плееры «Тишина» и «Пауза»): ни плашек, ни рамок - название, время, тонкая линия и одна строка значков;
      на паузе крупно встаёт название с кнопкой «Продолжить»; кадр при этом не темнеет (просьба владельца, 23.11) -
@@ -405,8 +427,5 @@
     .paused .left { margin-left: 18px; font-size: 14px; opacity: 0.7; }
     /* Большие кнопки по центру на паузе не нужны: есть «Продолжить». */
     .center.covered, .center.hide { opacity: 0; }
-  }
-  @media (min-width: 1000px) {
-    .center { inset: auto 35% 34px; }
   }
 </style>
