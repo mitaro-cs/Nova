@@ -6,29 +6,43 @@
   import Icon from './Icon.svelte';
   import type { IconName } from './icons';
 
-  // Экскурсия «вживую»: сама открывает разделы Nova, затемняет страницу и подсвечивает нужное место
-  // (баннер, панель разделов, ленту «Что смотреть», поиск, подборки, профиль) с подписью рядом. Шаги без
-  // страницы - общие экраны посередине. Запуск: сама после знакомства у нового человека и в любой момент -
-  // событие `nova-tour` («Экскурсия по Nova» на странице профиля). Стрелки листают, Esc закрывает.
-  type Step = { icon: IconName; title: string; text: string; href?: string; target?: string };
+  // Экскурсия A «Попробуйте сами» (выбор владельца, 23.11): семь коротких шагов прямо по приложению. Подсвечено одно
+  // место, рядом подсказка. На шагах «нажмите» подсвеченное можно нажать по-настоящему (оценка, «Смотреть») - и экскурсия
+  // сама переходит дальше, уже на открывшейся странице; на остальных шагах нажатия мимо подписи не проходят. «Дальше»
+  // работает всегда: если нужной страницы ещё нет, экскурсия сама откроет первую подходящую ссылку (`via`).
+  // Запуск: после знакомства и событием `nova-tour` («Экскурсия по Nova» в профиле). Стрелки листают, Esc закрывает.
+  type Step = {
+    icon: IconName;
+    title: string;
+    text: string;
+    /** Открыть страницу перед шагом. */
+    href?: string;
+    /** Подсветить первое видимое место. */
+    target?: string;
+    /** Если места нет на текущей странице - перейти по первой видимой ссылке. */
+    via?: string;
+    /** click - нажатие на подсвеченное и есть «Дальше»; free - с подсвеченным можно работать, дальше - кнопкой. */
+    try?: 'click' | 'free';
+    hint?: string;
+    /** Подсказку показываем, только если подсвечено именно это (на телефоне звёзды спрятаны в меню «…»). */
+    hintFor?: string;
+    /** На шаге плеера ставим видео на паузу: на паузе управление не прячется. */
+    pause?: boolean;
+  };
   const ME = '/people/me';
+  const FILM = '.showcase a[href^="/title/"], .showcase a[href^="/ext/"], a[href^="/title/"], a[href^="/ext/"]';
   const STEPS: Step[] = [
-    { icon: 'play', title: 'Добро пожаловать в Nova', text: 'Ваш кинозал: фильмы и сериалы с компьютера хозяина, друзья рядом, всё открывается в браузере и на телевизоре. Сейчас мы сами пройдём по разделам и покажем, где что лежит - это минута.' },
-    { icon: 'film', title: 'Главная: баннер', text: 'Здесь то, что вы смотрите, новое и рекомендации. «Смотреть» открывает фильм, «+» кладёт в «Хочу», «Не интересно» убирает его из советов.', href: '/', target: '.showcase' },
-    { icon: 'sparkle', title: 'Разделы кинотеатра', text: 'Главная, Фильмы, Сериалы, Аниме и Обзор - переключайте полосой. «Фильмы» и «Сериалы» - своё и то, что в планах; «Обзор» - всё кино мира.', href: '/', target: 'nav[aria-label="Разделы кинотеатра"]' },
-    { icon: 'home', title: 'Панель разделов', text: 'Главное, Что смотреть, Профиль, Коллекция и Поиск - одни и те же на телефоне (внизу), компьютере (сверху, вместе с поиском и профилем) и телевизоре. Красная точка у профиля - просьбы дружбы и новые сообщения.', href: '/', target: 'nav.tabs, header .pills' },
-    { icon: 'squareplay', title: 'Что смотреть', text: 'Лента карточек с кадром из фильма и коротким описанием. Трейлер сам играет у той карточки, что на экране. Закладка - в «Хочу», три точки - «Уже смотрел» или «Не интересно».', href: '/feed', target: '.fc' },
-    { icon: 'search', title: 'Поиск', text: 'Любой фильм, сериал или человек кино: русские и международные названия. Ниже - подборки и категории, фильтры по году, рейтингу и жанру.', href: '/search', target: '.big' },
-    { icon: 'globe', title: 'Обзор - всё кино мира', text: 'Чарты, новинки и подборки IMDb. Нашли то, чего нет в библиотеке - отметьте «Хочу» или попросите хозяина добавить; фильм появится сам.', href: '/discover', target: '.rw-head' },
-    { icon: 'bookmark', title: 'Коллекция', text: 'Всё, что вы отметили: «Буду смотреть», «Смотрю» и «Просмотрено» - в одном месте, с оценкой на постере.', href: '/my', target: '.my h1' },
-    { icon: 'list', title: 'Подборки', text: 'Общие подборки с друзьями: «Что посмотреть в пятницу», «Ужасы на Хэллоуин». Добавлять и отмечать просмотренное могут все участники.', href: '/lists', target: '.rw-head' },
-    { icon: 'user', title: 'Профиль', text: 'Статистика просмотров, обложка, любимые режиссёры. Здесь же чаты, подборки, комната по ссылке, управление и выход.', href: ME, target: '.quick' },
-    { icon: 'party', title: 'Смотрим вместе', text: 'Комната на двоих и больше: видео идёт синхронно, есть чат, реакции и голос. Позовите друга сообщением со ссылкой.' },
-    { icon: 'captions', title: 'Плеер', text: 'Качество само подстраивается под интернет. Пробел - пауза, стрелки - перемотка, S - пропустить заставку, F - во весь экран. Субтитры и дорожки - в меню плеера.' },
-    { icon: 'tv', title: 'И на телевизоре', text: 'Откройте адрес Nova в браузере телевизора - сервер покажет интерфейс под пульт, с той же панелью разделов. Войти можно тем же логином и паролем.' },
+    { icon: 'film', title: 'Витрина', text: 'Новое на Nova, отмеченное вами и популярное на IMDb. Кадры сменяются сами, листать - стрелками или смахиванием.', href: '/', target: '.showcase' },
+    { icon: 'star', title: 'Оцените фильм', text: 'Пять звёзд с половинками. По оценкам Nova подбирает, что посмотреть дальше, а друзья видят их в вашем профиле.', target: '.stars, #s-rating', via: FILM, try: 'click', hint: 'Нажмите на звезду', hintFor: '.stars' },
+    { icon: 'play', title: 'Смотреть', text: 'Фильм начнётся с того места, где вы остановились, - на любом устройстве: телефоне, компьютере или телевизоре.', target: 'a.watch, a.btn[href^="/watch/"]', via: FILM, try: 'click', hint: 'Нажмите «Смотреть»' },
+    { icon: 'captions', title: 'Плеер', text: 'Пробел - пауза, стрелки - перемотка на 10 секунд. Справа звук, озвучка, субтитры, качество и полный экран; подписи появляются при наведении.', target: '.bottom .row', via: 'a.watch, a.btn[href^="/watch/"]', pause: true },
+    { icon: 'party', title: 'Смотреть вместе', text: 'Позовите друзей: видео пойдёт у всех одновременно, с чатом, реакциями и голосом. Позвать можно ссылкой.', target: 'button[aria-label="Смотреть вместе"]', via: 'a.watch, a.btn[href^="/watch/"]', pause: true },
+    { icon: 'sparkle', title: 'Что смотреть', text: 'Опишите словами, что хочется: «короткое про космос», «комедия на вечер». Ниже - фильм дня и подборки по вашему вкусу.', href: '/feed', target: 'form.ask', try: 'free', hint: 'Попробуйте написать' },
+    { icon: 'user', title: 'Ваш профиль', text: 'Любимые фильмы, оценки, статистика и подборки с друзьями. Отсюда же чаты, комната по ссылке и повтор этой экскурсии.', href: ME, target: 'header.ph' },
   ];
 
   let open = $state(false);
+  let hintOn = $state(true);
   let step = $state(0);
   let dir = $state(1);
   let rect = $state<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -67,20 +81,44 @@
         }
       }
       if (!now.target || mine !== token) return;
+      // Часть мест есть в двух видах (шапка на компьютере, нижняя панель на телефоне) - берём видимый.
+      const find = (sel: string) => [...document.querySelectorAll<HTMLElement>(sel)].find((e) => e.getBoundingClientRect().width > 0) ?? null;
       let el: HTMLElement | null = null;
-      for (let i = 0; i < 50 && mine === token; i++) {
-        // Часть разделов есть в двух видах (шапка на компьютере, полоса и нижняя панель на телефоне) - берём видимый.
-        el = [...document.querySelectorAll<HTMLElement>(now.target)].find((e) => e.getBoundingClientRect().width > 0) ?? null;
+      for (let i = 0; i < 60 && mine === token; i++) {
+        el = find(now.target);
         if (el) break;
+        // Нужной страницы ещё нет (нажали «Дальше», а не само место) - открываем первую подходящую ссылку.
+        if (i === 6 && now.via) {
+          const link = find(now.via) as HTMLAnchorElement | null;
+          if (link?.href) {
+            try { await goto(new URL(link.href).pathname); } catch { return; }
+          }
+        }
         await sleep(100);
       }
       if (!el || mine !== token) return;
-      el.scrollIntoView({ block: 'center', behavior: d ? 'smooth' : 'auto' });
+      // Заголовок раздела - подсвечиваем весь раздел.
+      if (el.tagName === 'H2') el = el.closest('section') ?? el;
+      hintOn = !now.hintFor || el.matches(now.hintFor);
+      if (now.pause) document.querySelector('video')?.pause();
+      // На узком экране - к верху: подпись встаёт под местом и не закрывает его.
+      const block: ScrollLogicalPosition = innerWidth <= 700 && el.getBoundingClientRect().height < innerHeight / 2 ? 'start' : 'center';
+      el.style.scrollMarginTop = '28px';
+      el.style.scrollMarginBottom = '28px';
+      el.scrollIntoView({ block, behavior: d ? 'smooth' : 'auto' });
       let frame = 0;
       let previous: { x: number; y: number; w: number; h: number } | null = null;
+      // Страница после перехода может сама прокрутиться (возврат места): место ушло за экран - подводим к нему снова.
+      let fixes = 0;
+      let lastFix = performance.now();
       const follow = () => {
         if (mine !== token || !open || !el) return;
         const r = el.getBoundingClientRect();
+        if ((r.bottom < 0 || r.top > innerHeight) && fixes < 4 && performance.now() - lastFix > 400) {
+          fixes++;
+          lastFix = performance.now();
+          el.scrollIntoView({ block });
+        }
         if (!previous || previous.x !== r.left || previous.y !== r.top || previous.w !== r.width || previous.h !== r.height) {
           previous = { x: r.left, y: r.top, w: r.width, h: r.height };
           rect = previous;
@@ -95,6 +133,19 @@
     };
   });
 
+  // Шаг «нажмите»: нажатие внутри подсветки проходит к самой странице и переводит экскурсию дальше.
+  $effect(() => {
+    if (!open || s.try !== 'click') return;
+    const at = step;
+    const hit = (e: PointerEvent) => {
+      const r = rect;
+      if (!r || step !== at) return;
+      if (e.clientX >= r.x && e.clientX <= r.x + r.w && e.clientY >= r.y && e.clientY <= r.y + r.h) setTimeout(() => step === at && go(at + 1), 350);
+    };
+    document.addEventListener('pointerup', hit, true);
+    return () => document.removeEventListener('pointerup', hit, true);
+  });
+
   function go(to: number) {
     dir = to > step ? 1 : -1;
     step = Math.max(0, Math.min(STEPS.length - 1, to));
@@ -106,6 +157,8 @@
   }
   function key(e: KeyboardEvent) {
     if (!open) return;
+    // Шаг «попробуйте написать»: стрелки в поле ввода - для текста, а не для листания экскурсии.
+    if (e.key !== 'Escape' && e.target instanceof HTMLElement && e.target.closest('input, textarea')) return;
     if (e.key === 'ArrowRight') go(step + 1);
     else if (e.key === 'ArrowLeft') go(step - 1);
     else if (e.key === 'Escape') close();
@@ -131,7 +184,12 @@
 {#if open}
   <div class="veil" role="dialog" aria-modal="true" aria-label="Экскурсия по Nova" transition:fade={{ duration: d }}>
     {#if rect}
-      <div class="spot" style:left="{rect.x - 8}px" style:top="{rect.y - 8}px" style:width="{rect.w + 16}px" style:height="{rect.h + 16}px" aria-hidden="true"></div>
+      <div class="spot" class:open={!!s.try} style:left="{rect.x - 8}px" style:top="{rect.y - 8}px" style:width="{rect.w + 16}px" style:height="{rect.h + 16}px" aria-hidden="true"></div>
+      <!-- Нажатия мимо подсветки не доходят до страницы; внутри подсветки - только на шагах «попробуйте». -->
+      <div class="block" style:left="0" style:top="0" style:width="100%" style:height="{Math.max(0, rect.y - 8)}px" aria-hidden="true"></div>
+      <div class="block" style:left="0" style:top="{rect.y + rect.h + 8}px" style:width="100%" style:bottom="0" aria-hidden="true"></div>
+      <div class="block" style:left="0" style:top="{rect.y - 8}px" style:width="{Math.max(0, rect.x - 8)}px" style:height="{rect.h + 16}px" aria-hidden="true"></div>
+      <div class="block" style:left="{rect.x + rect.w + 8}px" style:top="{rect.y - 8}px" style:right="0" style:height="{rect.h + 16}px" aria-hidden="true"></div>
     {:else}
       <div class="dim" aria-hidden="true"></div>
     {/if}
@@ -156,10 +214,11 @@
           <h2>{s.title}</h2>
         </div>
         <p>{s.text}</p>
+        {#if s.hint && rect && hintOn}<span class="hint"><i aria-hidden="true"></i>{s.hint}</span>{/if}
         <div class="actions">
           {#if step > 0}<button class="btn" onclick={() => go(step - 1)}>Назад</button>{/if}
           <span class="grow"></span>
-          <button class="btn primary" onclick={() => (last ? close(true) : go(step + 1))}>{last ? 'Готово' : 'Дальше'}</button>
+          <button class="btn primary" onclick={() => (last ? close(true) : go(step + 1))}>{last ? 'Готово' : s.try === 'click' ? 'Пропустить шаг' : 'Дальше'}</button>
         </div>
       </div>
     {/key}
@@ -174,7 +233,14 @@
     display: grid;
     place-items: center;
     padding: 18px;
+    pointer-events: none;
   }
+  .veil > :global(*) { pointer-events: auto; }
+  .block { position: fixed; }
+  .spot.open { pointer-events: none; }
+  .hint { display: inline-flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 14px; border-radius: 999px; background: #ffffff14; font-size: 13px; font-weight: 600; }
+  .hint i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
   /* Без подсвеченного места - просто затемнение, подпись посередине. */
   .dim {
     position: absolute;
@@ -189,7 +255,6 @@
     box-shadow: 0 0 0 100vmax #000000c8;
     outline: 2px solid #ffffffd9;
     outline-offset: 0;
-    pointer-events: none;
     transition: left 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
     animation: pulse 2.2s ease-in-out infinite;
   }

@@ -29,7 +29,7 @@ test('знакомство: фильм выбирается через поис�
   await expect(guide).toHaveCount(0);
 });
 
-test('экскурсия сама открывает разделы и подсвечивает место', async ({ page }) => {
+test('экскурсия «попробуйте сами»: подсвечивает место, нажатие на него ведёт дальше', async ({ page }, info) => {
   await page.route('**/api/links/search**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/discover/title/*/trailer/hd', (route) => route.fulfill({ status: 200, contentType: 'video/mp4', body: '' }));
   await page.route('**/api/discover/title/*/trailer', (route) => route.fulfill({ json: { linkId: null } }));
@@ -40,24 +40,29 @@ test('экскурсия сама открывает разделы и подс�
     await page.evaluate(() => window.dispatchEvent(new Event('nova-tour')));
     await expect(tour).toBeVisible({ timeout: 600 });
   }).toPass({ timeout: 10000 });
-  await expect(tour.getByRole('heading', { name: 'Добро пожаловать в Nova' })).toBeVisible();
-  // Шаг «Главная: баннер» - страница сама перешла на главную и подсвечен баннер.
-  await tour.getByRole('button', { name: 'Дальше' }).click();
-  await expect(tour.getByRole('heading', { name: 'Главная: баннер' })).toBeVisible();
+  // Шаг 1: страница сама перешла на главную и подсвечена витрина.
+  await expect(tour.getByRole('heading', { name: 'Витрина' })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator('.spot')).toBeVisible();
-  // «Что смотреть» - страница ленты и подсвеченная карточка.
-  // Пока шаг сменяется, на миг видны обе подписи: ждём, пока останется одна, и только потом жмём дальше.
-  for (const step of ['Разделы кинотеатра', 'Панель разделов', 'Что смотреть']) {
-    await tour.getByRole('button', { name: 'Дальше' }).last().click();
-    await expect(tour.getByRole('heading', { name: step })).toHaveCount(1);
-  }
-  await expect(tour.getByRole('heading', { name: 'Что смотреть' })).toBeVisible();
-  await expect(page).toHaveURL(/\/feed$/);
-  await expect(page.locator('.spot')).toBeVisible();
+  // Шаг 2 по «Дальше»: экскурсия сама открыла фильм и подсветила звёзды.
+  await tour.getByRole('button', { name: 'Дальше' }).click();
+  await expect(tour.getByRole('heading', { name: 'Оцените фильм' })).toHaveCount(1);
+  await expect(page).toHaveURL(/\/(title|ext)\//);
+  // На телефоне звёзды спрятаны в меню «…» - подсвечен раздел оценок, без подсказки про звезду.
+  if (info.project.name === 'desktop') await expect(tour.getByText('Нажмите на звезду')).toBeVisible();
+  // Нажатие на подсвеченное проходит к странице и само ведёт дальше. Ждём, пока подсветка доедет до места.
+  let box = (await page.locator('.spot').boundingBox())!;
+  await expect(async () => {
+    const next = (await page.locator('.spot').boundingBox())!;
+    const still = Math.abs(next.y - box.y) < 1 && Math.abs(next.x - box.x) < 1;
+    box = next;
+    expect(still).toBe(true);
+  }).toPass({ intervals: [300], timeout: 6000 });
+  await page.mouse.click(box.x + 30, box.y + box.height / 2);
+  await expect(tour.getByRole('heading', { name: 'Смотреть' })).toHaveCount(1);
   // Стрелка влево возвращает на шаг назад, Esc закрывает.
   await page.keyboard.press('ArrowLeft');
-  await expect(tour.getByRole('heading', { name: 'Панель разделов' })).toBeVisible();
+  await expect(tour.getByRole('heading', { name: 'Оцените фильм' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(tour).toHaveCount(0);
 });
