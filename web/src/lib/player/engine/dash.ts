@@ -1,3 +1,4 @@
+import { uniqueLevels } from '../quality-label';
 // DASH загружается только при открытии MPD. Навигация и локальная библиотека его не скачивают.
 import type { HlsEngine, Level } from './hls';
 import { sourceTrackName, distinctNames } from '../tracks';
@@ -37,8 +38,8 @@ export function createDashEngine(url:string,loader=loadDash):HlsEngine {
       const p=dash.create();player=p;
       p.updateSettings({streaming:{scheduling:{scheduleWhilePaused:false},abr:{autoSwitchBitrate:{video:true}}}});
       p.on(dash.events.STREAM_INITIALIZED,()=>{
-        current=p.getRepresentationsByType('video').map((v,i)=>({i,height:v.height??0,label:v.height??0,
-          display:[v.height?`${v.height}p`:'Исходное качество',v.bandwidth?`${(v.bandwidth/1e6).toFixed(1)} Мбит/с`:null].filter(Boolean).join(' · ')})).sort((a,b)=>b.height-a.height);
+        current=uniqueLevels(p.getRepresentationsByType('video').map((v,i)=>({i,height:v.height??0,width:v.width??undefined,bitrate:v.bandwidth??0,label:v.height??0})))
+          .map(({i,height,label})=>({i,height,label}));
         levelsCb?.(current);
         const active=p.getCurrentTrackFor('audio');
         const tracks=p.getTracksFor('audio');

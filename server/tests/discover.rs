@@ -226,6 +226,15 @@ async fn episode_links_resume_and_dropped_feed() {
             .status()
             .is_success()
     );
+    // Просмотр по ссылке виден хосту: «Сейчас смотрят», активность и «Самое смотримое».
+    let status = host.json("/api/admin/status").await;
+    let now = &status["watching"][0];
+    assert_eq!(now["title"], "Во все тяжкие");
+    assert_eq!(now["position"], 120.0);
+    let metrics = host.json("/api/admin/metrics").await;
+    assert_eq!(metrics["people"]["activeWeek"], 1);
+    assert_eq!(metrics["activity"]["top"][0]["href"], "/ext/tt0903747");
+    assert_eq!(metrics["activity"]["days"].as_array().unwrap().last().unwrap()["views"], 1);
     let link = host.json(&format!("/api/links/{id}")).await;
     assert_eq!(link["season"], 2);
     assert_eq!(link["episode"], 3);

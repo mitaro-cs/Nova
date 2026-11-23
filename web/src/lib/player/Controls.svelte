@@ -373,7 +373,8 @@
     .skip { width: 24px; height: 24px; }
   }
   /* Минимализм (плееры «Тишина» и «Пауза»): ни плашек, ни рамок - название, время, тонкая линия и одна строка значков;
-     на паузе кадр темнеет и крупно встаёт название с кнопкой «Продолжить». */
+     на паузе крупно встаёт название с кнопкой «Продолжить»; кадр при этом не темнеет (просьба владельца, 23.11) -
+     текст читается за счёт мягкой тени. */
   .ends { display: none; }
   .paused { display: none; }
   @media (min-width: 701px) {
@@ -390,7 +391,7 @@
     .paused {
       position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: flex-end;
       padding: 0 clamp(28px, 4.5vw, 72px) 150px; pointer-events: none;
-      background: linear-gradient(90deg, #00000099 0%, #00000026 55%, transparent 100%), linear-gradient(0deg, #000000a6 0%, transparent 40%);
+      text-shadow: 0 2px 24px #00000080, 0 1px 3px #00000066;
       animation: swap 0.25s ease-out;
     }
     .paused * { pointer-events: auto; }

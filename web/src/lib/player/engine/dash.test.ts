@@ -13,13 +13,13 @@ class Fake implements DashPlayer {
   enableText(enabled:boolean){this.visible=enabled;}setTextTrack(index:number){this.text=index;}reset(){this.closed=true;}
 }
 describe('внешний DASH',()=>{
-  it('сохраняет все качества, озвучки, субтитры и позицию',async()=>{
+  it('одна строка на качество (лучший битрейт), озвучки, субтитры и позиция',async()=>{
     const p=new Fake(),e=createDashEngine('/movie.mpd',async()=>({create:()=>p,events:{STREAM_INITIALIZED:'ready',ERROR:'error'}}));
     let audio:string[]=[],subs:string[]=[];
     e.onAudioTracks(t=>audio=t.map(a=>a.label));e.onSubtitleTracks(t=>subs=t.map(s=>s.id));
     await e.start({}as HTMLVideoElement,{mode:'raw',quality:'auto',why:''},90);p.handlers.get('ready')?.();
-    expect(p.start).toBe(90);expect(e.levels().map(l=>l.i)).toEqual([0,1,2]);
-    for(let i=0;i<3;i++){e.setLevel(i);expect(p.quality).toBe(i);}
+    expect(p.start).toBe(90);expect(e.levels().map(l=>l.i)).toEqual([0,1]);
+    for(const l of e.levels()){e.setLevel(l.i);expect(p.quality).toBe(l.i);}
     e.setLevel(-1);expect(p.settings.at(-1)).toEqual({streaming:{abr:{autoSwitchBitrate:{video:true}}}});
     expect(audio).toEqual(['Русский','Original']);e.setAudioTrack(1);expect(p.audio).toBe('en');
     expect(subs).toEqual(['dash:0']);e.setSubtitleTrack(0);expect(p.visible).toBe(true);expect(p.text).toBe(0);

@@ -2,7 +2,7 @@
 // повторов - те же, что у прежнего плеера (хост готовит плейлист несколько секунд, интернет бывает плохим).
 import type { Engine } from '../session.svelte';
 import type { Step } from '../plan';
-import { qualityTier } from '../quality-label';
+import { qualityTier, uniqueLevels } from '../quality-label';
 import { abrEstimate } from '../speed';
 import { distinctNames, sourceTrackName } from '../tracks';
 import { streamUrl } from '../urls';
@@ -124,14 +124,9 @@ export function createHlsEngine(ctx: HlsCtx): HlsEngine {
       if (ctx.source) h.subtitleDisplay = false;
       h.on(Hls.Events.LEVEL_SWITCHED, ((_e: string, d: { level: number }) => levelCb?.(h.levels[d.level]?.height ?? null)) as never);
       h.on(Hls.Events.MANIFEST_PARSED, (() => {
-        // Для внешнего HLS показываем каждый вариант, включая одинаковые разрешения.
-        const seen = new Set<number>();
-        current = h.levels
-          .map((l, i) => ({ i, height: l.height, label: qualityTier(l.height, l.width),
-            ...(ctx.source ? {display: [l.height ? `${qualityTier(l.height,l.width)}p` : 'Исходный поток',
-              l.bitrate ? `${(l.bitrate / 1_000_000).toFixed(1)} Мбит/с` : null, l.videoCodec].filter(Boolean).join(' · ')} : {}) }))
-          .filter((l) => ctx.source || (l.height && !seen.has(l.label) && seen.add(l.label)))
-          .sort((a, b) => b.height - a.height);
+        // Одно качество - одна строка (у сайтов бывает по три варианта 720p): лучший битрейт на ступень.
+        current = uniqueLevels(h.levels.map((l, i) => ({ i, height: l.height, width: l.width, bitrate: l.bitrate, label: qualityTier(l.height, l.width) })))
+          .map(({ i, height, label }) => ({ i, height, label }));
         levelsCb?.(current);
         if (ctx.source) {
           const names = distinctNames((h.audioTracks ?? []).map((t, index) => ({ index, label: sourceTrackName(t.name, t.lang, index) })));

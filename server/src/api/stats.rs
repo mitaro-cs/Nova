@@ -117,11 +117,11 @@ pub async fn metrics(State(app): State<Arc<App>>, _m: Manager, Query(q): Query<M
         let logins_day = one(&format!("SELECT COUNT(*) FROM logins WHERE ok = 1 AND at > {}", now - DAY))?;
         let logins_week = one(&format!("SELECT COUNT(*) FROM logins WHERE ok = 1 AND at > {}", now - 7 * DAY))?;
         let failed_week = one(&format!("SELECT COUNT(*) FROM logins WHERE ok = 0 AND at > {}", now - 7 * DAY))?;
-        let active_week = one(&format!("SELECT COUNT(DISTINCT profile_id) FROM progress WHERE updated_at > {}", now - 7 * DAY))?;
+        let active_week = one(&format!("SELECT COUNT(DISTINCT profile_id) FROM (SELECT profile_id, updated_at FROM progress UNION ALL SELECT profile_id, updated_at FROM link_progress) WHERE updated_at > {}", now - 7 * DAY))?;
 
         // Просмотры по дням за две недели: сколько разных фильмов и серий смотрели и сколько человек.
         let mut st = c.prepare(
-            "SELECT (updated_at + ?1) / ?2 AS d, COUNT(*), COUNT(DISTINCT profile_id) FROM progress WHERE updated_at > ?3 GROUP BY d",
+            "SELECT (updated_at + ?1) / ?2 AS d, COUNT(*), COUNT(DISTINCT profile_id) FROM (SELECT profile_id, updated_at FROM progress UNION ALL SELECT profile_id, updated_at FROM link_progress) WHERE updated_at > ?3 GROUP BY d",
         )?;
         let rows: Vec<(i64, i64, i64)> = st
             .query_map(rusqlite::params![shift, DAY, now - 14 * DAY], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
@@ -137,23 +137,32 @@ pub async fn metrics(State(app): State<Arc<App>>, _m: Manager, Query(q): Query<M
 
         // Когда смотрят: просмотры по часам суток за месяц.
         let mut st = c.prepare(
-            "SELECT ((updated_at + ?1) / 3600000) % 24 AS h, COUNT(*) FROM progress WHERE updated_at > ?2 GROUP BY h",
+            "SELECT ((updated_at + ?1) / 3600000) % 24 AS h, COUNT(*) FROM (SELECT profile_id, updated_at FROM progress UNION ALL SELECT profile_id, updated_at FROM link_progress) WHERE updated_at > ?2 GROUP BY h",
         )?;
         let by_hour: Vec<(i64, i64)> = st
             .query_map(rusqlite::params![shift, now - 30 * DAY], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?;
         let hours: Vec<i64> = (0..24).map(|h| by_hour.iter().find(|r| r.0 == h).map_or(0, |r| r.1)).collect();
 
-        // Самое смотримое: по числу разных зрителей.
+        // Самое смотримое: по числу разных зрителей (свои файлы и видео по ссылке - у фильма ленты одна строка).
         let mut st = c.prepare(
-            "SELECT t.id, t.title, t.year, t.kind, COUNT(DISTINCT p.profile_id) AS v, SUM(p.done) AS fin
-             FROM progress p JOIN files f ON f.id = p.file_id JOIN titles t ON t.id = f.title_id
-             GROUP BY t.id ORDER BY v DESC, MAX(p.updated_at) DESC LIMIT 5",
+            "SELECT k, href, title, year, kind, COUNT(DISTINCT profile_id) AS v, SUM(done) FROM (
+               SELECT 't' || t.id AS k, '/title/' || t.id AS href, t.title, t.year, t.kind, p.profile_id, p.done, p.updated_at AS at
+               FROM progress p JOIN files f ON f.id = p.file_id JOIN titles t ON t.id = f.title_id
+               UNION ALL
+               SELECT COALESCE('x' || l.ext_id, 't' || l.title_id, 'l' || l.id),
+                      COALESCE('/ext/' || l.ext_id, '/title/' || l.title_id, '/watch/link/' || l.id),
+                      COALESCE(e.title, t.title, l.label), COALESCE(e.year, t.year), COALESCE(e.kind, t.kind, 'movie'),
+                      lp.profile_id, lp.position >= lp.duration * 0.95, lp.updated_at
+               FROM link_progress lp JOIN links l ON l.id = lp.link_id
+               LEFT JOIN ext_titles e ON e.id = l.ext_id LEFT JOIN titles t ON t.id = l.title_id
+             ) GROUP BY k ORDER BY v DESC, MAX(at) DESC LIMIT 5",
         )?;
         let top: Vec<Value> = st
             .query_map([], |r| {
-                Ok(json!({"id": r.get::<_, i64>(0)?, "title": r.get::<_, String>(1)?, "year": r.get::<_, Option<i64>>(2)?,
-                    "kind": r.get::<_, String>(3)?, "viewers": r.get::<_, i64>(4)?, "finished": r.get::<_, i64>(5)?}))
+                Ok(json!({"id": r.get::<_, String>(0)?, "href": r.get::<_, String>(1)?, "title": r.get::<_, String>(2)?,
+                    "year": r.get::<_, Option<i64>>(3)?, "kind": r.get::<_, String>(4)?, "viewers": r.get::<_, i64>(5)?,
+                    "finished": r.get::<_, i64>(6)?}))
             })?
             .collect::<Result<_, _>>()?;
 

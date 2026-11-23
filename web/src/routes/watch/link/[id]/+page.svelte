@@ -112,6 +112,16 @@
     } else if (link) window.open(link.url, '_blank', 'noopener');
   }
 
+  const app = typeof window !== 'undefined' && !!(window as Window & { __NOVA_DESKTOP__?: boolean }).__NOVA_DESKTOP__;
+  let winFull = $state(false);
+  function toggleWindow() {
+    winFull = !winFull;
+    void post('/api/host/fullscreen', { enabled: winFull }).catch(() => (winFull = !winFull));
+  }
+  $effect(() => () => {
+    if (winFull) void post('/api/host/fullscreen', { enabled: false }).catch(() => {});
+  });
+
   function back() {
     if (history.length > 1) history.back();
     else goto('/discover');
@@ -140,14 +150,14 @@
     {#if own && embeddedPage}
       <iframe src={embeddedPage} title="Просмотр на странице источника"
         sandbox="allow-scripts allow-same-origin allow-presentation"
-        allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen
+        allow={app ? 'autoplay; picture-in-picture; encrypted-media' : 'autoplay; fullscreen; picture-in-picture; encrypted-media'} allowfullscreen={!app}
         referrerpolicy="strict-origin-when-cross-origin"></iframe>
     {:else if own && link?.embed}
       <iframe
         src={link.embed}
         title={link.label}
-        allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write"
-        allowfullscreen
+        allow={app ? 'autoplay; picture-in-picture; encrypted-media; clipboard-write' : 'autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write'}
+        allowfullscreen={!app}
         referrerpolicy="strict-origin-when-cross-origin"
       ></iframe>
     {/if}
@@ -166,6 +176,8 @@
     <div class="bar">
       <button class="round" onclick={back} aria-label="Назад" title="Назад (Esc)"><Icon name="back" size={22} /></button>
       {#if link && !own}<span class="name">{link.label}</span>{/if}
+      <!-- В окне приложения плеер сайта не разворачивается сам (на Mac он уходил в отдельное окно) - разворачиваем окно. -->
+      {#if app && own}<button class="round end" onclick={toggleWindow} aria-label="Во весь экран" title="Во весь экран"><Icon name={winFull ? 'exitfs' : 'fullscreen'} size={20} /></button>{/if}
     </div>
   </div>
 {/if}
@@ -195,6 +207,7 @@
     gap: 12px;
     pointer-events: none;
   }
+  .round.end { margin-left: auto; }
   .round {
     pointer-events: auto;
     display: grid;

@@ -478,8 +478,10 @@
     right: 16px;
     bottom: 120px;
     width: min(320px, calc(100vw - 32px));
-    display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+    /* Колонка, а не сетка из шести строк: блоки появляются и пропадают (ссылка, «Позвать», очередь или чат), и
+       в сетке переключатель «Очередь/Чат» попадал в растягиваемую строку и раздувался в огромные овалы. */
+    display: flex;
+    flex-direction: column;
     gap: 10px;
     padding: 14px;
     border-radius: 18px;
@@ -730,7 +732,7 @@
   :global(.player.idle) .room-status {opacity:0;visibility:hidden;}
   @media(max-width:640px) {.room-status {top:78px;font-size:11px}.room-status small {font-size:10px}.side {top:130px;bottom:145px;right:12px;width:calc(100vw - 24px);border-radius:20px}.reacts button {width:30px;height:36px}.reacts {max-width:calc(100vw - 24px);}}
   .extra-members {font-size:11px;color:#b8b8c0;padding-left:4px;}
-  @media(max-height:500px) {.side {top:76px;bottom:100px;overflow:auto;grid-template-rows:auto auto minmax(50px,1fr) auto;}.room-status {top:68px;}.reacts {bottom:94px;}}
+  @media(max-height:500px) {.side {top:76px;bottom:100px;overflow:auto;}.room-status {top:68px;}.reacts {bottom:94px;}}
   /* Поверх видео - строго между панелями плеера: их высоту плеер отдаёт в --top-h и --bottom-h. */
   .room-status {
     top: calc(var(--top-h, 80px) + 8px);
@@ -787,10 +789,12 @@
     }
   }
   @media (min-width: 801px) {
-    .room:not(.closed) .side { top:0; bottom:0; right:0; width:360px; border-radius:0; height:100%; padding-top:24px; grid-template-rows:auto auto auto minmax(0,1fr) auto auto; }
+    .room:not(.closed) .side { top:0; bottom:0; right:0; width:360px; border-radius:0; height:100%; padding-top:24px; }
     .room:not(.closed) .toggle { right:372px; }
     .room:not(.closed) .reacts { left:calc((100% - 360px) / 2); }
   }
+  .side > :global(*) { flex: none; }
+  .side > .queue, .side > .feed { flex: 1 1 auto; min-height: 60px; overflow-y: auto; }
   .tabs2 { display: flex; gap: 6px; padding: 4px; border-radius: 999px; background: #17171a; }
   .tabs2 button { flex: 1; padding: 8px 0; border: 0; border-radius: 999px; background: none; color: #c4c4cc; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
   .tabs2 button.on { background: #fff; color: #0a0a0b; }

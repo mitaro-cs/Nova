@@ -74,7 +74,7 @@ export interface Metrics {
     days: { day: number; views: number; people: number }[];
     /** Просмотры по часам суток (24 числа) за месяц. */
     hours: number[];
-    top: { id: number; title: string; year: number | null; kind: string; viewers: number; finished: number }[];
+    top: { id: string; href: string; title: string; year: number | null; kind: string; viewers: number; finished: number }[];
   };
   social: { reviews: number; messages: number; lists: number; friends: number; wishes: number };
   disk: { db: number; images: number; hls: number; copy: number; cacheOther: number; backups: number; logs: number };

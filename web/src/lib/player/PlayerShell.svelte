@@ -738,6 +738,9 @@
 
   // ---------- управление: показ и скрытие, жесты, клавиши ----------
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  // На паузе управление и название видны всегда и не гаснут (просьба владельца, 23.11): даже если перед паузой
+  // управление уже спряталось (пауза пробелом или щелчком по видео).
+  const ui = $derived(shown || paused);
   function poke() {
     shown = true;
     clearTimeout(hideTimer);
@@ -854,17 +857,14 @@
     } catch {
       /* нет хранилища */
     }
-    const native = (window as Window & { __NOVA_DESKTOP__?: boolean }).__NOVA_DESKTOP__;
-    const nativeFullscreen = (enabled: boolean) => {
-      if (native) void api('/api/host/fullscreen', { method: 'POST', json: { enabled } }).catch(() => {});
-    };
+    // В окне приложения полного экрана HTML нет (его заменяет полный экран окна, `DESKTOP_SCRIPT` в main.rs).
+    const native = desktop();
     const fs = () => {
       full = !!document.fullscreenElement;
       if (full) {
         (box?.querySelector(':focus') as HTMLElement | null)?.blur();
         poke();
       }
-      nativeFullscreen(full);
     };
     document.addEventListener('fullscreenchange', fs);
     // Окно приложения могли вывести из полного экрана и снаружи (F11, системная кнопка): сверяем с размером экрана.
@@ -875,7 +875,8 @@
     return () => {
       window.removeEventListener('resize', sync);
       document.removeEventListener('fullscreenchange', fs);
-      if (full) nativeFullscreen(false);
+      // Ушли из плеера в полном экране окна - окно возвращаем в обычный размер.
+      if (full && native) void api('/api/host/fullscreen', { method: 'POST', json: { enabled: false } }).catch(() => {});
     };
   });
 
@@ -895,7 +896,7 @@
 
 <svelte:window onkeydown={key} onpointermove={poke} />
 
-<div class="player" class:idle={!shown} class:with-sidebar={sidebar} bind:this={box} style:--top-h="{topH}px" style:--bottom-h="{bottomH}px" onpointermove={poke} role="application" aria-label="Видеоплеер">
+<div class="player" class:idle={!ui} class:with-sidebar={sidebar} bind:this={box} style:--top-h="{topH}px" style:--bottom-h="{bottomH}px" onpointermove={poke} role="application" aria-label="Видеоплеер">
   <!-- svelte-ignore a11y_media_has_caption -->
   <video
     bind:this={video}
@@ -925,7 +926,7 @@
   ></video>
 
   <Overlay
-    {shown}
+    shown={ui}
     {jump}
     {subtitle}
     {subLook}
@@ -978,7 +979,7 @@
     episode={info?.episode ?? ''}
     season={src?.season ?? info?.season ?? null}
     episodeNo={src?.episodeNo ?? null}
-    {shown}
+    shown={ui}
     {paused}
     busy={waiting || !!error}
     {panel}

@@ -46,10 +46,15 @@ impl Host for DesktopHost {
             .unwrap_or_else(|| serde_json::json!({"ok":false,"error":"Окно хоста недоступно"}))
     }
     fn fullscreen(&self, enabled: bool) -> bool {
-        self.app
-            .get()
-            .and_then(|app| app.get_webview_window("main"))
-            .is_some_and(|window| window.set_fullscreen(enabled).is_ok())
+        self.app.get().and_then(|app| app.get_webview_window("main")).is_some_and(|window| {
+            // Mac: «простой» полный экран - в том же рабочем столе. Обычный уводил окно в отдельное
+            // пространство, и плеер с приложением оказывались на разных экранах.
+            #[cfg(target_os = "macos")]
+            let done = window.set_simple_fullscreen(enabled);
+            #[cfg(not(target_os = "macos"))]
+            let done = window.set_fullscreen(enabled);
+            done.is_ok()
+        })
     }
     fn update_info(&self) -> Option<fsfy::host::UpdateInfo> {
         Some(self.app.get()?.state::<update::Updates>().info())
@@ -152,6 +157,22 @@ fn drag_drop(window: &tauri::Window, e: &tauri::DragDropEvent) {
     }
 }
 
+/// Метка окна приложения и запрет полного экрана HTML-элементов: в WKWebView (Mac) он открывал видео в отдельном
+/// окне на своём рабочем столе, а в окне приложения оставалась заглушка «Нажмите для выхода из полноэкранного
+/// режима». Любой запрос полного экрана становится полным экраном самого окна.
+const DESKTOP_SCRIPT: &str = r#"(() => {
+  Object.defineProperty(window, '__NOVA_DESKTOP__', { value: true });
+  const win = () => {
+    const on = !(innerWidth >= screen.width - 1 && innerHeight >= screen.height - 1);
+    fetch('/api/host/fullscreen', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Fsfy': '1' }, body: JSON.stringify({ enabled: on }) }).catch(() => {});
+    return Promise.resolve();
+  };
+  for (const name of ['requestFullscreen', 'webkitRequestFullscreen', 'webkitRequestFullScreen']) {
+    if (Element.prototype[name]) Element.prototype[name] = win;
+  }
+  if (HTMLVideoElement.prototype.webkitEnterFullscreen) HTMLVideoElement.prototype.webkitEnterFullscreen = win;
+})();"#;
+
 fn main() {
     fsfy::logs::init("info");
 
@@ -210,7 +231,7 @@ fn main() {
 
             let hidden = std::env::args().any(|a| a == "--hidden");
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(entry))
-                .initialization_script("Object.defineProperty(window, '__NOVA_DESKTOP__', { value: true });")
+                .initialization_script(DESKTOP_SCRIPT)
                 .title(TITLE)
                 .inner_size(1360.0, 860.0)
                 .min_inner_size(960.0, 620.0)

@@ -25,3 +25,19 @@ export function levelLabel(level: LabelLevel, all: LabelLevel[]) {
   const order = same.findIndex((l) => l.i === level.i);
   return order === 0 ? base : `${base} (${order + 1})`;
 }
+
+/**
+ * Одно качество - одна строка: у сайтов в плейлисте бывает по два-три варианта одной высоты (разные битрейты
+ * и кодеки), и меню показывало «720p», «720p (2)», «720p (3)». Оставляем на каждую ступень вариант с большим
+ * битрейтом (при равном - первый), по убыванию высоты.
+ */
+export function uniqueLevels<T extends { height: number; width?: number; bitrate?: number }>(list: T[]): T[] {
+  const best = new Map<string, T>();
+  for (const l of list) {
+    if (!l.height) continue;
+    const key = qualityName(l.height, l.width);
+    const was = best.get(key);
+    if (!was || (l.bitrate ?? 0) > (was.bitrate ?? 0)) best.set(key, l);
+  }
+  return [...best.values()].sort((a, b) => b.height - a.height);
+}

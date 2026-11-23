@@ -97,7 +97,7 @@ describe('createHlsEngine', () => {
     e.setSubtitleTrack(-1); expect(h.subtitleTrack).toBe(-1); expect(h.subtitleDisplay).toBe(false);
   });
 
-  it('внешний поток сохраняет все уровни, в том числе одинаковую высоту, и обновляет список озвучек', async () => {
+  it('внешний поток: одна строка на качество (без «1080p (2)») и обновляет список озвучек', async () => {
     const e = createHlsEngine({source:'/master.m3u8',light:false,loader});
     let tracks: string[] = [];
     e.onAudioTracks(t => tracks = t.map(a => a.label));
@@ -105,7 +105,7 @@ describe('createHlsEngine', () => {
     const h = FakeHls.last!;
     h.levels.push({height:2160,width:3840});
     h.emit('manifest');
-    expect(e.levels().map(l => l.i)).toEqual([3,0,1,2]);
+    expect(e.levels().map(l => l.i)).toEqual([3,0,2]);
     for(const level of e.levels()) { e.setLevel(level.i); expect(h.currentLevel).toBe(level.i); }
     h.audioTracks.push({name:'Третья озвучка',lang:'ru',default:false});
     h.emit('audio');

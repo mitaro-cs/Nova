@@ -169,7 +169,7 @@
           const [vNow, vWas] = part(views);
           const [pNow, pWas] = part(people);
           return [
-            { label: 'Просмотров за неделю', value: vNow, delta: pct(vNow, vWas), line: spark(views), note: `${vWas} неделей раньше` },
+            { label: 'Просмотров за неделю', value: vNow, delta: pct(vNow, vWas), line: spark(views), note: `неделей раньше - ${vWas}` },
             { label: 'Заходов зрителей', value: pNow, delta: pct(pNow, pWas), line: spark(people), note: `${m.people.activeWeek} разных людей` },
             { label: 'Новых фильмов', value: m.library.addedWeek, delta: null, line: spark(views.map((_, i) => (i === views.length - 1 ? m!.library.addedWeek : 0))), note: `${m.library.addedMonth} за месяц` },
             { label: 'Входов за сутки', value: m.people.loginsDay, delta: null, line: spark(people), note: m.people.failedWeek ? `${m.people.failedWeek} неудачных за неделю` : 'неудачных нет' },
@@ -240,7 +240,7 @@
           {#each m.activity.top as t, i (t.id)}
             <li>
               <span class="rank">{i + 1}</span>
-              <a href="/title/{t.id}"><b>{t.title}</b><small>{t.year ?? ''}{t.year ? ' · ' : ''}{t.kind === 'series' ? 'сериал' : 'фильм'}</small></a>
+              <a href={t.href}><b>{t.title}</b><small>{t.year ?? ''}{t.year ? ' · ' : ''}{t.kind === 'series' ? 'сериал' : 'фильм'}</small></a>
               <span class="meter"><i style:transform="scaleX({t.viewers / topMax})"></i></span>
               <span class="who"><Icon name="users" size={14} /> {t.viewers}</span>
             </li>
