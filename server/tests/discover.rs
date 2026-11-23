@@ -235,6 +235,10 @@ async fn episode_links_resume_and_dropped_feed() {
     assert_eq!(metrics["people"]["activeWeek"], 1);
     assert_eq!(metrics["activity"]["top"][0]["href"], "/ext/tt0903747");
     assert_eq!(metrics["activity"]["days"].as_array().unwrap().last().unwrap()["views"], 1);
+    // «Топ-10 Nova за неделю» на главной - тот же просмотр, карточкой фильма ленты и числом зрителей.
+    let top = host.json("/api/top/week").await;
+    assert_eq!(top[0]["ext"]["id"], "tt0903747");
+    assert_eq!(top[0]["viewers"], 1);
     let link = host.json(&format!("/api/links/{id}")).await;
     assert_eq!(link["season"], 2);
     assert_eq!(link["episode"], 3);

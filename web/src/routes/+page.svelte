@@ -10,6 +10,7 @@
   import ContinueRow from '$lib/ui/ContinueRow.svelte';
   import Loading from '$lib/ui/Loading.svelte';
   import CatalogStrip from '$lib/ui/CatalogStrip.svelte';
+  import TopTen from '$lib/ui/TopTen.svelte';
   import { counts, featured, filter, isAnime, ofTab, shelves, STATUSES, statusOf, tabOf, type Status } from '$lib/library';
   import { session } from '$lib/session.svelte';
   import Icon from '$lib/ui/Icon.svelte';
@@ -62,6 +63,14 @@
     void extSheet.version;
     let live = true;
     api<NonNullable<typeof theme>>('/api/theme').then((t) => { if (live) { theme = t; themeSettled = true; } }, () => { if (live) themeSettled = true; });
+    return () => { live = false; };
+  });
+  // «Топ-10 Nova за неделю» - только на главной, под «Продолжить просмотр».
+  let top = $state<{ card?: Card; ext?: ExtCard; viewers: number }[]>([]);
+  $effect(() => {
+    if (tab !== 'home') return;
+    let live = true;
+    api<typeof top>('/api/top/week').then((t) => live && (top = t), () => {});
     return () => { live = false; };
   });
   let feedFailed = $state(false);
@@ -201,7 +210,7 @@
           <span class="eyebrow">ВАШ ДОМАШНИЙ КИНОТЕАТР</span>
           <h1>Что посмотрим сегодня?</h1>
           <p>Фильмы, сериалы и истории, к которым хочется возвращаться.</p>
-          <div class="welcome-actions"><a class="btn primary" href="/discover">Открыть обзор</a><a class="btn" href="/search">Найти фильм</a>{#if session.me?.manage}<a class="btn" href="/admin?tab=folders">Добавить с компьютера</a>{/if}</div>
+          <div class="welcome-actions"><a class="btn primary" href="/discover">Открыть каталог</a><a class="btn" href="/search">Найти фильм</a>{#if session.me?.manage}<a class="btn" href="/admin?tab=folders">Добавить с компьютера</a>{/if}</div>
         </section>
       {/if}
     {:else if hero.length}
@@ -211,6 +220,7 @@
     <div class="rows">
       {#if tab === 'home'}
         {#if sectionResumes.length}<ContinueRow items={sectionResumes} />{:else if resumeFailed}{#each rows.filter((r) => r.key === 'continue') as row (row.key)}<Shelf title={row.title} items={row.items} eager droppable />{/each}{/if}
+        {#if top.length >= 3}<TopTen items={top} />{/if}
         {#if theme?.items.length}<PosterRow title={theme.title} note={theme.subtitle || 'тема недели'} items={theme.items} />{/if}
         {#if recommended.length}<PosterRow title="Вам может понравиться" note="По любимым жанрам и фильмам" items={recommended} />{/if}
         {#if rewatch.length}<PosterRow title="Хотите пересмотреть?" items={rewatch} />{/if}

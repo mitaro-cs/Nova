@@ -222,3 +222,34 @@ pub fn of_title(app: &App, v: &Viewer, title: Option<i64>, ext: Option<&str>) ->
     out.sort_by_key(rank);
     Ok(out)
 }
+
+/// «Топ-10 Nova за неделю» (главная «Витрина», 23.11): что за 7 дней смотрело больше всего разных людей - свои фильмы
+/// и видео по ссылке (у фильма ленты - одна строка). Только то, что этот зритель может видеть.
+pub async fn top_week(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {
+    let since = now_ms() - 7 * 86_400_000;
+    let rows: Vec<(Option<i64>, Option<String>, i64, i64)> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT title, ext, COUNT(DISTINCT profile_id) AS n, MAX(at) FROM (
+               SELECT f.title_id AS title, NULL AS ext, p.profile_id, p.updated_at AS at
+               FROM progress p JOIN files f ON f.id = p.file_id WHERE p.updated_at > ?1
+               UNION ALL
+               SELECT l.title_id, l.ext_id, lp.profile_id, lp.updated_at
+               FROM link_progress lp JOIN links l ON l.id = lp.link_id WHERE lp.updated_at > ?1
+             ) GROUP BY COALESCE('t' || title, 'x' || ext) ORDER BY n DESC, MAX(at) DESC LIMIT 20",
+        )?;
+        let r = st.query_map([since], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        r.collect()
+    })?;
+    let mut out = Vec::new();
+    for (title, ext, n, at) in rows {
+        let now = Now { at, title, ext: if title.is_some() { None } else { ext }, label: String::new() };
+        if let Some(mut item) = render(&app, &v, std::slice::from_ref(&now))?.pop() {
+            item["viewers"] = json!(n);
+            out.push(item);
+        }
+        if out.len() == 10 {
+            break;
+        }
+    }
+    Ok(Json(json!(out)))
+}

@@ -72,6 +72,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/titles/{id}/watched", put(catalog::set_watched))
         .route("/api/titles/{id}/status", put(catalog::set_status))
         .route("/api/friends/activity", get(activity::friends))
+        .route("/api/top/week", get(activity::top_week))
         .route("/img/{name}", get(catalog::image))
         // люди
         .route("/api/titles/{id}/reviews", get(social::reviews).post(social::add_review))
