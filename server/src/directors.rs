@@ -184,7 +184,8 @@ pub async fn fetch(app: &Arc<App>, id: &str, role: &str) -> anyhow::Result<()> {
     works.dedup_by(|a, b| a.id == b.id);
     upsert(app, &works)?;
     let ids: Vec<String> = works.iter().map(|w| w.id.clone()).collect();
-    let photo_url = v["primaryImage"]["url"].as_str().map(|u| sized(u, 400));
+    // Портрет крупно (страница «Ретроспектива»: 300 px на компьютере при плотности 2-3) - 1200 px, а не 400.
+    let photo_url = v["primaryImage"]["url"].as_str().map(|u| sized(u, 1200));
     let (photo, _) = tokio::join!(
         async {
             match photo_url {

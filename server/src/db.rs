@@ -725,6 +725,10 @@ ALTER TABLE users ADD COLUMN consent_at INTEGER;
     r#"
 ALTER TABLE profiles ADD COLUMN reactions TEXT NOT NULL DEFAULT '[]';
 "#,
+    // 38: портреты людей кино теперь 1200 px (были 400) - при следующем открытии страницы человека скачать заново.
+    r#"
+UPDATE ext_people SET at = 0;
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции
