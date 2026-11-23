@@ -62,10 +62,10 @@ export function forgetLibrary() {
 // ---------- панель разделов (такая же, как на телефоне и компьютере) ----------
 
 const TABS: [string, string, string, IconName][] = [
-  ['home', '/', 'Главное', 'home'],
-  ['feed', '/feed', 'Что смотреть', 'squareplay'],
+  ['home', '/', 'Главная', 'home'],
+  ['feed', '/feed', 'Подбор', 'squareplay'],
   ['profile', '/profile', 'Профиль', 'user'],
-  ['my', '/my', 'Коллекция', 'bookmark'],
+  ['my', '/my', 'Моё', 'bookmark'],
   ['search', '/search', 'Поиск', 'search'],
 ];
 

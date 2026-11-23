@@ -12,11 +12,11 @@
   import type { ExtCard, NowItem } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
   import { toast } from '$lib/ui/toast.svelte';
-  import BrowseGenres from '$lib/ui/BrowseGenres.svelte';
+  import CatalogStrip from '$lib/ui/CatalogStrip.svelte';
   import Loading from '$lib/ui/Loading.svelte';
   import PosterWall from '$lib/social/PosterWall.svelte';
 
-  // Обзор как на IMDb: что смотрят друзья, «потому что вам понравилось», новинки, жанры, российское,
+  // Каталог («Всё»; разделы S1, 23.11) - бывший Обзор, как на IMDb: что смотрят друзья, «потому что вам понравилось», новинки, жанры, российское,
   // аниме, популярное и топ-250 (не только то, что есть у нас), поиск по всему IMDb, видео по ссылке.
   // У каждого фильма - своя страница `/ext/<id>`. Капсулы сверху - только фильмы или сериалы.
   type Row = { key: string; title: string; items: ExtCard[] };
@@ -112,11 +112,12 @@
   }
 </script>
 
+<CatalogStrip on="all" />
 <div class="rw-page">
   <section class="stage">
     <div class="wall" aria-hidden="true"><PosterWall posters={[]} prominent /></div>
     <div class="inner">
-      <h1>Обзор</h1>
+      <h1>Каталог</h1>
       <p class="lead">Что смотрит мир кино - и чего у вас пока нет.</p>
       <form class="find" role="search" onsubmit={submit}>
         <Icon name="search" size={22} />
@@ -126,8 +127,8 @@
       <div class="bar">
         <nav class="kinds" aria-label="Что показывать">
           <a class="chip" class:on={!kind} href="/discover">Всё</a>
-          <a class="chip" class:on={kind === 'movies'} href="/discover?kind=movies">Фильмы</a>
-          <a class="chip" class:on={kind === 'series'} href="/discover?kind=series">Сериалы</a>
+          <a class="chip" class:on={kind === 'movies'} href="/discover?kind=movies">Только фильмы</a>
+          <a class="chip" class:on={kind === 'series'} href="/discover?kind=series">Только сериалы</a>
         </nav>
         <div class="acts">
           <button class="btn" onclick={() => (finder = true)}><Icon name="link" size={18} /> Смотреть по ссылке</button>
@@ -156,7 +157,7 @@
     <section aria-label={full?.title ?? 'Подборка'}>
       <div class="head">
         <h2>{full?.title ?? ''}</h2>
-        <a class="muted" href="/discover"><Icon name="back" size={14} /> Обзор</a>
+        <a class="muted" href="/discover"><Icon name="back" size={14} /> Каталог</a>
       </div>
       {#if full}
         <div class="grid">{#each full.items as card, i (card.id)}<Poster {card} rank={chart.startsWith('top') ? i + 1 : null} {i} />{/each}</div>
@@ -176,7 +177,6 @@
     {/each}
   {:else if feed.rows.length}
     {#if !kind}<Spotlight rows={feed.rows} />{/if}
-    <BrowseGenres />
     {#if friendRows.length}<PosterRow title="Друзья смотрят" items={friendRows} />{/if}
     {#each rows as row, i (row.key)}
       <PosterRow title={row.title} items={row.items} href={row.key.startsWith('because') ? null : `/discover?chart=${row.key}`} ranked={row.key.startsWith('top')} {i} />

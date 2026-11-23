@@ -9,7 +9,7 @@ export const feedScreen: Screen = async (root) => {
     .filter((c) => c.status !== 'watched' && c.status !== 'dropped')
     .sort((a, b) => b.addedAt - a.addedAt)
     .slice(0, 24);
-  let h = bar('feed') + '<section class="page"><h1 class="title">Что смотреть</h1>';
+  let h = bar('feed') + '<section class="page"><h1 class="title">Подбор</h1>';
   if (!items.length) h += '<div class="empty small">Пока нечего предложить</div>';
   else {
     h += '<div class="feedgrid">';

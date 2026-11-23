@@ -170,7 +170,7 @@
       <h2 class="rw-h2">Трейлеры в герое</h2>
       <label class="switch">
         <input type="checkbox" bind:checked={trailers} onchange={() => { try { localStorage.setItem('nova-trailers', trailers ? 'on' : 'off'); } catch { /* приватный режим */ } }} />
-        <span>Трейлер сам играет без звука в герое главной и в ленте «Что смотреть». Выключите, чтобы экономить трафик.</span>
+        <span>Трейлер сам играет без звука в герое главной и в ленте «Подбора». Выключите, чтобы экономить трафик.</span>
       </label>
     </section>
     <section class="rw-block pane">

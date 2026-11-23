@@ -16,7 +16,7 @@ const bar = (page: Page) => page.getByRole('navigation', { name: 'Разделы
 const desk = (page: Page) => page.viewportSize()!.width > 1000;
 const top = (page: Page) => page.getByRole('navigation', { name: 'Разделы кинотеатра' });
 /** Перейти в раздел: на телефоне и планшете - нижней панелью, на компьютере - шапкой («Витрина»). */
-async function goTo(page: Page, name: 'Коллекция' | 'Что смотреть' | 'Профиль') {
+async function goTo(page: Page, name: 'Моё' | 'Подбор' | 'Каталог' | 'Профиль') {
   if (!desk(page)) return bar(page).getByRole('link', { name }).click();
   if (name === 'Профиль') return page.getByRole('link', { name: 'Мой профиль' }).click();
   return top(page).getByRole('link', { name }).click();
@@ -29,7 +29,8 @@ test('разделы: внизу на телефоне и планшете, св
   if (width > 1000) {
     // Компьютер («Витрина»): знак, разделы текстом, поиск, колокольчик и профиль - всё в шапке; нижней панели нет.
     await expect(bar(page)).toBeHidden();
-    const labels = [/Главная/, /Что смотреть/, /Фильмы/, /Сериалы/, ...(width >= 1280 ? [/Аниме/] : []), /Обзор/, /Коллекция/];
+    // Четыре раздела (S1, 23.11): Фильмы, Сериалы и Аниме - полосой внутри Каталога.
+    const labels = [/Главная/, /Подбор/, /Каталог/, /Моё/];
     await expect(top(page).getByRole('link')).toHaveText(labels);
     await expect(page.getByRole('searchbox', { name: 'Быстрый поиск' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Мой профиль' })).toBeVisible();
@@ -41,12 +42,12 @@ test('разделы: внизу на телефоне и планшете, св
   } else {
     const links = bar(page).getByRole('link');
     // У вкладки «Профиль» бывает число (просьбы и сообщения) - название всё равно в тексте.
-    await expect(links).toHaveText([/Главное/, /Что смотреть/, /Профиль/, /Коллекция/, /Поиск/]);
+    await expect(links).toHaveText([/Главная/, /Подбор/, /Каталог/, /Моё/, /Профиль/]);
     // Фон панели - сплошной (цвет дизайна менялся), главное - что она не прозрачная.
     await expect(bar(page)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const box = await bar(page).boundingBox();
     expect(box!.y + box!.height).toBeGreaterThan(height - 2);
-    for (const name of ['Главное', 'Что смотреть', 'Профиль', 'Коллекция', 'Поиск']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
+    for (const name of ['Главная', 'Подбор', 'Каталог', 'Моё', 'Профиль']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
   }
   // Аватарного меню в шапке больше нет: профиль - ссылка.
   await expect(page.getByRole('button', { name: /^Меню/ })).toHaveCount(0);
@@ -55,12 +56,18 @@ test('разделы: внизу на телефоне и планшете, св
 test('разделы ведут на свои страницы', async ({ page }) => {
   await offline(page);
   await page.goto(url('/'));
-  await goTo(page, 'Коллекция');
+  await goTo(page, 'Моё');
   await expect(page).toHaveURL(/\/my$/);
-  await expect(page.getByRole('heading', { name: 'Коллекция', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Моё', level: 1 })).toBeVisible();
   await expect(page.locator('main').getByRole('link', { name: /Подборки/ })).toBeVisible();
-  await goTo(page, 'Что смотреть');
+  await goTo(page, 'Подбор');
   await expect(page).toHaveURL(/\/feed$/);
+  await expect(page.getByRole('heading', { name: 'Подбор', level: 1 })).toBeVisible();
+  await goTo(page, 'Каталог');
+  await expect(page).toHaveURL(/\/discover$/);
+  // Внутри Каталога - полоса «Всё · Фильмы · Сериалы · Аниме».
+  await page.getByRole('navigation', { name: 'Каталог' }).getByRole('link', { name: 'Сериалы' }).click();
+  await expect(page).toHaveURL(/tab=series$/);
   await goTo(page, 'Профиль');
   await expect(page).toHaveURL(/\/people\/\d+$/);
   // Чаты, подборки и выход - на странице профиля (в меню аватара их больше нет).
@@ -72,7 +79,7 @@ test('разделы ведут на свои страницы', async ({ page }
 test('полоса разделов и кнопки героя - на всех ширинах', async ({ page }) => {
   await offline(page);
   await page.goto(url('/?tab=movies'));
-  await expect(page.getByRole('navigation', { name: 'Разделы кинотеатра' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Каталог' })).toBeVisible();
   const hero = page.getByRole('region', { name: 'Рекомендуем' });
   await expect(hero.getByRole('link', { name: /Смотреть|Продолжить/ })).toBeVisible();
   await expect(hero.getByRole('button', { name: 'Не интересно' })).toBeVisible();
@@ -88,8 +95,7 @@ test('кнопка героя белая, цвета фильма нет', async
   expect(await page.evaluate(() => document.documentElement.getAttribute('style') ?? '')).not.toContain('--film');
 });
 
-test('пустая библиотека: полоса разделов не уезжает под шапку', async ({ page }, info) => {
-  test.skip(info.project.name === 'desktop', 'на компьютере разделы - в шапке (капсула), отдельной полосы нет');
+test('пустая библиотека: полоса каталога не уезжает под шапку', async ({ page }) => {
   await offline(page);
   await page.route('**/api/library', async (route) => {
     const res = await route.fetch();
@@ -97,7 +103,7 @@ test('пустая библиотека: полоса разделов не уе
     await route.fulfill({ response: res, json: Array.isArray(json) ? [] : { ...json, items: [], recent: [] } });
   });
   await page.goto(url('/?tab=movies'));
-  const strip = await page.getByRole('navigation', { name: 'Разделы кинотеатра' }).boundingBox();
+  const strip = await page.getByRole('navigation', { name: 'Каталог' }).boundingBox();
   const header = await page.locator('header').boundingBox();
   expect(strip && header && strip.y >= header.y + header.height - 1).toBe(true);
 });
@@ -120,7 +126,7 @@ test('постеры растут вместе с экраном', async ({ page
   await expectClean(page, 'коллекция');
 });
 
-test('«Что смотреть»: кадр из фильма и краткая информация', async ({ page }) => {
+test('«Подбор»: кадр из фильма и краткая информация', async ({ page }) => {
   await offline(page);
   await page.goto(url('/feed'));
   const card = page.locator('.fc').first();
@@ -130,7 +136,7 @@ test('«Что смотреть»: кадр из фильма и краткая 
   await expect(card.locator('.shot img')).toBeVisible();
 });
 
-test('«Что смотреть» на компьютере - на всю ширину, кадр слева', async ({ page }, info) => {
+test('«Подбор» на компьютере - на всю ширину, кадр слева', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'только компьютер');
   await offline(page);
   await page.goto(url('/feed'));

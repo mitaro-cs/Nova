@@ -53,7 +53,7 @@ test('новая страница открывается сверху, а по �
       return page.evaluate(() => document.body.scrollTop);
     })
     .toBeGreaterThan(100);
-  await page.locator('nav.tabs').getByRole('link', { name: 'Коллекция' }).click();
+  await page.locator('nav.tabs').getByRole('link', { name: 'Моё' }).click();
   await expect(page).toHaveURL(/\/my$/);
   await expect.poll(() => page.evaluate(() => document.body.scrollTop)).toBe(0);
   await page.goBack();

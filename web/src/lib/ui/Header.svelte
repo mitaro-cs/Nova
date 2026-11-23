@@ -11,9 +11,8 @@
   import Logo from './Logo.svelte';
 
   // Шапка: слева знак, справа колокольчик (просьбы дружбы, сообщения, просьбы зрителей) и у хоста «добавить».
-  // Разделы - одна панель из пяти вкладок внизу на телефоне, планшете и компьютере (на телевизоре такая же,
-  // `web/tv`): Главное, Что смотреть, Профиль, Коллекция, Поиск. Люди, Чаты, Подборки и остальное - на странице
-  // «Профиль».
+  // Разделы на телефоне и планшете - панель из пяти вкладок внизу: Главная, Подбор, Каталог, Моё, Профиль (поиск -
+  // в Каталоге и значком в шапке главной). Люди, чаты и остальное - на странице «Профиль».
   let scrolled = $state(false);
   let menu = $state(false);
   // Лист колокольчика грузится по нажатию: бюджет JS главной.
@@ -58,18 +57,19 @@
 
   // Компьютер («Витрина»): вся навигация сверху - знак, разделы текстом с «бегущей» чертой под выбранным, поиск с
   // фильтром, колокольчик и карточка профиля. Нижней панели на компьютере нет (она остаётся на телефоне и планшете).
+  // Четыре раздела (S1, выбор владельца 23.11): Главная, Подбор (бывшее «Что смотреть» + «Под настроение»), Каталог
+  // (бывшие Обзор, Фильмы, Сериалы, Аниме - полосой внутри), Моё (бывшая Коллекция + подборки).
   const NAV: { id: string; to: string; label: string; wide?: boolean }[] = [
     { id: 'home', to: '/', label: 'Главная' },
-    { id: 'feed', to: '/feed', label: 'Что смотреть' },
-    { id: 'movies', to: '/?tab=movies', label: 'Фильмы' },
-    { id: 'series', to: '/?tab=series', label: 'Сериалы' },
-    { id: 'anime', to: '/?tab=anime', label: 'Аниме', wide: true },
-    { id: 'discover', to: '/discover', label: 'Обзор' },
-    { id: 'my', to: '/my', label: 'Коллекция' },
+    { id: 'feed', to: '/feed', label: 'Подбор' },
+    { id: 'catalog', to: '/discover', label: 'Каталог' },
+    { id: 'my', to: '/my', label: 'Моё' },
   ];
+  const inCatalogPath = (p: string, q: Pick<URLSearchParams, 'get'>) =>
+    (p === '/' && tabOf(q) !== 'home') || ['/discover', '/franchise', '/search', '/movies', '/series'].some((x) => p.startsWith(x));
   const activeNav = $derived(
-    path === '/' ? tabOf(navigationUrl.searchParams) : path.startsWith('/feed') ? 'feed' : path.startsWith('/discover') ? 'discover'
-      : path.startsWith('/my') || path.startsWith('/lists') ? 'my' : null,
+    path === '/' && tabOf(navigationUrl.searchParams) === 'home' ? 'home' : inCatalogPath(path, navigationUrl.searchParams) ? 'catalog'
+      : path.startsWith('/feed') ? 'feed' : path.startsWith('/my') || path.startsWith('/lists') ? 'my' : null,
   );
   // Черта под выбранным разделом: одна на всех, плавно переезжает (только transform и ширина через scaleX).
   let navEl = $state<HTMLElement>();
@@ -99,7 +99,8 @@
     const v = q.trim();
     void goto(v ? `/search?q=${encodeURIComponent(v)}` : '/search');
   }
-  const inHome = $derived(path === '/' || path.startsWith('/discover'));
+  const inHome = $derived(activeNav === 'home');
+  const inCatalog = $derived(activeNav === 'catalog');
   const inFeed = $derived(path.startsWith('/feed'));
   const inCollection = $derived(path.startsWith('/my') || path.startsWith('/lists'));
   // Вкладка «Профиль»: своя страница, оформление, люди, чаты и управление.
@@ -150,17 +151,16 @@
   {#if Menu}<Menu close={() => (menu = false)} />{/if}
 {/if}
 
-<!-- Одна панель на всех экранах (телефон, планшет, компьютер, телевизор), под большим пальцем. Фильмы, сериалы,
-     аниме и обзор - полосой разделов на главной; люди, чаты и подборки - в «Профиле» и «Коллекции». -->
+<!-- Панель телефона и планшета, под большим пальцем: те же четыре раздела и профиль. -->
 <nav class="tabs" aria-label="Разделы">
-  <a href="/" class:on={inHome} aria-current={inHome ? 'page' : undefined}><Icon name="home" size={24} /><span>Главное</span></a>
-  <a href="/feed" class:on={inFeed} aria-current={inFeed ? 'page' : undefined}><Icon name="squareplay" size={24} /><span>Что смотреть</span></a>
+  <a href="/" class:on={inHome} aria-current={inHome ? 'page' : undefined}><Icon name="home" size={24} /><span>Главная</span></a>
+  <a href="/feed" class:on={inFeed} aria-current={inFeed ? 'page' : undefined}><Icon name="squareplay" size={24} /><span>Подбор</span></a>
+  <a href="/discover" class:on={inCatalog} aria-current={inCatalog ? 'page' : undefined}><Icon name="grid" size={24} /><span>Каталог</span></a>
+  <a href="/my" class:on={inCollection} aria-current={inCollection ? 'page' : undefined}><Icon name="bookmark" size={24} /><span>Моё</span></a>
   <a href={profile ? `/people/${profile.id}` : '/profile'} class:on={inProfile} aria-current={inProfile ? 'page' : undefined}>
     <span class="ic"><Avatar avatar={profile?.avatar ?? 0} photo={profile?.photo} size={24} />{#if alert}<i class="num">{alert}</i>{/if}</span>
     <span>Профиль</span>
   </a>
-  <a href="/my" class:on={inCollection} aria-current={inCollection ? 'page' : undefined}><Icon name="bookmark" size={24} /><span>Коллекция</span></a>
-  <a href="/search" class:on={path === '/search'} aria-current={path === '/search' ? 'page' : undefined}><Icon name="search" size={24} /><span>Поиск</span></a>
 </nav>
 
 <style>

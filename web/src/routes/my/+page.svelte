@@ -22,10 +22,10 @@
   const empty = $derived(marks !== null && !marks.want.length && !marks.watching.length && !marks.watched.length);
 </script>
 
-<svelte:head><title>Коллекция - Nova</title></svelte:head>
+<svelte:head><title>Моё - Nova</title></svelte:head>
 
 <main class="my">
-  <h1>Коллекция</h1>
+  <h1>Моё</h1>
   {#if failed && !marks}
     <p class="note">Не удалось загрузить. Проверьте связь.</p>
   {:else if marks === null}
@@ -37,7 +37,7 @@
       {#if marks.watched.length}<PosterRow title="Просмотрено" items={marks.watched} />{/if}
     </div>
     {#if empty}
-      <p class="note">Здесь будет то, что вы отметите: «Хочу», «Смотрю» и «Просмотрено». Начните с <a href="/discover">обзора</a>.</p>
+      <p class="note">Здесь будет то, что вы отметите: «Хочу», «Смотрю» и «Просмотрено». Начните с <a href="/discover">каталога</a>.</p>
     {/if}
     <a class="lists" href="/lists">
       <Icon name="list" size={24} />

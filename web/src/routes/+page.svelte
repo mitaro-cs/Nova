@@ -9,7 +9,7 @@
   import type { Card, ExtCard, Marks, ResumeItem } from '$lib/types';
   import ContinueRow from '$lib/ui/ContinueRow.svelte';
   import Loading from '$lib/ui/Loading.svelte';
-  import BrowseGenres from '$lib/ui/BrowseGenres.svelte';
+  import CatalogStrip from '$lib/ui/CatalogStrip.svelte';
   import { counts, featured, filter, isAnime, ofTab, shelves, STATUSES, statusOf, tabOf, type Status } from '$lib/library';
   import { session } from '$lib/session.svelte';
   import Icon from '$lib/ui/Icon.svelte';
@@ -175,13 +175,8 @@
 </script>
 
 <div class="home" class:flat={tab !== 'home' && items !== null && !hero.length} class:homepage={tab === 'home'}>
-  <!-- Разделы полосой под шапкой, на всех ширинах. -->
-  <nav class="strip" aria-label="Разделы кинотеатра">
-    {#each [['/', 'home', 'Главная'], ['/?tab=movies', 'movies', 'Фильмы'], ['/?tab=series', 'series', 'Сериалы'], ['/?tab=anime', 'anime', 'Аниме']] as [to, id, label] (id)}
-      <a href={to} class:on={tab === id} aria-current={tab === id ? 'page' : undefined}>{label}</a>
-    {/each}
-    <a href="/discover">Обзор</a>
-  </nav>
+  <!-- Каталог (фильмы, сериалы, аниме): полоса «Всё · Фильмы · Сериалы · Аниме» на всех ширинах. На главной её нет. -->
+  {#if tab !== 'home'}<CatalogStrip on={tab === 'movies' || tab === 'series' || tab === 'anime' ? tab : 'all'} />{/if}
   {#if catalog.failed}
     <div class="page empty"><Icon name="offline" size={40} /> Не удалось загрузить - проверьте связь</div>
   {:else if items === null}
@@ -227,7 +222,6 @@
           <section class="feed-loading" aria-busy="true"><h2>Подбираем истории для вас</h2><div class="ph-cards">{#each Array(6) as _, i (i)}<span class="ph-card skeleton"></span>{/each}</div></section>
         {:else}
           {#each imdb.slice(0, 6) as row, i (row.key)}<PosterRow title={row.title} items={row.items} href="/discover?chart={row.key}" ranked={row.key.startsWith('top')} {i} />{/each}
-          <BrowseGenres />
           {#if !imdb.some((r) => r.items.length)}
             <section class="feed-empty"><h2>{feedFailed ? 'Подборки временно недоступны' : 'Выберите свою следующую историю'}</h2><p class="muted">{feedFailed ? 'Не удалось получить подборки. Ваша библиотека и поиск остаются под рукой.' : 'Находите фильмы через поиск и добавляйте их в планы на вечер.'}</p><div class="welcome-actions"><button class="btn" onclick={() => refresh++}>Обновить подборки</button><a class="btn" href="/search">Перейти к поиску</a></div></section>
           {/if}
@@ -308,38 +302,6 @@
     padding: 0 var(--edge);
   }
   .flat .rows { padding-top: 20px; }
-  /* Компьютер: разделы кинотеатра - в шапке, отдельной полосы нет. */
-  @media (min-width: 1001px) {
-    .home .strip { display: none; }
-  }
-  /* Полоса разделов липнет под шапкой. Нижняя и верхняя панели этих разделов не содержат. */
-  .strip {
-    position: sticky;
-    top: calc(var(--header) + env(safe-area-inset-top));
-    z-index: 45;
-    display: flex;
-    align-items: center;
-    gap: clamp(17px, 2vw, 28px);
-    height: 46px;
-    padding: 0 var(--gutter);
-    overflow-x: auto;
-    scrollbar-width: none;
-    background: #000;
-  }
-  .strip::-webkit-scrollbar { display: none; }
-  .strip a {
-    flex: none;
-    padding: 8px 0 6px;
-    border-bottom: 3px solid transparent;
-    color: #8e8e93;
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-    transition: color .15s;
-  }
-  .strip a:hover { color: #fff; }
-  .strip a.on { color: #fff; border-bottom-color: #fff; }
   @media (max-width: 640px) {
     .welcome { padding-top: 32px; }
     .home .ph-hero, .home .ph-hero.wait { height: clamp(440px, 130vw, 640px); min-height: 0; }

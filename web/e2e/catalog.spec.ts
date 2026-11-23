@@ -24,9 +24,9 @@ test('главная: герой, ряды и сериалы рядом с фи�
 });
 
 test('Фильмы: фильтр по статусу, отметки со страницы фильма', async ({ page }) => {
-  await page.goto(url('/'));
-  // На всех ширинах разделы - полосой на главной (в верхней и нижней панелях их нет).
-  await page.getByRole('navigation', { name: 'Разделы кинотеатра' }).getByRole('link', { name: 'Фильмы' }).click();
+  await page.goto(url('/discover'));
+  // Фильмы, сериалы и аниме - полосой внутри Каталога (разделы S1, 23.11).
+  await page.getByRole('navigation', { name: 'Каталог' }).getByRole('link', { name: 'Фильмы' }).click();
   await expect(page).toHaveURL(/tab=movies/);
   const chip = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) });
   await expect(chip('Хочу посмотреть')).toContainText('2');
