@@ -721,6 +721,10 @@ INSERT OR IGNORE INTO settings(key, value) VALUES ('video.catalogs', '[{"domain"
 ALTER TABLE users ADD COLUMN consent_version INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN consent_at INTEGER;
 "#,
+    // 37: свой набор смайликов для реакций в комнатах (до шести, JSON-список; пусто - набор по умолчанию).
+    r#"
+ALTER TABLE profiles ADD COLUMN reactions TEXT NOT NULL DEFAULT '[]';
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

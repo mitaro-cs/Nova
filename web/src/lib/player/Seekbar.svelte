@@ -11,6 +11,7 @@
     intro = null,
     trickplay = null,
     fileId = 0,
+    marks = [],
     onseek,
     ondrag,
   }: {
@@ -20,6 +21,8 @@
     intro?: [number, number] | null;
     trickplay?: Trickplay | null;
     fileId?: number;
+    /** Реакции зала (комната): смайлик над полосой на своей секунде, нажатие - перейти к моменту. */
+    marks?: { position: number; emoji: string }[];
     onseek: (t: number) => void;
     ondrag?: (dragging: boolean) => void;
   } = $props();
@@ -77,6 +80,11 @@
     {#if intro && duration}<i class="introzone" style:left="{(intro[0] / duration) * 100}%" style:width="{((intro[1] - intro[0]) / duration) * 100}%"></i>{/if}
     <i class="played" style:width="{dragging && hover !== null && duration ? (hover / duration) * 100 : playedPct}%"></i>
   </div>
+  {#if marks.length && duration}
+    <span class="marks" aria-hidden="true">
+      {#each marks.filter((m) => m.position <= duration) as m, i (i)}<span class="mk" style:left="{(m.position / duration) * 100}%" style:--lift="{(i % 3) * 14}px">{m.emoji}</span>{/each}
+    </span>
+  {/if}
   {#if hover !== null && duration}
     {#if thumb && trickplay}
       <span
@@ -94,6 +102,9 @@
 </div>
 
 <style>
+  .marks { position: absolute; left: 0; right: 0; bottom: 100%; height: 0; pointer-events: none; }
+  .mk { position: absolute; bottom: calc(2px + var(--lift)); font-size: 15px; line-height: 1; transform: translateX(-50%); filter: drop-shadow(0 2px 4px #0009); animation: mk-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+  @keyframes mk-in { from { opacity: 0; transform: translate(-50%, 6px) scale(0.6); } }
   .bar {
     position: relative;
     height: 24px;

@@ -24,6 +24,7 @@
     intro = null,
     trickplay = null,
     fileId = 0,
+    marks = [],
     volume,
     muted,
     qualityLabel = '',
@@ -66,6 +67,7 @@
     intro?: [number, number] | null;
     trickplay?: Trickplay | null;
     fileId?: number;
+    marks?: { position: number; emoji: string }[];
     volume: number;
     muted: boolean;
     qualityLabel?: string;
@@ -157,7 +159,7 @@
 
 <div class="bottom" class:hide={!shown} bind:clientHeight={bottomH} role="group" aria-label="Управление просмотром">
   <div class="cap">
-  <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} onseek={(t) => { onseek(t); nudge(); }} ondrag={(d) => { scrub = d; ondrag(d); }} />
+  <Seekbar {time} {duration} {bufferedPct} {intro} {trickplay} {fileId} {marks} onseek={(t) => { onseek(t); nudge(); }} ondrag={(d) => { scrub = d; ondrag(d); }} />
   <div class="row">
     <button class="ibtn tip mouse" data-tip={paused ? 'Смотреть (пробел)' : 'Пауза (пробел)'} aria-label={paused ? 'Смотреть' : 'Пауза'} onclick={ontoggle}><Icon name={paused ? 'play' : 'pause'} size={22} /></button>
     <button class="ibtn tip mouse" data-tip="Назад 10 с (←)" aria-label="Назад на 10 секунд" onclick={() => onskip(-10)}>

@@ -416,6 +416,37 @@ pub struct FavBody {
     value: bool,
 }
 
+#[derive(Deserialize)]
+pub struct ReactionsBody {
+    emojis: Vec<String>,
+}
+
+/// Свой набор смайликов для реакций в комнатах: до шести, без повторов; пустой список - набор по умолчанию.
+pub async fn set_reactions(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Json(b): Json<ReactionsBody>,
+) -> ApiResult<Json<Value>> {
+    let mut list: Vec<String> = Vec::new();
+    for e in b.emojis {
+        let e = e.trim().to_string();
+        if !super::rooms::emoji_ok(&e) {
+            return Err(ApiError::bad("bad_emoji", "В наборе - только смайлики"));
+        }
+        if !list.contains(&e) {
+            list.push(e);
+        }
+    }
+    if list.len() > 6 {
+        return Err(ApiError::bad("too_many", "Не больше шести смайликов"));
+    }
+    let json = serde_json::to_string(&list).unwrap_or_else(|_| "[]".into());
+    app.db.with(|c| c.execute("UPDATE profiles SET reactions = ? WHERE id = ?", params![json, v.profile.id]))?;
+    let shown: Vec<String> =
+        if list.is_empty() { super::rooms::REACTIONS.iter().map(|s| s.to_string()).collect() } else { list };
+    Ok(Json(json!({"reactions": shown})))
+}
+
 /// Один фильм в любимые или из них (с его страницы). Шестой фильм (или сериал) - нельзя: сначала убрать один.
 pub async fn set_favorite(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<FavBody>) -> ApiResult<Json<Value>> {
     if !valid_key(&b.key) {

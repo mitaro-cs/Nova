@@ -520,3 +520,45 @@ async fn empty_room_starts_with_the_first_video_in_the_queue() {
     assert_eq!(info["state"]["playing"], false);
     running.shutdown().await;
 }
+
+#[tokio::test]
+async fn hall_own_emoji_marks_and_votes() {
+    // Комната «Зал» (23.11): свои смайлики у каждого, реакции остаются отметками на полосе, голоса «что дальше».
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let me = host.json("/api/me").await;
+    assert_eq!(me["reactions"].as_array().unwrap().len(), 6, "по умолчанию - шесть смайликов");
+    let set = host.send("PUT", "/api/me/reactions", json!({"emojis": ["🍿", "😱", "🫶", "🍿"]})).await;
+    assert!(set.status().is_success());
+    assert_eq!(host.json("/api/me").await["reactions"], json!(["🍿", "😱", "🫶"]), "без повторов");
+    for bad in [json!({"emojis": ["ура"]}), json!({"emojis": ["😀", "😁", "😂", "🤣", "😃", "😄", "😅"]})]
+    {
+        assert_eq!(host.send("PUT", "/api/me/reactions", bad).await.status(), 400);
+    }
+    let room = host.send("POST", "/api/rooms", json!({})).await.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Любой смайлик, но не текст.
+    let ok = host.send("POST", &format!("/api/rooms/{room}/react"), json!({"emoji": "🫠", "position": 61.5})).await;
+    assert!(ok.status().is_success());
+    let text = host.send("POST", &format!("/api/rooms/{room}/react"), json!({"emoji": "lol"})).await;
+    assert_eq!(text.status(), 400);
+    let info = host.json(&format!("/api/rooms/{room}")).await;
+    assert_eq!(info["marks"][0]["emoji"], "🫠");
+    assert_eq!(info["marks"][0]["position"], 61.5);
+    // Голос за видео в очереди: второй раз - снять.
+    let res = host.send("POST", "/api/links", json!({"url": "https://example.com/hall.mp4", "label": "Зал"})).await;
+    let link = res.json::<Value>().await.unwrap()["id"].as_i64().unwrap();
+    assert!(
+        host.send("POST", &format!("/api/rooms/{room}/queue"), json!({"linkId": link})).await.status().is_success()
+    );
+    let item = host.json(&format!("/api/rooms/{room}")).await["queue"][0]["id"].as_u64().unwrap();
+    assert!(host.send("POST", &format!("/api/rooms/{room}/queue/{item}/vote"), json!({})).await.status().is_success());
+    let info = host.json(&format!("/api/rooms/{room}")).await;
+    assert_eq!(info["queue"][0]["votes"].as_array().unwrap().len(), 1);
+    assert_eq!(info["marks"], json!([]), "новое видео - с чистой полосы");
+    host.send("POST", &format!("/api/rooms/{room}/queue/{item}/vote"), json!({})).await;
+    assert_eq!(host.json(&format!("/api/rooms/{room}")).await["queue"][0]["votes"], json!([]));
+    running.shutdown().await;
+}

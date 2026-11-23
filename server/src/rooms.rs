@@ -51,7 +51,12 @@ pub struct Room {
     pub queue: Vec<Item>,
     pub current: Option<u64>,
     pub next_item: u64,
+    /// Реакции зала на полосе времени текущего видео: место (с), смайлик, кто. Новое видео - с чистой полосы.
+    pub marks: Vec<Value>,
 }
+
+/// Сколько отметок реакций держим на одно видео.
+pub const MARKS_MAX: usize = 300;
 
 /// Что стоит в очереди: фильм с сервиса (`file_id`) или видео по ссылке (`link_id`).
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +72,8 @@ pub struct Item {
     pub by: i64,
     pub by_name: String,
     pub approved: bool,
+    /// Кто голосует за это видео («что дальше»): порядок всё равно задаёт создатель, голоса ему подсказка.
+    pub votes: std::collections::BTreeSet<i64>,
 }
 
 /// В очереди не больше стольких видео, и не больше стольких чужих предложений от одного человека.
@@ -104,12 +111,13 @@ impl Room {
         json!({
             "type": "snapshot", "id": self.id, "ownerId": self.owner, "titleId": self.title_id,
             "state": self.current(), "members": self.members_json(), "chat": self.chat, "voice": self.voice,
-            "queue": self.queue, "current": self.current,
+            "queue": self.queue, "current": self.current, "marks": self.marks,
         })
     }
 
     /// Включить видео из очереди у всех с начала, на паузе (в пустой комнате - первое добавленное).
     fn start(&mut self, i: &Item) {
+        self.marks.clear();
         self.title_id = i.title_id;
         self.current = Some(i.id);
         self.state = State {
@@ -168,6 +176,7 @@ impl Rooms {
                 current: first.as_ref().map(|i| i.id),
                 next_item: 2,
                 queue: first.into_iter().collect(),
+                marks: Vec::new(),
             },
         );
         id
@@ -362,8 +371,30 @@ impl Rooms {
         })
     }
 
-    pub fn react(&self, id: &str, from: Value, emoji: &str) -> Option<()> {
-        self.with(id, |r| r.send(json!({"type": "react", "from": from, "emoji": emoji, "at": now_ms()})))
+    /// Реакция: всплывает у всех с аватаром автора и остаётся отметкой на полосе времени (`position` - секунда видео).
+    pub fn react(&self, id: &str, from: Value, emoji: &str, position: Option<f64>) -> Option<()> {
+        self.with(id, |r| {
+            let position = position.filter(|p| p.is_finite() && *p >= 0.0);
+            if let Some(p) = position {
+                if r.marks.len() >= MARKS_MAX {
+                    r.marks.remove(0);
+                }
+                r.marks.push(json!({"position": p, "emoji": emoji, "from": from["id"]}));
+            }
+            r.send(json!({"type": "react", "from": from, "emoji": emoji, "position": position, "at": now_ms()}))
+        })
+    }
+
+    /// Голос за видео в очереди: второй раз - снять. `None` - нет комнаты, `Some(false)` - нет такого видео.
+    pub fn vote(&self, id: &str, item: u64, profile: i64) -> Option<bool> {
+        self.with(id, |r| {
+            let Some(i) = r.queue.iter_mut().find(|i| i.id == item) else { return false };
+            if !i.votes.remove(&profile) {
+                i.votes.insert(profile);
+            }
+            r.queue_event();
+            true
+        })
     }
 
     /// Где сейчас идущие комнаты: (кто в них, файл, ссылка, место) - чтобы записать «смотреть дальше».

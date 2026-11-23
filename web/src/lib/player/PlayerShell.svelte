@@ -50,6 +50,7 @@
     onnext,
     onfinish,
     onNearEnd,
+    marks = [],
     children,
   }: {
     fileId?: number;
@@ -69,6 +70,8 @@
     onnext?: () => void;
     onfinish?: () => void;
     onNearEnd?: () => void;
+    /** Комната: реакции зала отметками на полосе перемотки. */
+    marks?: { position: number; emoji: string }[];
     children?: Snippet;
   } = $props();
 
@@ -975,6 +978,7 @@
   {@render children?.()}
 
   <Controls
+    {marks}
     title={src?.title ?? info?.title ?? ''}
     episode={info?.episode ?? ''}
     season={src?.season ?? info?.season ?? null}

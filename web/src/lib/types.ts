@@ -249,6 +249,8 @@ export interface Me {
   legal?: { version: number; accepted: number; needed: boolean };
   /** Любимые фильмы (до 5): «t:12» или «x:tt…». */
   favorites?: string[];
+  /** Свой набор смайликов для реакций в комнатах (до шести). */
+  reactions?: string[];
   hasPassword: boolean;
   manage: boolean;
   window: boolean;
@@ -526,10 +528,19 @@ export interface RoomItem {
   by: number;
   byName: string;
   approved: boolean;
+  /** Кто голосует за это видео «что дальше». */
+  votes?: number[];
+}
+
+/** Реакция зала на полосе времени: секунда видео, смайлик, кто. */
+export interface RoomMark {
+  position: number;
+  emoji: string;
+  from: number;
 }
 
 export type RoomEvent =
-  | { type: 'snapshot'; id: string; ownerId: number; titleId: number; state: RoomState; members: Who[]; chat: RoomChat[]; voice: number[]; queue?: RoomItem[]; current?: number | null }
+  | { type: 'snapshot'; id: string; ownerId: number; titleId: number; state: RoomState; members: Who[]; chat: RoomChat[]; voice: number[]; queue?: RoomItem[]; current?: number | null; marks?: RoomMark[] }
   | { type: 'queue'; queue: RoomItem[]; current: number | null }
   | { type: 'now'; titleId: number; state: RoomState; current: number | null }
   | { type: 'voice'; ids: number[] }
@@ -537,4 +548,4 @@ export type RoomEvent =
   | { type: 'state'; state: RoomState }
   | { type: 'members'; members: Who[] }
   | ({ type: 'chat' } & RoomChat)
-  | { type: 'react'; from: Who; emoji: string; at: number };
+  | { type: 'react'; from: Who; emoji: string; position?: number | null; at: number };

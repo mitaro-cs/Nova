@@ -5,7 +5,9 @@
   import PlayerShell from '$lib/player/PlayerShell.svelte';
   import type { PlayerSync } from '$lib/player/sync';
   import { session } from '$lib/session.svelte';
-  import type { RoomChat, RoomEvent, RoomItem, RoomState, Who } from '$lib/types';
+  import { clock } from '$lib/fmt';
+  import type { RoomChat, RoomEvent, RoomItem, RoomMark, RoomState, Who } from '$lib/types';
+  import EmojiPicker from '$lib/room/EmojiPicker.svelte';
   import { Voice } from '$lib/room/voice.svelte';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Icon from '$lib/ui/Icon.svelte';
@@ -14,7 +16,13 @@
   // всех сразу. Сбоку - кто в комнате и чат, внизу - реакции, летящие вверх по экрану. Связь -
   // поток событий сервера (EventSource), действия - обычные запросы.
   const id = $derived(page.params.id ?? '');
-  const REACTIONS = ['❤️', '😂', '😮', '😢', '🔥', '👏', '😱', '👍'];
+  // Комната «Зал» (23.11): у каждого свои смайлики (профиль, «Мои реакции»), реакция всплывает с аватаром и
+  // остаётся отметкой на полосе времени; зрители сидят внизу кадра (кто говорит - светится); голоса «что дальше» в
+  // очереди; время в чате («0:41:20») - ссылка на момент.
+  const DEFAULT_REACTIONS = ['❤️', '😂', '😮', '😢', '🔥', '👏'];
+  const myReactions = $derived(session.me?.reactions?.length ? session.me.reactions : DEFAULT_REACTIONS);
+  let picking = $state(false);
+  let marks = $state<RoomMark[]>([]);
 
   let room = $state<RoomState | null>(null);
   let receivedAt = 0;
@@ -35,7 +43,7 @@
   let inviting = $state(false);
   let friends = $state<Who[] | null>(null);
   let invited = $state<number[]>([]);
-  let flying = $state<{ key: number; emoji: string; x: number; who: string }[]>([]);
+  let flying = $state<{ key: number; emoji: string; x: number; who: Who }[]>([]);
   let feed = $state<HTMLElement>();
   // Видео по ссылке (фильм из Обзора): поток через сервер - узнаём один раз.
   let linkSrc = $state<{ url: string; hls: boolean; dash?: boolean; title: string; linkId: number; start: number } | null>(null);
@@ -71,7 +79,7 @@
   }
 
   let key = 0;
-  function fly(emoji: string, who: string) {
+  function fly(emoji: string, who: Who) {
     const k = ++key;
     flying = [...flying, { key: k, emoji, x: 10 + Math.random() * 70, who }];
     setTimeout(() => (flying = flying.filter((f) => f.key !== k)), 2600);
@@ -98,6 +106,7 @@
         current = e.current ?? null;
         members = e.members;
         chat = e.chat;
+        marks = e.marks ?? [];
         setState(e.state);
         scrollChat();
       } else if (e.type === 'state') {if(sending)deferred=e.state;else setState(e.state);}
@@ -106,6 +115,7 @@
         queue = e.queue;
         current = e.current;
       } else if (e.type === 'now') {
+        marks = [];
         titleId = e.titleId;
         current = e.current;
         acceptedRevision = -1;
@@ -114,7 +124,10 @@
       else if (e.type === 'chat') {
         chat = [...chat.slice(-59), { from: e.from, body: e.body, at: e.at }];
         scrollChat();
-      } else if (e.type === 'react') fly(e.emoji, e.from.name);
+      } else if (e.type === 'react') {
+        fly(e.emoji, e.from);
+        if (e.position != null) marks = [...marks.slice(-299), { position: e.position, emoji: e.emoji, from: e.from.id }];
+      }
       else if (e.type === 'voice') voice?.setIds(e.ids);
       else if (e.type === 'signal' && e.to === session.me?.user.profile?.id) voice?.signal(e.from, e.data);
     };
@@ -178,7 +191,30 @@
   }
 
   function react(emoji: string) {
-    post(`/api/rooms/${id}/react`, { emoji }).catch(() => {});
+    post(`/api/rooms/${id}/react`, { emoji, position: room ? expected(room).position : null }).catch(() => {});
+  }
+  // Время в чате: «0:41:20» или «41:20» - ссылка на момент (перематывает всех, как обычная перемотка).
+  const TIME = /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g;
+  function parts(body: string): { text: string; at?: number }[] {
+    const out: { text: string; at?: number }[] = [];
+    let last = 0;
+    for (const m of body.matchAll(TIME)) {
+      const sec = m[1].split(':').reduce((a, n) => a * 60 + Number(n), 0);
+      if (m.index! > last) out.push({ text: body.slice(last, m.index) });
+      out.push({ text: m[1], at: sec });
+      last = m.index! + m[1].length;
+    }
+    if (last < body.length) out.push({ text: body.slice(last) });
+    return out;
+  }
+  function seekTo(at: number) {
+    if (!room) return;
+    sync.local({ fileId: room.fileId, playing: room.playing, position: at });
+    listeners.forEach((l) => l(expected(room!)));
+  }
+  function stamp() {
+    if (!room) return;
+    text = `${clock(expected(room).position)} ${text}`.trimEnd() + ' ';
   }
 
   async function openInvite() {
@@ -295,7 +331,7 @@
     {#if room.linkId && (!linkSrc || linkSrc.linkId !== room.linkId)}
       <div class="boot" aria-busy="true"><Icon name="party" size={36} /> Готовим видео с сайта…</div>
     {:else}
-    <PlayerShell fileId={room.fileId} src={room.linkId ? linkSrc : null} {sync} sidebar={side}>
+    <PlayerShell fileId={room.fileId} src={room.linkId ? linkSrc : null} {sync} sidebar={side} {marks}>
       <div class="room" class:closed={!side}>
         <div class="room-status" role="status"><Icon name="party" size={14}/><span>Смотрим вместе</span><i class:online={connection === 'online'}></i><small>{error || (connection === 'online' ? `${members.length} участн.` : 'Восстанавливаем связь…')}</small></div>
         <button class="toggle" aria-label={side ? 'Спрятать чат' : 'Показать чат'} aria-expanded={side} onclick={() => (side = !side)}>
@@ -356,6 +392,7 @@
                   <li class:now={q.id === current}>
                     <span class="src">{q.source}</span>
                     <span class="nm"><b>{q.label}</b><small>{q.id === current ? 'играет · ' : ''}{q.byName}</small></span>
+                    {#if q.id !== current}<button class="vote" class:on={!!me && !!q.votes?.includes(me)} aria-pressed={!!me && !!q.votes?.includes(me)} aria-label="Голос за «{q.label}»" onclick={() => act(`/${q.id}/vote`)}>▲ {q.votes?.length ?? 0}</button>{/if}
                     {#if owner}
                       <button class="sq" aria-label="Выше" disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
                       <button class="sq" aria-label="Ниже" disabled={i === ready.length - 1} onclick={() => move(i, 1)}>↓</button>
@@ -387,24 +424,34 @@
               {#each chat as m, i (i)}
                 <li class="msg" class:mine={m.from.id === me}>
                   <Avatar avatar={m.from.avatar} photo={m.from.photo} size={22} />
-                  <span><b>{m.from.name}</b> {m.body}</span>
+                  <span><b>{m.from.name}</b> {#each parts(m.body) as p, k (k)}{#if p.at != null}<button class="ts" onclick={() => seekTo(p.at!)} aria-label="Перейти к {p.text}">{p.text}</button>{:else}{p.text}{/if}{/each}</span>
                 </li>
               {/each}
             </ol>
             {#if voice?.error}<p class="error">{voice.error}</p>{/if}
             {#if error}<p class="error">{error}</p>{/if}
             <form class="say" onsubmit={say}>
+              <button class="btn sm icon ghost" type="button" aria-label="Отметить момент" title="Вставить текущее время - его можно нажать" onclick={stamp}><Icon name="clock" size={15} /></button>
               <input class="input" bind:value={text} maxlength="500" placeholder="Сообщение…" aria-label="Сообщение в комнату" />
               <button class="btn sm icon" aria-label="Отправить" disabled={!text.trim()}><Icon name="send" size={16} /></button>
             </form>
             {/if}
           </aside>
         {/if}
+        <!-- Зал: кто смотрит - внизу кадра; кто говорит в голосовом чате - светится. -->
+        {#if members.length > 1}
+          <ul class="seats" aria-label="Зрители в зале">
+            {#each members.slice(0, 8) as m (m.id)}
+              <li class:talk={voice?.speaking[m.id]} class:mic={voice?.ids.includes(m.id)} title="{m.name}{voice?.ids.includes(m.id) ? ' · в голосовом чате' : ''}"><Avatar avatar={m.avatar} photo={m.photo} size={34} /><small>{m.name}</small></li>
+            {/each}
+          </ul>
+        {/if}
         <div class="reacts" role="group" aria-label="Реакции">
-          {#each REACTIONS as r (r)}<button onclick={() => react(r)} aria-label="Реакция {r}">{r}</button>{/each}
+          {#each myReactions as r (r)}<button onclick={() => react(r)} aria-label="Реакция {r}">{r}</button>{/each}
+          <button class="edit" onclick={() => (picking = true)} aria-label="Мои реакции" title="Выбрать свои смайлики"><Icon name="pencil" size={14} /></button>
         </div>
         {#each flying as f (f.key)}
-          <span class="fly" style:left="{f.x}%" aria-hidden="true"><em>{f.emoji}</em><small>{f.who}</small></span>
+          <span class="fly" style:left="{f.x}%" aria-hidden="true"><span class="fa"><Avatar avatar={f.who.avatar} photo={f.who.photo} size={22} /><em>{f.emoji}</em></span><small>{f.who.name}</small></span>
         {/each}
       </div>
     </PlayerShell>
@@ -413,8 +460,23 @@
 {:else}
   <div class="boot" aria-busy="true"><Icon name="party" size={36} /> Входим в комнату…</div>
 {/if}
+<EmojiPicker bind:open={picking} />
 
 <style>
+  /* Зал: зрители внизу кадра, свои смайлики, голоса и время в чате. */
+  .seats { position: absolute; left: 50%; bottom: calc(var(--bottom-h, 120px) + 64px); z-index: 4; display: flex; gap: 10px; margin: 0; padding: 0; list-style: none; transform: translateX(-50%); pointer-events: none; transition: opacity 0.2s; }
+  .seats li { display: grid; justify-items: center; gap: 3px; }
+  .seats li :global(img), .seats li :global(.avatar) { border-radius: 50%; box-shadow: 0 0 0 2px #000; transition: box-shadow 0.2s; }
+  .seats li.mic :global(img), .seats li.mic :global(.avatar) { box-shadow: 0 0 0 2px #000, 0 0 0 3px #ffffff66; }
+  .seats li.talk :global(img), .seats li.talk :global(.avatar) { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff; }
+  .seats small { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ffffffcc; font-size: 11px; text-shadow: 0 1px 3px #000; }
+  :global(.player.idle) .seats { opacity: 0; }
+  .reacts .edit { display: grid; place-items: center; color: #c9c9cf; }
+  .fa { display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 3px; border-radius: 999px; background: #00000080; }
+  .fa :global(img), .fa :global(.avatar) { border-radius: 50%; }
+  .vote { flex: none; padding: 4px 8px; border: 1px solid #ffffff26; border-radius: 999px; background: none; color: #c9c9cf; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
+  .vote.on { background: #fff; color: #000; border-color: #fff; }
+  .ts { display: inline; padding: 0 6px; border: 0; border-radius: 999px; background: #fff; color: #000; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
   .boot {
     min-height: 100dvh;
     display: grid;
@@ -762,7 +824,7 @@
     transition: opacity 0.3s ease, transform 0.3s ease;
   }
   .fly {
-    bottom: calc(var(--bottom-h, 120px) + 64px);
+    bottom: calc(var(--bottom-h, 120px) + 124px);
   }
   :global(.player.idle) .room-status,
   :global(.player.idle) .room .toggle {

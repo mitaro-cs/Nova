@@ -4,7 +4,7 @@ import { expectClean, url } from './util';
 // «Управление → Обзор»: показатели, понятные подписи и два действия хозяина (кэш видео, копия базы).
 
 test('показатели обзора: цифры, активность, диск, качество', async ({ page }) => {
-  await page.goto(url('/admin'));
+  await page.goto(url('/admin?tab=overview'));
   const kpis = page.getByLabel('Главные цифры');
   await expect(kpis).toBeVisible();
   await expect(kpis).toContainText('Фильмов');
@@ -22,7 +22,7 @@ test('показатели обзора: цифры, активность, ди�
 });
 
 test('метрики с сервера: числа сходятся с библиотекой', async ({ page }) => {
-  await page.goto(url('/admin'));
+  await page.goto(url('/admin?tab=overview'));
   const data = await page.evaluate(async () => {
     const [m, s] = await Promise.all([fetch('/api/admin/metrics?tz=180').then((r) => r.json()), fetch('/api/admin/status').then((r) => r.json())]);
     return { m, s };
@@ -34,7 +34,7 @@ test('метрики с сервера: числа сходятся с библ�
 });
 
 test('копия базы делается по кнопке', async ({ page }) => {
-  await page.goto(url('/admin'));
+  await page.goto(url('/admin?tab=overview'));
   await page.getByRole('button', { name: /Копия базы сейчас/ }).click();
   await expect(page.getByText(/Копия базы готова/)).toBeVisible();
 });
@@ -44,7 +44,7 @@ test('кнопка очистки кэша согласована с его ра
   // Проверяем связь: кэша нет - кнопка недоступна, есть - доступна (на то же значение, что отдал сервер).
   const clear = page.getByRole('button', { name: /Очистить кэш видео/ });
   await expect(async () => {
-    await page.goto(url('/admin'));
+    await page.goto(url('/admin?tab=overview'));
     await expect(clear).toBeVisible();
     const m = await page.evaluate(() => fetch('/api/admin/metrics?tz=0').then((r) => r.json()));
     const empty = m.disk.hls + m.disk.copy + m.disk.cacheOther === 0;

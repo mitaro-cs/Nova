@@ -4,6 +4,7 @@
   import { api, errorText } from '$lib/api';
   import Access from '$lib/admin/Access.svelte';
   import Catalog from '$lib/admin/Catalog.svelte';
+  import HomeMap from '$lib/admin/HomeMap.svelte';
   import Folders from '$lib/admin/Folders.svelte';
   import Overview from '$lib/admin/Overview.svelte';
   import People from '$lib/admin/People.svelte';
@@ -18,6 +19,7 @@
   import type { IconName } from '$lib/ui/icons';
 
   const TABS: [string, string, IconName][] = [
+    ['map', 'Карта дома', 'home'],
     ['setup', 'Мастер', 'sparkle'],
     ['overview', 'Обзор', 'pulse'],
     ['folders', 'Папки', 'folder'],
@@ -29,17 +31,18 @@
     ['version', 'Версия', 'download'],
   ];
   const GROUPS: { name: string; ids: string[] }[] = [
-    { name: 'Библиотека', ids: ['setup', 'overview', 'folders', 'catalog'] },
+    { name: 'Библиотека', ids: ['map', 'setup', 'overview', 'folders', 'catalog'] },
     { name: 'Люди', ids: ['people', 'wishes'] },
     { name: 'Система', ids: ['access', 'settings', 'version'] },
   ];
   const TAB = Object.fromEntries(TABS.map(([id, label, icon]) => [id, { label, icon }])) as Record<string, { label: string; icon: IconName }>;
   // Значки разделов - белые и серые, без цветов-украшений (решение владельца, 2 ноября): цвет в управлении значит
   // только состояние - зелёный «работает», красный «ошибка».
-  const TONE: Record<string, string> = Object.fromEntries(['setup', 'overview', 'folders', 'catalog', 'people', 'wishes', 'access', 'settings', 'version'].map((id) => [id, '#e4e4e7']));
+  const TONE: Record<string, string> = Object.fromEntries(['map', 'setup', 'overview', 'folders', 'catalog', 'people', 'wishes', 'access', 'settings', 'version'].map((id) => [id, '#e4e4e7']));
 
   // Что в каждом разделе и что там можно сделать - хост видит это сверху раздела.
   const INFO: Record<string, { hint: string; title: string; text: string; can: string[] }> = {
+    map: { hint: 'Вся система на одной схеме', title: 'Карта дома', text: 'Откуда берутся фильмы, сама Nova, выход в интернет и кто смотрит прямо сейчас. Нажмите на карточку - справа откроются её настройки.', can: ['Увидеть, всё ли работает', 'Открыть настройки любой части', 'Посмотреть, кто и что смотрит'] },
     setup: { hint: 'Пять шагов до готовности', title: 'Настройка сервера', text: 'Папка, описания, доступ и люди по шагам. Проверки идут сами, а справа видно, что получится у зрителей.', can: ['Пройти настройку по шагам', 'Проверить скорость раздачи', 'Вернуться к любому шагу'] },
     overview: { hint: 'Всё ли работает', title: 'Обзор', text: 'Состояние Nova одним взглядом: что работает, что требует внимания и кто сейчас смотрит.', can: ['Проверить, всё ли в порядке', 'Скопировать адрес для друзей', 'Увидеть, кто и что смотрит'] },
     folders: { hint: 'Где лежат фильмы', title: 'Папки', text: 'Папки на этом компьютере или внешнем диске, из которых Nova берёт фильмы и сериалы. Новые файлы подхватываются сами.', can: ['Добавить или убрать папку', 'Перетащить файлы в своё место для фильмов', 'Посмотреть, как называть папки и файлы'] },
@@ -51,8 +54,8 @@
     version: { hint: 'Обновления', title: 'Версия', text: 'Какая версия Nova установлена и как обновиться. Фильмы, люди и настройки при обновлении сохраняются.', can: ['Узнать версию', 'Обновить Nova'] },
   };
 
-  const tab = $derived(page.url.searchParams.get('tab') ?? 'overview');
-  const info = $derived(INFO[tab] ?? INFO.overview);
+  const tab = $derived(page.url.searchParams.get('tab') ?? 'map');
+  const info = $derived(INFO[tab] ?? INFO.map);
   let status = $state<Status | null>(null);
   let statusError = $state('');
 
@@ -123,7 +126,8 @@
     </header>
     {#if statusError}<p class="error" role="alert">Не удалось обновить показатели: {statusError} <button class="btn sm" onclick={reload}>Повторить</button></p>{/if}
     {#if status}
-      {#if tab === 'setup'}<Wizard {status} {reload} window={!!session.me?.window} />
+      {#if tab === 'map'}<HomeMap {status} {reload} window={!!session.me?.window} />
+      {:else if tab === 'setup'}<Wizard {status} {reload} window={!!session.me?.window} />
       {:else if tab === 'overview'}<Overview {status} {reload} />
       {:else if tab === 'folders'}<Folders {status} window={!!session.me?.window} {reload} />
       {:else if tab === 'catalog'}<Catalog />

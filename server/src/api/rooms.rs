@@ -20,7 +20,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Реакции поверх видео - только эти.
-const REACTIONS: &[&str] = &["❤️", "😂", "😮", "😢", "🔥", "👏", "😱", "👍"];
+/// Набор по умолчанию - у тех, кто ещё не выбрал свои смайлики.
+pub const REACTIONS: &[&str] = &["❤️", "😂", "😮", "😢", "🔥", "👏"];
+
+/// Смайлик, а не текст: 1-8 знаков, ни одной буквы, цифры или знака ASCII (флаги, ZWJ-сочетания и
+/// модификаторы кожи проходят).
+pub fn emoji_ok(s: &str) -> bool {
+    let n = s.chars().count();
+    (1..=8).contains(&n)
+        && s.len() <= 32
+        && s.chars().all(|c| !c.is_ascii() && !c.is_alphanumeric() && !c.is_whitespace())
+}
 
 fn me(app: &App, v: &Viewer) -> ApiResult<Value> {
     let p = app.db.with(|c| {
@@ -99,6 +109,7 @@ fn item_for(app: &App, v: &Viewer, file: Option<i64>, link: Option<i64>) -> ApiR
         by: v.profile.id,
         by_name,
         approved: false,
+        votes: Default::default(),
     };
     match (file, link) {
         (Some(f), _) => {
@@ -284,6 +295,9 @@ pub async fn chat(
 #[derive(Deserialize)]
 pub struct ReactBody {
     emoji: String,
+    /// Секунда видео, на которой отреагировали: отметка на полосе времени.
+    #[serde(default)]
+    position: Option<f64>,
 }
 
 pub async fn react(
@@ -293,11 +307,16 @@ pub async fn react(
     Json(b): Json<ReactBody>,
 ) -> ApiResult<Json<Value>> {
     guard(&app, &v, &id)?;
-    if !REACTIONS.contains(&b.emoji.as_str()) {
-        return Err(ApiError::bad("bad_emoji", "Такой реакции нет"));
+    if !emoji_ok(&b.emoji) {
+        return Err(ApiError::bad("bad_emoji", "Реакция - только смайлик"));
     }
+    let key = format!("react:{}", v.profile.id);
+    if app.message_limit.blocked(&key) {
+        return Err(ApiError::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Слишком часто - подождите минуту"));
+    }
+    app.message_limit.fail(&key);
     let who = me(&app, &v)?;
-    app.rooms.react(&id, who, &b.emoji).ok_or_else(no_room)?;
+    app.rooms.react(&id, who, &b.emoji, b.position).ok_or_else(no_room)?;
     Ok(Json(json!({"ok": true})))
 }
 
@@ -422,6 +441,17 @@ pub async fn queue_approve(
 ) -> ApiResult<Json<Value>> {
     owner_only(&app, &v, &id)?;
     app.rooms.approve(&id, item).filter(|ok| *ok).ok_or_else(ApiError::not_found)?;
+    Ok(Json(json!({"ok": true})))
+}
+
+/// Голос «что дальше» за видео в очереди (повторно - снять). Голосовать может любой в комнате.
+pub async fn queue_vote(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path((id, item)): Path<(String, u64)>,
+) -> ApiResult<Json<Value>> {
+    guard(&app, &v, &id)?;
+    app.rooms.vote(&id, item, v.profile.id).filter(|ok| *ok).ok_or_else(ApiError::not_found)?;
     Ok(Json(json!({"ok": true})))
 }
 
