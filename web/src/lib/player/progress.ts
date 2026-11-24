@@ -10,6 +10,8 @@ export interface ProgressOpts {
   net?: () => unknown;
   /** Перед отправкой (метка «это своё сохранение» для синхронизации между устройствами). */
   onSave?: () => void;
+  /** Сервер ответил: досмотрено (`done`), фильм только что стал «Просмотрено» (`watched`). */
+  onResult?: (r: { done: boolean; watched: boolean }) => void;
 }
 
 const MIN_GAP_MS = 5000;
@@ -40,6 +42,11 @@ export function createProgress(o: ProgressOpts) {
           body,
         }),
       )
+      .then(async (r) => {
+        if (!o.onResult || !(r instanceof Response) || !r.ok) return;
+        const j = (await r.json().catch(() => null)) as { done?: boolean; watched?: boolean } | null;
+        if (j) o.onResult({ done: !!j.done, watched: !!j.watched });
+      })
       .catch(() => {});
     return chain;
   }

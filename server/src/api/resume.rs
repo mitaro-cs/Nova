@@ -20,7 +20,7 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
         let Some(p) = c.resume.as_ref().filter(|p| {
             (p.position > 0.0 || (c.kind == "series" && taste.recent.contains(&c.id)))
                 && p.duration > 0.0
-                && p.position < p.duration * 0.95
+                && !super::play::finished(p.position, p.duration, None)
         }) else {
             continue;
         };
@@ -32,7 +32,7 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
     let rows:Vec<LinkResume>=app.db.with(|c|{
         let mut st=c.prepare("SELECT l.id,l.ext_id,p.position,p.duration,p.updated_at,l.season,l.episode
           FROM link_progress p JOIN links l ON l.id=p.link_id WHERE p.profile_id=?1 AND l.ext_id IS NOT NULL
-          AND p.position>0 AND p.duration>0 AND p.position<p.duration*0.95
+          AND p.position>0 AND p.duration>0 AND p.position<p.duration-MIN(MAX(p.duration*0.08,20),600,p.duration*0.25)
           AND NOT EXISTS(SELECT 1 FROM ext_dropped d WHERE d.profile_id=?1 AND d.ext_id=l.ext_id)
           AND NOT EXISTS(SELECT 1 FROM ext_marks m WHERE m.profile_id=?1 AND m.ext_id=l.ext_id AND m.status='watched')
           AND NOT EXISTS(SELECT 1 FROM link_progress newer JOIN links nl ON nl.id=newer.link_id WHERE newer.profile_id=?1 AND nl.ext_id=l.ext_id AND (newer.updated_at>p.updated_at OR(newer.updated_at=p.updated_at AND nl.id>l.id)))

@@ -153,7 +153,7 @@ pub async fn metrics(State(app): State<Arc<App>>, _m: Manager, Query(q): Query<M
                SELECT COALESCE('x' || l.ext_id, 't' || l.title_id, 'l' || l.id),
                       COALESCE('/ext/' || l.ext_id, '/title/' || l.title_id, '/watch/link/' || l.id),
                       COALESCE(e.title, t.title, l.label), COALESCE(e.year, t.year), COALESCE(e.kind, t.kind, 'movie'),
-                      lp.profile_id, lp.position >= lp.duration * 0.95, lp.updated_at
+                      lp.profile_id, lp.position >= lp.duration - MIN(MAX(lp.duration * 0.08, 20), 600, lp.duration * 0.25), lp.updated_at
                FROM link_progress lp JOIN links l ON l.id = lp.link_id
                LEFT JOIN ext_titles e ON e.id = l.ext_id LEFT JOIN titles t ON t.id = l.title_id
              ) GROUP BY k ORDER BY v DESC, MAX(at) DESC LIMIT 5",

@@ -24,6 +24,9 @@
   import { levelLabel, qualityName, qualityTier } from './quality-label';
   import { createVolumeControl } from './volume';
   import EndScreen from './EndScreen.svelte';
+  import Icon from '$lib/ui/Icon.svelte';
+  import { loadCatalog } from '$lib/catalog.svelte';
+  import { marksChanged } from '$lib/discover/sheet.svelte';
   import MomentSheet from './MomentSheet.svelte';
   import { loadPrefs, matchTrack, nightSaved, saveNight, savePrefs } from './memory';
   import { browserName, reportEvent } from './report';
@@ -313,6 +316,7 @@
       ended = false;
       nextPrepared = false;
       creditsSkipped = false;
+      doneSeen = false;
       subId = '';
       cues = [];
       elsewhere = null;
@@ -421,6 +425,21 @@
       return { mbit, stalls: stallCount, quality: shownQuality };
     },
     onSave: noteOwnSave,
+    onResult: ({ done, watched }) => {
+      if (!done || doneSeen) return;
+      doneSeen = true;
+      // Досмотрено - «Просмотрено» видно сразу: каталог и отметки перечитаются при следующем показе, а не через 15 с.
+      void loadCatalog(true);
+      marksChanged();
+      if (watched) markedWatched = true;
+    },
+  });
+  let markedWatched = $state(false);
+  let doneSeen = false;
+  $effect(() => {
+    if (!markedWatched) return;
+    const t = setTimeout(() => (markedWatched = false), 4000);
+    return () => clearTimeout(t);
   });
 
   $effect(() => {
@@ -469,6 +488,13 @@
   // ---------- заставка, титры, следующая серия ----------
   const canNext = $derived(!!info?.next || !!nextSource);
   const inIntro = $derived(inIntroAt(time, intro));
+  // Титры фильма (или последней серии): дальше смотреть нечего - «Пропустить титры» сразу ведёт к экрану конца,
+  // а место «на титрах» сервер уже считает досмотренным.
+  const movieCredits = $derived(!canNext && !sync && !ended && !error && info?.markers.credits != null && time >= info.markers.credits && time < duration - 1);
+  function skipCredits() {
+    video?.pause();
+    onEnded();
+  }
   const inCredits = $derived(
     inCreditsAt(time, { credits: info?.markers.credits ?? null, hasNext: !!info?.next, series: info?.kind === 'series', skipped: creditsSkipped, failed: !!error }),
   );
@@ -1013,6 +1039,8 @@
     failedFile={src ? 0 : fileId}
     failedLink={!!src}
     skipTo={inIntro && intro ? intro[1] : null}
+    skipCredits={movieCredits}
+    onskipcredits={skipCredits}
     next={(inCredits || (nextEpisode.left !== null && !inCredits)) && canNext
       ? { title: nextSource?.title ?? info?.nextInfo?.label ?? '', still: info?.nextInfo?.still ?? null, countdown: nextEpisode.left, inCredits }
       : null}
@@ -1047,6 +1075,9 @@
   <!-- Совместный просмотр: чат и реакции поверх видео (видны и во весь экран). -->
   {#if ended && !canNext && !sync && !error && info}
     <EndScreen titleId={info.titleId} linkId={src?.linkId ?? null} title={src?.title ?? info.title} onreplay={() => { ended = false; seek(0); toggle(); }} onback={back} />
+  {/if}
+  {#if markedWatched}
+    <p class="watched-chip" role="status"><Icon name="check" size={16} /> Отмечено: просмотрено</p>
   {/if}
   {#if moment !== null}
     <MomentSheet at={moment} title={src?.title ?? info?.title ?? ''} {fileId} linkId={src?.linkId ?? null} titleId={info?.titleId ?? 0} onclose={() => (moment = null)} />
@@ -1151,6 +1182,8 @@
 </div>
 
 <style>
+  .watched-chip { position: absolute; z-index: 7; top: max(18px, env(safe-area-inset-top)); left: 50%; display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 16px; border-radius: 999px; background: #fff; color: #000; font-size: 14px; font-weight: 700; transform: translateX(-50%); animation: chip-in 0.35s var(--ease, ease) both; pointer-events: none; }
+  @keyframes chip-in { from { opacity: 0; transform: translate(-50%, -8px); } }
   .player {
     position: fixed;
     inset: 0;

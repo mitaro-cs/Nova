@@ -729,6 +729,12 @@ ALTER TABLE profiles ADD COLUMN reactions TEXT NOT NULL DEFAULT '[]';
     r#"
 UPDATE ext_people SET at = 0;
 "#,
+    // 39: заставка и титры, найденные по кадрам (`library::markers`): JSON {"intro":[с, по]|null,"credits":с|null},
+    // и отпечатки начала серии (по кадру в секунду) - для сравнения серий одного сезона.
+    r#"
+ALTER TABLE files ADD COLUMN auto_markers TEXT;
+ALTER TABLE files ADD COLUMN head_hash BLOB;
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

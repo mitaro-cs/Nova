@@ -21,6 +21,8 @@
     failedFile = 0,
     failedLink = false,
     skipTo = null,
+    skipCredits = false,
+    onskipcredits,
     next = null,
     onback,
     onretry,
@@ -48,6 +50,9 @@
     failedFile?: number;
     failedLink?: boolean;
     skipTo?: number | null;
+    /** Начались титры фильма (дальше серии нет) - «Пропустить титры» ведёт к экрану конца. */
+    skipCredits?: boolean;
+    onskipcredits?: () => void;
     next?: { title: string; still: string | null; countdown: number | null; inCredits: boolean } | null;
     onback: () => void;
     onretry: () => void;
@@ -120,6 +125,8 @@
 
 {#if skipTo !== null}
   <button class="skip" class:low={!shown} onclick={() => onskipintro(skipTo)}>Пропустить заставку</button>
+{:else if skipCredits && onskipcredits}
+  <button class="skip" class:low={!shown} onclick={onskipcredits}>Пропустить титры</button>
 {/if}
 
 {#if next}

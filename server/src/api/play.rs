@@ -29,12 +29,14 @@ pub struct FileRow {
     pub episode: Option<i32>,
     pub name: Option<String>,
     pub trickplay: Option<String>,
+    /// Заставка и титры, найденные по кадрам (`library::markers`).
+    pub auto: Option<String>,
 }
 
 /// Файл, который этот профиль может смотреть (скрытое и «взрослое» в детском профиле - нет).
 pub fn file_row(app: &App, v: &Viewer, id: i64) -> ApiResult<FileRow> {
     let sql = format!(
-        "SELECT f.path, f.probe, t.title, t.id, t.kind, f.season, f.episode, f.name, f.trickplay
+        "SELECT f.path, f.probe, t.title, t.id, t.kind, f.season, f.episode, f.name, f.trickplay, f.auto_markers
          FROM files f JOIN titles t ON t.id = f.title_id WHERE f.id = ? AND f.missing = 0 AND {}",
         visible(v.profile.kids)
     );
@@ -50,6 +52,7 @@ pub fn file_row(app: &App, v: &Viewer, id: i64) -> ApiResult<FileRow> {
                 episode: r.get(6)?,
                 name: r.get(7)?,
                 trickplay: r.get(8)?,
+                auto: r.get(9)?,
             })
         })
     })?;
@@ -61,11 +64,11 @@ pub fn file_row(app: &App, v: &Viewer, id: i64) -> ApiResult<FileRow> {
 pub struct Markers {
     pub intro: Option<(f64, f64)>,
     pub credits: Option<f64>,
-    /// Отметил хост (иначе - из глав файла).
+    /// Отметил хост (иначе - из глав файла или по кадрам).
     pub manual: bool,
 }
 
-/// Заставка и титры: отметки хоста на сезон важнее глав файла.
+/// Заставка и титры: отметки хоста на сезон важнее глав файла, главы - найденного по кадрам.
 pub fn markers_for(app: &App, f: &FileRow) -> Markers {
     let season = f.season.unwrap_or(0);
     let manual: Option<(Option<f64>, Option<f64>, Option<f64>)> = app
@@ -81,6 +84,9 @@ pub fn markers_for(app: &App, f: &FileRow) -> Markers {
         .ok()
         .flatten();
     let (ch_intro, ch_credits) = f.probe.as_ref().map(|p| chapter_markers(&p.chapters, p.duration)).unwrap_or_default();
+    // Глав нет - то, что нашлось по кадрам.
+    let auto = crate::library::markers::parse(f.auto.as_deref());
+    let (ch_intro, ch_credits) = (ch_intro.or(auto.intro), ch_credits.or(auto.credits));
     match manual {
         Some((s, e, cr)) => Markers {
             intro: match (s, e) {
@@ -602,6 +608,18 @@ pub async fn save_progress(
     Ok(Json(json!({"ok": true, "done": done, "watched": watched})))
 }
 
+/// Досмотрено: начались титры (отметка хоста, глава или найденные по кадрам) или до конца осталось меньше 8 %
+/// (не меньше 20 с, но не больше четверти видео, и не больше 10 минут - у двухчасового фильма титры идут минут восемь-десять). Одно правило
+/// для своих файлов и видео по ссылке: закрыли на титрах - фильм уже «Просмотрено». В SQL то же -
+/// `position >= duration - MIN(MAX(duration * 0.08, 20), 600, duration * 0.25)` (`resume.rs`, `stats.rs`).
+pub fn finished(position: f64, duration: f64, credits: Option<f64>) -> bool {
+    if duration <= 0.0 {
+        return false;
+    }
+    let tail = (duration * 0.08).clamp(20.0, 600.0).min(duration * 0.25);
+    position >= duration - tail || credits.is_some_and(|c| c > duration * 0.5 && position >= c)
+}
+
 /// Записать место профиля в файле; вернуть (досмотрено, фильм/сериал стал «Просмотрено»).
 fn store_progress(
     app: &App,
@@ -612,9 +630,11 @@ fn store_progress(
     duration: f64,
 ) -> ApiResult<(bool, bool)> {
     let pos = position.min(duration);
-    // Досмотрено: начались титры или осталось меньше 7 %.
-    let credits = markers_for(app, f).credits;
-    let done = pos >= duration * 0.93 || credits.is_some_and(|c| pos >= c);
+    let done = finished(pos, duration, markers_for(app, f).credits);
+    // Начали смотреть то, где заставку и титры ещё не искали, - фоновая задача найдёт их сейчас, а не через 15 минут.
+    if f.auto.is_none() {
+        app.probe_kick.notify_one();
+    }
     app.db.with(|c| {
         c.execute(
             "INSERT INTO progress (profile_id, file_id, position, duration, done, updated_at) VALUES (?, ?, ?, ?, ?, ?)
@@ -636,7 +656,7 @@ pub fn save_room_place(app: &App, profiles: &[i64], file_id: i64, position: f64)
     }
     let row = app.db.with(|c| {
         c.query_row(
-            "SELECT f.probe, t.id, t.kind, f.season, f.episode, f.duration
+            "SELECT f.probe, t.id, t.kind, f.season, f.episode, f.duration, f.auto_markers
              FROM files f JOIN titles t ON t.id = f.title_id WHERE f.id = ? AND f.missing = 0",
             [file_id],
             |r| {
@@ -651,6 +671,7 @@ pub fn save_room_place(app: &App, profiles: &[i64], file_id: i64, position: f64)
                         episode: r.get(4)?,
                         name: None,
                         trickplay: None,
+                        auto: r.get(6)?,
                     },
                     r.get::<_, Option<f64>>(5)?,
                 ))
@@ -743,6 +764,20 @@ pub async fn get_progress(State(app): State<Arc<App>>, v: Viewer, Path(id): Path
 #[cfg(test)]
 mod net_tests {
     use super::*;
+
+    #[test]
+    fn finished_on_credits_or_last_eight_percent() {
+        // Двухчасовой фильм: закрыли на титрах за 9 минут до конца - досмотрено, за 15 - нет.
+        assert!(finished(7200.0 - 540.0, 7200.0, None));
+        assert!(!finished(7200.0 - 900.0, 7200.0, None));
+        // Найденные титры раньше - считаются они; титры в первой половине - ошибка, не верим.
+        assert!(finished(6000.0, 7200.0, Some(5900.0)));
+        assert!(!finished(3000.0, 7200.0, Some(2000.0)));
+        // Короткий ролик: хвост не меньше 20 с, пустая длина - не досмотрено.
+        assert!(finished(100.0, 120.0, None));
+        assert!(!finished(90.0, 120.0, None));
+        assert!(!finished(10.0, 0.0, None));
+    }
 
     #[test]
     fn only_known_qualities() {

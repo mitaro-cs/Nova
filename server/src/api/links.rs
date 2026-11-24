@@ -354,7 +354,7 @@ pub struct ProgressBody {
     duration: f64,
 }
 
-/// Где остановился у видео по ссылке. Фильм из ленты сам становится «Смотрю», досмотрен (95 %) -
+/// Где остановился у видео по ссылке. Фильм из ленты сам становится «Смотрю», досмотрен (`play::finished`) -
 /// «Просмотрел».
 pub async fn progress(
     State(app): State<Arc<App>>,
@@ -365,12 +365,13 @@ pub async fn progress(
     if !(b.position.is_finite() && b.duration.is_finite() && b.position >= 0.0 && b.duration > 0.0) {
         return Err(ApiError::bad("bad_progress", "Неверное место в видео"));
     }
-    store_link_progress(&app, v.profile.id, id, b.position, b.duration)?;
-    Ok(Json(json!({"ok": true})))
+    let (done, watched) = store_link_progress(&app, v.profile.id, id, b.position, b.duration)?;
+    Ok(Json(json!({"ok": true, "done": done, "watched": watched})))
 }
 
 /// Записать место профиля в видео по ссылке (и «Смотрю»/«Просмотрел» у фильма из ленты).
-pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration: f64) -> ApiResult<()> {
+/// Вернуть (досмотрено, фильм ленты стал «Просмотрено» только что).
+pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration: f64) -> ApiResult<(bool, bool)> {
     let target: Option<(Option<String>, Option<i64>, Option<i64>)> = app.db.with(|c| {
         c.query_row("SELECT ext_id, season, episode FROM links WHERE id = ?", [id], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
@@ -380,8 +381,8 @@ pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration:
     let (ext, season, episode) = target.ok_or_else(ApiError::not_found)?;
     let now = now_ms();
     let b = ProgressBody { position, duration };
-    let done = b.position >= b.duration * 0.95;
-    app.db.tx(|c| {
+    let done = super::play::finished(b.position.min(b.duration), b.duration, None);
+    let watched = app.db.tx(|c| {
         c.execute(
             "INSERT INTO link_progress (profile_id, link_id, position, duration, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(profile_id, link_id) DO UPDATE SET position = ?3, duration = ?4, updated_at = ?5",
@@ -397,16 +398,22 @@ pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration:
                 )?;
             }
             let status = if done && !series { "watched" } else { "watching" };
+            let before: Option<String> = c
+                .query_row("SELECT status FROM ext_marks WHERE profile_id = ? AND ext_id = ?", params![me, e], |r| {
+                    r.get(0)
+                })
+                .optional()?;
             c.execute(
                 "INSERT INTO ext_marks (profile_id, ext_id, status, at) VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(profile_id, ext_id) DO UPDATE SET status = ?3, at = ?4
                  WHERE ext_marks.status != 'watched' OR ?3 = 'watched'",
                 params![me, e, status, now],
             )?;
+            return Ok(status == "watched" && before.as_deref() != Some("watched"));
         }
-        Ok(())
+        Ok(false)
     })?;
-    Ok(())
+    Ok((done, watched))
 }
 
 /// Совместный просмотр видео по ссылке: место комнаты - у всех, кто в ней (длина - из ссылки; не знаем - не пишем).

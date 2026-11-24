@@ -248,11 +248,16 @@ async fn episode_links_resume_and_dropped_feed() {
     assert_eq!(resume[0]["duration"], 1200.0);
     assert_eq!(resume[0]["label"], "2 сезон, 3 серия");
     assert_eq!(resume[0]["href"], format!("/watch/link/{id}"));
-    assert!(
-        host.send("PUT", &format!("/api/links/{id}/progress"), json!({"position":1190,"duration":1200}))
-            .await
-            .status()
-            .is_success()
+    let r: Value = host
+        .send("PUT", &format!("/api/links/{id}/progress"), json!({"position":1110,"duration":1200}))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        (r["done"].clone(), r["watched"].clone()),
+        (json!(true), json!(false)),
+        "серия досмотрена на титрах, сериал - нет"
     );
     let marks = host.json("/api/me/marks").await;
     assert_eq!(host.json("/api/continue").await, json!([]), "досмотренная серия не предлагается как продолжение");
