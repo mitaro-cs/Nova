@@ -59,7 +59,9 @@
         // смотреть другой источник.
         const r = await api<{ position: number | null; duration: number | null }>(`/api/links/${want}/resume`).catch(() => null);
         const p = r?.position != null && r.duration ? { position: r.position, duration: r.duration } : l.progress;
-        const start = p && p.position < p.duration * 0.95 ? p.position : 0;
+        // Ссылка на момент (`?t=` - «Отметить момент» в плеере) главнее места, где остановились.
+        const at = Number(page.url.searchParams.get('t'));
+        const start = at > 0 ? at : p && p.position < p.duration * 0.95 ? p.position : 0;
         try {
           const s = await api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${want}/stream/source`);
           if (want === id) src = { ...s, title: fetchedTitle||l.label, linkId: l.id, start, season: l.season, episodeNo: l.episode };

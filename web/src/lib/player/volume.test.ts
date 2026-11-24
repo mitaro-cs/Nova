@@ -17,3 +17,18 @@ it('при запрете Web Audio не показывает фиктивные
   vi.stubGlobal('window',{AudioContext:Context});const video={volume:1,muted:false} as HTMLVideoElement;
   expect(await createVolumeControl(video).set(2)).toBe(1);expect(video.volume).toBe(1);
 });
+it('ночной звук: компрессор сжимает и поднимает громкость, днём - нейтрален',async()=>{
+  const param=()=>({setValueAtTime:vi.fn()});
+  const gain={gain:param(),connect:vi.fn(),disconnect:vi.fn()};
+  const comp={threshold:param(),ratio:param(),knee:param(),attack:param(),release:param(),connect:vi.fn(),disconnect:vi.fn()};
+  class Context{state='running';currentTime=0;destination={};resume=async()=>{};createGain=()=>gain;createDynamicsCompressor=()=>comp;createMediaElementSource=()=>({connect:vi.fn()});close=async()=>{};}
+  vi.stubGlobal('window',{AudioContext:Context});
+  const control=createVolumeControl({volume:1,muted:false} as HTMLVideoElement);
+  expect(await control.night(true)).toBe(true);
+  expect(comp.threshold.setValueAtTime).toHaveBeenLastCalledWith(-38,0);
+  expect(comp.ratio.setValueAtTime).toHaveBeenLastCalledWith(8,0);
+  expect(gain.gain.setValueAtTime).toHaveBeenLastCalledWith(1.7,0);
+  await control.night(false);
+  expect(comp.ratio.setValueAtTime).toHaveBeenLastCalledWith(1,0);
+  expect(gain.gain.setValueAtTime).toHaveBeenLastCalledWith(1,0);
+});

@@ -50,6 +50,10 @@
     onrate,
     onquality,
     onlevel,
+    night = false,
+    onnight,
+    skipAlways = null,
+    onskipalways,
   }: {
     panel: string;
     info: PlayInfo;
@@ -84,7 +88,23 @@
     onrate: (r: number) => void;
     onquality: (q: Quality) => void;
     onlevel: (i: number) => void;
+    /** Ночной звук: тихие диалоги громче, взрывы тише. */
+    night?: boolean;
+    onnight?: () => void;
+    /** Сериал с отмеченной заставкой: пропускать её самим (null - не сериал или заставки нет). */
+    skipAlways?: boolean | null;
+    onskipalways?: () => void;
   } = $props();
+
+  // Одно меню (23.11): озвучка, субтитры, качество и скорость - вкладками одной панели.
+  const TABBED = ['audio', 'subs', 'quality', 'speed'];
+  const tabs = $derived([
+    ...(info.play.audio.length > 1 ? [{ id: 'audio', label: 'Озвучка' }] : []),
+    ...(info.play.subs.length ? [{ id: 'subs', label: 'Субтитры' }] : []),
+    ...(linked ? (srcLevels.length ? [{ id: 'quality', label: 'Качество' }] : []) : origOk || ladder.length ? [{ id: 'quality', label: 'Качество' }] : []),
+    { id: 'speed', label: 'Скорость' },
+  ]);
+  const tabbed = $derived(TABBED.includes(panel) && tabs.length > 1);
 
   const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   const speedText = (r: number) => (r === 1 ? 'Обычная' : `×${String(r).replace('.', ',')}`);
@@ -92,7 +112,12 @@
   const sourceLevelLabel = (level: Level) => levelLabel(level, srcLevels);
 </script>
 
-<div class="panel" role="menu">
+<div class="panel" class:tabbed role="menu">
+  {#if tabbed}
+    <div class="ptabs" role="tablist" aria-label="Настройки звука и картинки">
+      {#each tabs as t (t.id)}<button role="tab" aria-selected={panel === t.id} class:on={panel === t.id} onclick={() => panel !== t.id && onpanel(t.id)}>{t.label}</button>{/each}
+    </div>
+  {/if}
   {#if panel === 'episodes'}
     <h4>Сезоны и серии</h4>
     <div class="episode-seasons">
@@ -115,6 +140,8 @@
     {#if info.titleId && info.kind === 'series'}<button role="menuitem" onclick={() => onpanel('episodes')}><Icon name="tv" size={18} /> Сезоны и серии</button>{/if}
     <button role="menuitem" onclick={() => onpanel('quality')}><Icon name="sliders" size={18} /> Качество <small>{qualityLabel}</small></button>
     <button role="menuitem" onclick={() => onpanel('speed')}><Icon name="play" size={18} /> Скорость <small>{speedText(rate)}</small></button>
+    {#if onnight}<button role="menuitemcheckbox" aria-checked={night} class="toggle" onclick={onnight}><Icon name="volume" size={18} /> Ночной звук <small>{night ? 'вкл' : 'выкл'}</small><i class="sw" class:on={night} aria-hidden="true"></i></button>{/if}
+    {#if skipAlways !== null && onskipalways}<button role="menuitemcheckbox" aria-checked={skipAlways} class="toggle" onclick={onskipalways}><Icon name="skip" size={18} /> Пропускать заставку в этом сериале<i class="sw" class:on={skipAlways} aria-hidden="true"></i></button>{/if}
     {#if onvolume}<label class="boost">Громкость · {Math.round(volume*100)}%<input aria-label="Громкость до 200%" type="range" min="0" max="2" step="0.02" value={volume} oninput={e=>onvolume?.(Number(e.currentTarget.value))} /><span>0% <b>100%</b> 200%</span></label>{/if}
     {#if info.play.subs.length}<button role="menuitem" onclick={() => onpanel('subs')}><Icon name="captions" size={18} /> Субтитры и размер</button>{/if}
     {#if info.play.audio.length > 1}<button role="menuitem" onclick={() => onpanel('audio')}><Icon name="audio" size={18} /> Озвучка</button>{/if}
@@ -214,6 +241,15 @@
 </div>
 
 <style>
+  .ptabs { position: sticky; top: -10px; z-index: 1; display: flex; gap: 4px; margin: -2px -2px 8px; padding: 4px; border-radius: 999px; background: #2a2a2e; }
+  .panel .ptabs button { flex: 1; justify-content: center; padding: 7px 6px; border-radius: 999px; color: #c9c9cf; font-size: 13px; font-weight: 700; }
+  .panel .ptabs button.on { background: #fff; color: #0a0a0b; }
+  .tabbed > h4:first-of-type { display: none; }
+  .panel button.toggle { position: relative; padding-right: 58px; }
+  .sw { position: absolute; right: 12px; top: 50%; width: 38px; height: 22px; margin-top: -11px; border-radius: 22px; background: #ffffff33; transition: background 0.2s; }
+  .sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+  .sw.on { background: #46c992; }
+  .sw.on::after { transform: translateX(16px); }
   .boost{display:grid;gap:10px;padding:12px;font-size:13px}.boost input{width:100%;accent-color:white}.boost span{display:flex;justify-content:space-between;color:#aaa;font-size:11px}.boost b{font-weight:400}
   .panel {
     position: absolute;

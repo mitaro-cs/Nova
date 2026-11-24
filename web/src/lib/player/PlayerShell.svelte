@@ -23,6 +23,9 @@
   import { createProgress, elsewherePosition } from './progress';
   import { levelLabel, qualityName, qualityTier } from './quality-label';
   import { createVolumeControl } from './volume';
+  import EndScreen from './EndScreen.svelte';
+  import MomentSheet from './MomentSheet.svelte';
+  import { loadPrefs, matchTrack, nightSaved, saveNight, savePrefs } from './memory';
   import { browserName, reportEvent } from './report';
   import { PlaySession, type Engine, type PlayEvent } from './session.svelte';
   import { inCredits as inCreditsAt, inIntro as inIntroAt, nearEnd, NextEpisode } from './skip.svelte';
@@ -88,6 +91,17 @@
   let sourceTracks:Partial<HlsEngine>|null=null;
   let quality = $state<Quality>('orig');
   let audio = $state(0);
+  // Память (23.11): ночной звук - общий; у сериала - озвучка, субтитры и «пропускать заставку».
+  let night = $state(nightSaved());
+  // «Отметить момент» (23.11): секунда, которой поделиться (null - окно закрыто).
+  let moment = $state<number | null>(null);
+  function markMoment() {
+    panel = '';
+    video?.pause();
+    moment = Math.floor(time);
+  }
+  let skipAlways = $state(false);
+  let autoSkipped = false;
   let hlsHeight = $state<number | null>(null);
   let srcLevels = $state<Level[]>([]);
   let srcLevel = $state(-1);
@@ -324,12 +338,23 @@
           void speed.then(value=>{if(resource===resourceGeneration)mbit=value;});
           info = i;
           audio = Math.max(0, defaultAudioTrack(i.play.audio));
+          // Сериал: как выбирали в прошлой серии - та же озвучка, те же субтитры, пропуск заставки.
+          const prefs = i.kind === 'series' ? loadPrefs(i.titleId) : {};
+          const sameAudio = matchTrack(i.play.audio, prefs.audio);
+          if (sameAudio) audio = sameAudio.index;
+          skipAlways = !!prefs.skipIntro;
+          autoSkipped = false;
           quality = slow || (mbit===null&&i.hls) ? 'auto' : startQuality(mbit, i.bitrate ?? null);
           if (quality === 'auto' && i.hls) say('Включили автоматическое качество');
+          const sameSubs = matchTrack(i.play.subs, prefs.subs);
           const forced = i.play.subs.find((x) => x.forced && x.lang?.startsWith('ru'));
-          if (forced) void pickSubs(forced.id);
+          if (sameSubs) void pickSubs(sameSubs.id);
+          else if (forced && prefs.subs !== null) void pickSubs(forced.id);
+          // Ссылка на момент (`?t=`, «Отметить момент») главнее места, где остановились.
+          const at = Number(new URL(location.href).searchParams.get('t'));
           const start = sync && remote
             ? remotePosition(remote, remoteAt, performance.now())
+            : at > 0 ? at
             : i.position > 5 && (!i.play.duration || i.position < i.play.duration - 20) ? i.position : 0;
           begin(start);
         },
@@ -458,6 +483,43 @@
   $effect(() => {
     if (ended && nextSource && !creditsSkipped) nextEpisode.start(5);
   });
+  // «Пропускать заставку в этом сериале»: один раз за серию, сразу как началась заставка.
+  $effect(() => {
+    if (!skipAlways || !inIntro || !intro || autoSkipped || sync) return;
+    autoSkipped = true;
+    untrack(() => seek(intro[1]));
+    say('Заставку пропустили');
+  });
+  // Ночной звук включается, как только готова звуковая цепочка видео.
+  $effect(() => {
+    const control = volumeControl;
+    if (!control || !night) return;
+    void control.night(true);
+  });
+  async function toggleNight() {
+    const on = !night;
+    const ok = volumeControl ? await volumeControl.night(on) : false;
+    night = on && ok;
+    saveNight(night);
+    say(night ? 'Ночной звук: тихие диалоги громче, взрывы тише' : 'Ночной звук выключен');
+    if (on && !ok) say('Браузер не дал изменить звук');
+  }
+  function toggleSkipAlways() {
+    skipAlways = !skipAlways;
+    if (info?.kind === 'series') savePrefs(info.titleId, { skipIntro: skipAlways });
+    say(skipAlways ? 'Заставку в этом сериале будем пропускать сами' : 'Заставку больше не пропускаем');
+  }
+  // Свой выбор дорожек в сериале запоминаем (а не то, что включилось само).
+  function chooseAudio(i: number) {
+    const t = info?.play.audio.find((a) => a.index === i);
+    if (t && info?.kind === 'series') savePrefs(info.titleId, { audio: { label: t.label, lang: t.lang } });
+    setAudio(i);
+  }
+  function chooseSubs(id: string) {
+    const t = info?.play.subs.find((x) => x.id === id);
+    if (info?.kind === 'series' && !src) savePrefs(info.titleId, { subs: t ? { label: t.label, lang: t.lang } : null });
+    void pickSubs(id);
+  }
 
   function goNext() {
     nextEpisode.cancel();
@@ -782,6 +844,14 @@
 
   function key(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // Открыто окно «Отметить момент»: Esc закрывает его, остальные клавиши - для поля подписи, а не плеера.
+    if (moment !== null) {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        moment = null;
+      }
+      return;
+    }
     if (e.target instanceof HTMLElement && e.target.closest('input, textarea, [contenteditable="true"]')) {
       // Фокус остался в поле (окно ссылки закрылось, чат комнаты): Esc - убрать фокус; поле не
       // в плеере (от прошлой страницы) - Esc работает как обычно.
@@ -975,10 +1045,17 @@
   />
 
   <!-- Совместный просмотр: чат и реакции поверх видео (видны и во весь экран). -->
+  {#if ended && !canNext && !sync && !error && info}
+    <EndScreen titleId={info.titleId} linkId={src?.linkId ?? null} title={src?.title ?? info.title} onreplay={() => { ended = false; seek(0); toggle(); }} onback={back} />
+  {/if}
+  {#if moment !== null}
+    <MomentSheet at={moment} title={src?.title ?? info?.title ?? ''} {fileId} linkId={src?.linkId ?? null} titleId={info?.titleId ?? 0} onclose={() => (moment = null)} />
+  {/if}
   {@render children?.()}
 
   <Controls
     {marks}
+    onmoment={duration ? markMoment : undefined}
     title={src?.title ?? info?.title ?? ''}
     episode={info?.episode ?? ''}
     season={src?.season ?? info?.season ?? null}
@@ -1059,8 +1136,12 @@
         panel = '';
         onwrong?.();
       }}
-      onaudio={setAudio}
-      onsubs={pickSubs}
+      onaudio={chooseAudio}
+      onsubs={chooseSubs}
+      {night}
+      onnight={toggleNight}
+      skipAlways={info?.kind === 'series' && !src && intro ? skipAlways : null}
+      onskipalways={toggleSkipAlways}
       onlook={setLook}
       onrate={setRate}
       onquality={setQuality}

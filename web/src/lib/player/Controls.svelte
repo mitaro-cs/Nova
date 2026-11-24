@@ -49,6 +49,7 @@
     onpanel,
     onnext,
     onpip,
+    onmoment,
     onfullscreen,
     onheight,
   }: {
@@ -92,6 +93,8 @@
     onpanel: (name: string) => void;
     onnext: () => void;
     onpip: () => void;
+    /** «Отметить момент»: ссылка на эту секунду - себе или другу. */
+    onmoment?: () => void;
     onfullscreen: () => void;
     onheight: (top: number, bottom: number) => void;
   } = $props();
@@ -184,6 +187,7 @@
     <!-- Качество - текстом («1080p», «Авто»), а не вторым значком «ползунки»: раньше их было два одинаковых рядом. -->
     {#if showQuality}<button class="ibtn tip q" class:on={panel === 'quality'} data-tip="Качество" aria-label="Качество" onclick={() => onpanel('quality')}><span class="qtext">{qualityLabel || 'Авто'}</span></button>{/if}
     <button class="ibtn tip" class:on={panel === 'settings'} data-tip="Настройки" aria-label="Настройки плеера" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
+    {#if onmoment}<button class="ibtn tip" data-tip="Отметить момент" aria-label="Отметить момент" onclick={onmoment}><Icon name="bookmark" size={20} /></button>{/if}
     {#if pipOk}<button class="ibtn tip" data-tip="Картинка в картинке (P)" aria-label="Картинка в картинке" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
     <button class="ibtn tip" data-tip={full ? 'Выйти из полного экрана (F)' : 'Во весь экран (F)'} aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
   </div>
