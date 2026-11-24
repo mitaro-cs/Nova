@@ -206,8 +206,14 @@
           <ol class="best">
             {#each top5 as w, i (w.id)}
               <li style:--i={i}>
-                <span class="rank" aria-hidden="true">{i + 1}</span>
-                <div class="bp"><Poster card={w} {i} /></div>
+                <a class="pw" href="/ext/{w.id}" title="{w.title}{w.year ? `, ${w.year}` : ''}">
+                  <span class="rank" aria-hidden="true">{i + 1}</span>
+                  <span class="bp" style:background={placeholder(w.title)}>
+                    {#if w.poster}<img use:hideBroken src={artW(w.poster, 342)} alt={w.title} loading="lazy" decoding="async" width="228" height="342" />{/if}
+                    {#if seen(w)}<i class="ck" aria-label="смотрели"><Icon name="check" size={12} /></i>{/if}
+                  </span>
+                  <span class="cap"><b>{w.title}</b><small>{[w.year, w.rating ? `★ ${w.rating.toFixed(1)}` : null].filter(Boolean).join(' · ')}</small></span>
+                </a>
               </li>
             {/each}
           </ol>
@@ -436,10 +442,6 @@
     animation: rise-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
     animation-delay: calc(var(--i) * 40ms);
   }
-  /* Номер места не закрывает оценку: оценку сдвигаем вправо от номера. */
-  .best :global(.rate) {
-    left: 34px;
-  }
   .rank {
     position: absolute;
     z-index: 2;
@@ -578,11 +580,17 @@
   .mine .here { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #fff; color: #000; font-size: 12px; font-weight: 700; }
   h2.lab { color: #8c8c96; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
 
-  /* Лучшее: огромные контурные цифры слева от постера (как чарты стримингов). */
-  .best li { padding-left: clamp(40px, 4.6vw, 64px); }
-  .best .bp { position: relative; z-index: 1; }
-  .best .rank { position: absolute; z-index: 0; left: -4px; top: 18%; width: auto; height: auto; display: block; background: none; box-shadow: none; color: #000; font-size: clamp(96px, 10vw, 170px); font-weight: 800; line-height: 0.8; letter-spacing: -0.08em; -webkit-text-stroke: 2px #ffffffb0; }
-  .best :global(.rate) { left: 8px; }
+  /* Лучшее: огромные контурные цифры слева от постера (как чарты стримингов). Цифра - своя колонка, низом ровно по
+     постеру, постер её не закрывает; подпись - отдельной строкой под постером (раньше цифра наезжала на текст). */
+  .best { align-items: start; }
+  .best .pw { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: end; align-content: start; color: inherit; text-decoration: none; }
+  .best .rank { position: static; grid-row: 1; grid-column: 1; width: 0.62em; height: auto; display: block; text-align: right; margin-right: -0.1em; background: none; box-shadow: none; color: #0b0b0d; font-size: clamp(84px, 8.4vw, 150px); font-weight: 800; line-height: 0.74; letter-spacing: -0.06em; -webkit-text-stroke: 2px #ffffffe6; paint-order: stroke fill; }
+  .best .bp { position: relative; z-index: 1; grid-row: 1; grid-column: 2; display: block; aspect-ratio: 2 / 3; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 28px #0008; transition: transform 0.3s var(--ease, ease); }
+  .best .bp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .best .pw:hover .bp { transform: translateY(-4px); }
+  .best .cap { grid-row: 2; grid-column: 2; display: grid; gap: 2px; min-width: 0; padding-top: 10px; }
+  .best .cap b { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; font-size: 14px; font-weight: 600; line-height: 1.25; }
+  .best .cap small { color: #a1a1aa; font-size: 12px; }
 
   /* Хронология: постеры на линии лет; смотренное в цвете с галочкой, остальное серым. */
   .legend { display: flex; gap: 16px; color: #8c8c96; font-size: 12.5px; }
@@ -604,6 +612,6 @@
   @media (max-width: 640px) {
     .hero .ph { width: 180px; }
     .mine, dl.facts { justify-content: center; margin-inline: auto; }
-    .best { grid-template-columns: repeat(5, minmax(150px, 1fr)); overflow-x: auto; }
+    .best { grid-template-columns: repeat(5, minmax(150px, 1fr)); overflow-x: auto; padding-bottom: 6px; }
   }
 </style>
