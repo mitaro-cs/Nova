@@ -126,7 +126,7 @@
 
 <article class="fc" bind:this={root}>
   <div class="shot">
-    <a class="cover" {href} onclick={() => ext && remember(ext)} aria-label={c.title}>
+    <a class="cover" class:nf={!!shot && !framed} {href} onclick={() => ext && remember(ext)} aria-label={c.title}>
       <span class="cover-fallback" style:background={placeholder(c.title)} aria-hidden="true"><i>{c.kind==='series'?'СЕРИАЛ':'ФИЛЬМ'}</i><b>{c.title}</b>{#if c.year}<small>{c.year}</small>{/if}</span>
       <!-- Кадра нет: тот же постер растянут и притемнён фоном (25.11 - вместо пустой цветной заливки по бокам). -->
       {#if shot && !framed}<img class="backfill" src={artW(shot, 342)} alt="" aria-hidden="true" loading="lazy" decoding="async" />{/if}
@@ -180,6 +180,8 @@
   .cover-fallback i { font-size:10px; font-style:normal; font-weight:700; letter-spacing:.22em; color:#ffffffa8; }
   .cover-fallback b { max-width:18ch; font-size:clamp(20px,3vw,42px); line-height:1.1; text-wrap:balance; text-shadow:0 3px 18px #000; }
   .cover-fallback small { font-size:12px; color:#ffffffb5; }
+  /* Постер вместо кадра: заглушка с названием не просвечивает сквозь притемнённый фон. */
+  .cover.nf .cover-fallback { visibility: hidden; }
   .cover img.backfill {
     z-index: 0;
     opacity: 0.32;
