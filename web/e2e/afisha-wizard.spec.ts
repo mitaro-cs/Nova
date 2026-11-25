@@ -50,16 +50,18 @@ test('с фильма назад на главную - на то же место
   test.skip(info.project.name !== 'desktop', 'на касании прокручивается body, проверяем на компьютере');
   await page.goto(url('/'));
   await page.waitForLoadState('networkidle');
-  await page.mouse.wheel(0, 1200);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(800);
-  const was = await page.evaluate(() => scrollY);
-  await page.evaluate(() => {
-    const a = [...document.querySelectorAll<HTMLAnchorElement>('main a[href^="/title/"]')].find((x) => {
-      const r = x.getBoundingClientRect();
-      return r.top > 100 && r.bottom < innerHeight;
-    });
-    a?.click();
+  // Прокручиваем так, чтобы на экране оказалась карточка своего фильма ниже героя.
+  const href = await page.evaluate(() => {
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('main a[href^="/title/"]')];
+    const a = links.find((x) => x.getBoundingClientRect().top + scrollY > innerHeight * 0.9) ?? links.at(-1);
+    if (!a) return null;
+    scrollTo({ top: Math.max(0, a.getBoundingClientRect().top + scrollY - innerHeight / 2), behavior: 'instant' as ScrollBehavior });
+    return a.getAttribute('href');
   });
+  expect(href).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(200);
+  const was = await page.evaluate(() => scrollY);
+  await page.locator(`main a[href="${href}"]`).filter({ visible: true }).first().click();
   await expect(page).toHaveURL(/\/title\//);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
