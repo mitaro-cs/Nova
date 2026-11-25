@@ -295,6 +295,8 @@ export interface PlayInfo {
   season: number | null;
   position: number;
   markers: { intro: [number, number] | null; credits: number | null; manual: boolean };
+  /** Заставку и титры ещё ищут по кадрам: плеер переспрашивает `GET /api/files/{id}/markers`. */
+  markersPending?: boolean;
   trickplay: Trickplay | null;
   hls: boolean;
   /** Мбит/с файла - сколько нужно для «Оригинала». */
@@ -406,6 +408,8 @@ export interface VideoLink {
   url: string;
   embed: string | null;
   label: string;
+  /** Что показывать: название фильма (с сезоном и серией) или подпись без « | English (2010, 4K)». */
+  display?: string;
   thumb: string | null;
   duration: number | null;
   titleId: number | null;
@@ -481,7 +485,8 @@ export interface ProfileDecor {
   likedPeople?: { name: string; nameRu?: string; role: string; photo: string | null }[];
   cover: string | null;
   /** Обложка: лента просмотренного или своя картинка. */
-  coverKind: 'ribbon' | 'image';
+  /** Обложка: лента просмотренного, кадр первого любимого фильма или своя картинка. */
+  coverKind: 'ribbon' | 'image' | 'frame';
   directors: string[];
   /** Постеры просмотренного - для ленты на обложке. */
   ribbon: string[];

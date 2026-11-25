@@ -290,7 +290,9 @@ pub fn decor(app: &App, v: &Viewer, id: i64) -> ApiResult<Value> {
     type Row = (Option<String>, Option<String>, Option<String>, String, String, String, bool);
     let (cover, accent, bio, favs, directors, kind, show): Row = app.db.with(|c| {
         c.query_row(
-            "SELECT cover, accent, bio, favorites, directors, cover_kind, show_activity FROM profiles WHERE id = ?",
+            "SELECT cover, accent, bio, favorites, directors,
+                    CASE WHEN cover_kind = 'ribbon' AND cover_frame = 1 THEN 'frame' ELSE cover_kind END, show_activity
+             FROM profiles WHERE id = ?",
             [id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
         )
@@ -650,10 +652,14 @@ pub async fn set_decor(State(app): State<Arc<App>>, v: Viewer, Json(b): Json<Dec
         }
     }
     if let Some(k) = &b.cover_kind {
-        if k != "ribbon" && k != "image" {
-            return Err(ApiError::bad("bad_value", "Обложка - лента или своя картинка"));
+        // `frame` - кадр первого любимого фильма (25.11: отдельный вариант, а не замена ленты).
+        if k != "ribbon" && k != "image" && k != "frame" {
+            return Err(ApiError::bad("bad_value", "Обложка - лента, кадр любимого фильма или своя картинка"));
         }
-        app.db.with(|c| c.execute("UPDATE profiles SET cover_kind = ? WHERE id = ?", params![k, me]))?;
+        let (kind, frame) = if k == "frame" { ("ribbon", true) } else { (k.as_str(), false) };
+        app.db.with(|c| {
+            c.execute("UPDATE profiles SET cover_kind = ?, cover_frame = ? WHERE id = ?", params![kind, frame, me])
+        })?;
     }
     if let Some(s) = b.show_activity {
         app.db.with(|c| c.execute("UPDATE profiles SET show_activity = ? WHERE id = ?", params![s, me]))?;
@@ -695,13 +701,20 @@ pub async fn set_cover(State(app): State<Arc<App>>, v: Viewer, body: axum::body:
         _ => name,
     };
     app.db.with(|c| {
-        c.execute("UPDATE profiles SET cover = ?, cover_kind = 'image' WHERE id = ?", params![name, v.profile.id])
+        c.execute(
+            "UPDATE profiles SET cover = ?, cover_kind = 'image', cover_frame = 0 WHERE id = ?",
+            params![name, v.profile.id],
+        )
     })?;
     Ok(Json(json!({"cover": format!("/img/{name}")})))
 }
 
 pub async fn delete_cover(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Value>> {
-    app.db
-        .with(|c| c.execute("UPDATE profiles SET cover = NULL, cover_kind = 'ribbon' WHERE id = ?", [v.profile.id]))?;
+    app.db.with(|c| {
+        c.execute(
+            "UPDATE profiles SET cover = NULL, cover_kind = 'ribbon', cover_frame = 0 WHERE id = ?",
+            [v.profile.id],
+        )
+    })?;
     Ok(Json(json!({"ok": true})))
 }

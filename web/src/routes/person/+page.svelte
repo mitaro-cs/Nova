@@ -105,15 +105,35 @@
   );
   const mosaic = $derived((d?.works ?? []).filter((w) => w.poster).slice(0, 18));
   const top5 = $derived(best.slice(0, 5));
-  // Баннер: кадр (16:9, большой) лучшего фильма; пока не пришёл - мозаика постеров.
-  let banner = $state<string | null>(null);
+  // Фон (просьба владельца 25.11 «фон интереснее»): кадры четырёх лучших работ сменяют друг друга с медленным
+  // приближением. У спектакля или короткометражки кадра может не быть - берём следующую работу. Ни одного кадра - мозаика.
+  let banners = $state<string[]>([]);
+  let slide = $state(0);
   $effect(() => {
-    const id = best[0]?.id;
-    banner = id ? (peekDetail(id)?.backdrop ?? null) : null;
-    if (!id || banner) return;
+    const ids = best.slice(0, 6).map((w) => w.id);
+    const got = new Map<string, string>();
+    const put = () => (banners = ids.map((id) => got.get(id)).filter((x): x is string => !!x).slice(0, 4));
+    for (const id of ids) {
+      const b = peekDetail(id)?.backdrop;
+      if (b) got.set(id, b);
+    }
+    put();
+    slide = 0;
     let live = true;
-    getDetail(id).then((x) => live && (banner = x.backdrop ?? null), () => {});
+    for (const id of ids.filter((x) => !got.has(x)).slice(0, 4)) {
+      getDetail(id).then((x) => {
+        if (!live || !x.backdrop) return;
+        got.set(id, x.backdrop);
+        put();
+      }, () => {});
+    }
     return () => (live = false);
+  });
+  $effect(() => {
+    const n = banners.length;
+    if (n < 2 || document.documentElement.classList.contains('no-motion')) return;
+    const t = setInterval(() => (slide = (slide + 1) % n), 8000);
+    return () => clearInterval(t);
   });
   // Что из его работ человек уже смотрел: отметка «Просмотрено» у фильма ленты или у своего фильма на Nova.
   const localStatus = $derived(new Map((d?.local ?? []).map((c) => [c.id, c.status])));
@@ -150,9 +170,11 @@
   {#if error}
     <div class="empty"><Icon name="info" size={36} /> {error}</div>
   {:else}
-    <header class="hero" class:has-banner={!!banner}>
-      {#if banner}
-        <img class="banner" use:fadeIn src={artW(banner, 1920)} alt="" decoding="async" aria-hidden="true" />
+    <header class="hero" class:has-banner={banners.length > 0}>
+      {#if banners.length}
+        <div class="stage" aria-hidden="true">
+          {#each banners as b, i (b)}<img class="banner" class:on={i === slide} use:fadeIn src={artW(b, 1920)} alt="" decoding="async" />{/each}
+        </div>
       {:else}
         <div class="wall" aria-hidden="true">
           {#each mosaic as w (w.id)}<img use:hideBroken src={artW(w.poster, 342)} alt="" loading="lazy" decoding="async" />{/each}
@@ -563,15 +585,27 @@
     animation: none;
   }
   /* «Ретроспектива»: большой кадр фоном, цветной портрет 4:5 (чёрно-белый читается как траурный - владелец, 23.11), факты крупными цифрами. */
-  .banner { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; opacity: 0.5; }
+  .stage { position: absolute; inset: 0; z-index: -2; overflow: hidden; }
+  .banner { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; opacity: 0; transition: opacity 1.6s ease; }
+  .banner.on { opacity: 0.62; animation: drift 10s linear both; }
+  @keyframes drift { from { transform: scale(1.1) translateX(1.5%); } to { transform: scale(1.02); } }
+  :global(.no-motion) .banner.on { animation: none; }
   .hero.has-banner { background: #000; }
-  .hero.has-banner .veil { background: linear-gradient(90deg, #000 0%, #000000c0 32%, #00000060 70%, #000 100%), linear-gradient(0deg, var(--bg) 0%, transparent 50%); }
+  /* Слева темно под текстом, справа кадр открыт; снизу растворяется в страницу; лёгкая виньетка по краям. */
+  .hero.has-banner .veil {
+    background:
+      linear-gradient(90deg, #000000f0 0%, #000000b0 30%, #00000030 64%, #00000080 100%),
+      linear-gradient(0deg, var(--bg) 0%, transparent 46%),
+      radial-gradient(120% 90% at 70% 40%, transparent 50%, #000000a0 100%);
+  }
   .hero .ph { width: clamp(150px, 21vw, 300px); aspect-ratio: 4 / 5; border-radius: 22px; }
   /* Строка чуть выше 1: у «Й» и «Ё» надстрочные знаки, при 0.92 они наезжали на подпись сверху. */
   .hero h1 { font-size: clamp(36px, 6.4vw, 92px); font-weight: 800; letter-spacing: -0.05em; line-height: 1.02; padding-top: 0.04em; white-space: normal; overflow: visible; }
   .hero .who > small { letter-spacing: 0.2em; }
-  dl.facts { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 10px 0 0; }
-  dl.facts div { display: flex; flex-direction: column-reverse; }
+  dl.facts { display: flex; flex-wrap: wrap; gap: 12px 0; margin: 10px 0 0; }
+  /* Факты через тонкие черты: цифры не слипаются («1991-2028» и «7,5»). */
+  dl.facts div { display: flex; flex-direction: column-reverse; padding: 0 22px; border-left: 1px solid #ffffff2e; white-space: nowrap; }
+  dl.facts div:first-child { padding-left: 0; border-left: 0; }
   dl.facts dd { margin: 0; font-size: clamp(20px, 2vw, 28px); font-weight: 800; letter-spacing: -0.02em; }
   dl.facts dt { color: #ffffff99; font-size: 12px; }
   .mine { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; width: fit-content; max-width: 100%; margin-top: 8px; padding: 10px 14px; border-radius: 16px; background: #ffffff14; font-size: 14px; }

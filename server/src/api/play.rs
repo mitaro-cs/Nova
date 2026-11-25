@@ -157,7 +157,12 @@ pub async fn info(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
         let size = std::fs::metadata(&f.path).ok()?.len() as f64;
         Some((size * 8.0 / d / 1e6 * 10.0).round() / 10.0)
     });
+    // Заставку и титры здесь ещё не искали - ищем сейчас, плеер переспросит `GET /api/files/{id}/markers`.
+    if f.auto.is_none() {
+        crate::library::markers::detect_now(&app, id);
+    }
     Ok(Json(json!({
+        "markersPending": crate::library::markers::pending(&app, id),
         "play": info, "titleId": f.title_id, "kind": f.kind, "title": f.title, "bitrate": bitrate,
         "season": f.season,
         "episode": super::catalog::episode_label(f.season, f.episode, crate::episode_locale::localized(&app, f.name.as_deref()).as_deref()),
@@ -709,6 +714,12 @@ pub struct MarkersBody {
 }
 
 /// Хост отмечает заставку и титры прямо в плеере - на весь сезон.
+/// Отметки заставки и титров и идёт ли ещё их поиск по кадрам (плеер спрашивает, пока `pending`).
+pub async fn get_markers(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+    let f = file_row(&app, &v, id)?;
+    Ok(Json(json!({"markers": markers_for(&app, &f), "pending": crate::library::markers::pending(&app, id)})))
+}
+
 pub async fn set_markers(
     State(app): State<Arc<App>>,
     m: Manager,

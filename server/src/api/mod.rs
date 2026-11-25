@@ -171,7 +171,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/files/{id}/hls/{h}/index.m3u8", get(play::hls_variant))
         .route("/api/files/{id}/hls/{h}/{seg}", get(play::hls_segment))
         .route("/api/files/{id}/trickplay/{sheet}", get(play::trickplay))
-        .route("/api/files/{id}/markers", put(play::set_markers))
+        .route("/api/files/{id}/markers", get(play::get_markers).put(play::set_markers))
         .route("/api/speedtest", get(play::speedtest))
         .route("/api/progress/{id}", get(play::get_progress).put(play::save_progress).delete(play::clear_progress))
         // смотреть вместе

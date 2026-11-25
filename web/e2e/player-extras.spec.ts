@@ -82,7 +82,7 @@ test('плеер: в конце фильма - оценка и «что даль
   await expect(end.getByRole('button', { name: 'Смотреть снова' })).toBeVisible();
 });
 
-test('плеер: «Пропустить титры» ведёт к концу фильма, досмотренное сразу «Просмотрено»', async ({ page }) => {
+test('плеер: в титрах - «Завершить» ведёт к концу фильма, досмотренное сразу «Просмотрено»', async ({ page }) => {
   const id = await fileOf(page, 'Ла-Ла Ленд');
   // Титры с 2-й секунды (как нашла бы фоновая задача); сервер отвечает, что фильм только что стал «Просмотрено».
   await page.route(`**/api/files/${id}/info`, async (r) => {
@@ -94,7 +94,8 @@ test('плеер: «Пропустить титры» ведёт к концу �
     r.request().method() === 'PUT' ? r.fulfill({ json: { ok: true, done: true, watched: true } }) : r.fallback(),
   );
   await page.goto(url(`/watch/${id}?t=2.2`));
-  const skip = page.getByRole('button', { name: 'Пропустить титры' });
+  const card = page.getByRole('group', { name: 'Начались титры' });
+  const skip = card.getByRole('button', { name: 'Завершить' });
   await expect(skip).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Отмечено: просмотрено' })).toBeVisible();
   await skip.click();

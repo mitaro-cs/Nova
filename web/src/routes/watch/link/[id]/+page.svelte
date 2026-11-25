@@ -64,7 +64,7 @@
         const start = at > 0 ? at : p && p.position < p.duration * 0.95 ? p.position : 0;
         try {
           const s = await api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${want}/stream/source`);
-          if (want === id) src = { ...s, title: fetchedTitle||l.label, linkId: l.id, start, season: l.season, episodeNo: l.episode };
+          if (want === id) src = { ...s, title: l.display||fetchedTitle||l.label, linkId: l.id, start, season: l.season, episodeNo: l.episode };
         } catch (x) {
           if (want !== id) return;
           // Сайт не отдал поток - его собственный плеер (у своего сайта - сообщение и ссылка).

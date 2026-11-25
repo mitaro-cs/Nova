@@ -84,10 +84,10 @@ pub async fn probe_worker(app: Arc<App>) {
             }
         }
         if let Some(ffmpeg) = tools.ffmpeg {
-            // Когда новых файлов нет: лёгкие постеры для рядов, потом кадры для перемотки, потом заставка и титры по кадрам.
+            // Когда новых файлов нет: лёгкие постеры для рядов, потом заставка и титры по кадрам (быстро, нужны сразу), потом кадры для перемотки.
             if thumbs(&app, &ffmpeg).await
-                || trickplay_one(&app, &ffmpeg).await
                 || super::markers::auto_one(&app, &ffmpeg).await
+                || trickplay_one(&app, &ffmpeg).await
             {
                 continue;
             }

@@ -11,6 +11,7 @@
   import { localized } from '$lib/localized.svelte';
   import type { Card, ExtCard, ExtDetail } from '$lib/types';
   import type { Component } from 'svelte';
+  import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
 
   type Item = { card?: Card; ext?: ExtCard };
@@ -48,15 +49,24 @@
   const card = $derived(selected?.card ?? detail?.card ?? selected?.ext);
   const href = $derived(selected?.card ? `/title/${selected.card.id}` : `/ext/${selected?.ext?.id}`);
   const overview = $derived(localized(selected?.card?.overview ?? detail?.overview));
+  // Свежие подробности - и у центральной карточки, и у соседей: в кэше страницы может лежать старая версия (до выбора
+  // кадра хостом или пока сервер ещё подбирал кадр), и соседи показывали не тот баннер, что потом в центре (25.11).
+  const nearIds = $derived([...new Set([extId, ...items.map((it, i) => (it.ext && Math.abs(relOf(i)) <= 2 ? it.ext.id : null))].filter((x): x is string => !!x))]);
+  const loading = new Set<string>();
   $effect(() => {
-    const id = extId;
-    if (!id) return;
+    const ids = nearIds;
     let live = true;
-    let timer = 0;
-    let tries = 0;
-    const load = () => getDetail(id).then((r) => { if (!live) return; fetched[id] = r; if (r.refreshing && ++tries < 12) timer = window.setTimeout(load,3000); }, () => {});
-    load();
-    return () => { live = false; clearTimeout(timer); };
+    const timers: number[] = [];
+    for (const id of ids) {
+      const have = untrack(() => fetched[id]);
+      if (have && !have.refreshing) continue;
+      if (loading.has(id)) continue;
+      loading.add(id);
+      let tries = 0;
+      const load = () => getDetail(id).then((r) => { if (!live) { loading.delete(id); return; } fetched[id] = r; if (r.refreshing && ++tries < 12) timers.push(window.setTimeout(load, 3000)); else loading.delete(id); }, () => loading.delete(id));
+      load();
+    }
+    return () => { live = false; timers.forEach(clearTimeout); for (const id of ids) loading.delete(id); };
   });
 
   // Карусель - настоящая лента: у каждой карточки свой кадр (в полном размере), положение - `--rel` (0 - по центру,
@@ -75,7 +85,8 @@
       const src = it.card.backdrop ?? it.card.backdropSmall ?? it.card.poster ?? null;
       return { src, set: it.card.backdrop ? heroSet(it.card.backdrop, it.card.backdropSmall) : undefined };
     }
-    const d = fetched[it.ext!.id] ?? peekDetail(it.ext!.id);
+    // Пока свежие подробности не пришли - постер, а не старый кадр из кэша (он мог быть «не тем»).
+    const d = fetched[it.ext!.id] ?? (peekDetail(it.ext!.id)?.refreshing ? null : peekDetail(it.ext!.id));
     const src = d?.backdrop ?? d?.gallery?.[0] ?? it.ext!.poster ?? null;
     return { src, set: d?.backdrop || d?.gallery?.[0] ? heroSet(src!, null) : undefined };
   }

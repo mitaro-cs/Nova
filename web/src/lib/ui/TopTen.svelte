@@ -30,14 +30,17 @@
 </section>
 
 <style>
+  /* Цифра - своя колонка слева, низом по постеру (не режется краем ленты); под мышью ничего не прыгает - только светлая
+     рамка (просьба владельца 25.11 «не должно двигаться»). Лента едет только вбок. */
   .top10 { margin: 8px 0 30px; }
   h2 { margin: 0 0 14px; font-size: clamp(19px, 1.6vw, 24px); font-weight: 700; }
-  ol { display: flex; gap: 14px; margin: 0; padding: 4px 0 8px; list-style: none; overflow-x: auto; scrollbar-width: none; }
+  ol { display: flex; gap: 10px; margin: 0; padding: 2px 0 6px; list-style: none; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-width: none; }
   ol::-webkit-scrollbar { display: none; }
-  li { position: relative; flex: none; width: calc(var(--pw, 170px) + clamp(44px, 4.4vw, 70px)); padding-left: clamp(44px, 4.4vw, 70px); }
-  .n { position: absolute; left: -2px; bottom: 6px; z-index: 0; color: #000; font-size: clamp(110px, 11vw, 190px); font-weight: 800; line-height: 0.78; letter-spacing: -0.08em; -webkit-text-stroke: 2px #ffffffb0; pointer-events: none; }
-  li:nth-child(10) .n { letter-spacing: -0.12em; }
-  a { position: relative; z-index: 1; display: grid; place-items: center; aspect-ratio: 2 / 3; border-radius: 14px; overflow: hidden; color: #fff; font-weight: 700; text-align: center; box-shadow: 0 18px 40px -20px #000; transition: transform 0.3s var(--ease, ease); }
-  a:hover { transform: translateY(-4px); }
+  li { flex: none; display: flex; align-items: flex-end; }
+  .n { flex: none; width: 0.64em; margin-right: -0.06em; text-align: right; color: #000; font-size: clamp(100px, 10vw, 170px); font-weight: 800; line-height: 0.74; letter-spacing: -0.06em; -webkit-text-stroke: 2px #ffffffb8; paint-order: stroke fill; pointer-events: none; user-select: none; }
+  li:nth-child(10) .n { width: 1.1em; letter-spacing: -0.1em; }
+  a { position: relative; z-index: 1; flex: none; width: var(--pw, 170px); display: grid; place-items: center; aspect-ratio: 2 / 3; border-radius: 14px; overflow: hidden; color: #fff; font-weight: 700; text-align: center; box-shadow: 0 18px 40px -20px #000; }
+  a::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px #ffffffb0; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  a:hover::after, a:focus-visible::after { opacity: 1; }
   img { width: 100%; height: 100%; object-fit: cover; }
 </style>

@@ -50,8 +50,8 @@
   $effect(() => {
     const l = room?.linkId;
     if (!l || linkSrc?.linkId === l) return;
-    Promise.all([api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${l}/stream/source`), api<{ label: string }>(`/api/links/${l}`)]).then(
-      ([s, link]) => (linkSrc = { ...s, title: link.label, linkId: l, start: room ? expected(room).position : 0 }),
+    Promise.all([api<{ url: string; hls: boolean; dash?: boolean }>(`/api/links/${l}/stream/source`), api<{ label: string; display?: string }>(`/api/links/${l}`)]).then(
+      ([s, link]) => (linkSrc = { ...s, title: link.display || link.label, linkId: l, start: room ? expected(room).position : 0 }),
       (x) => (error = errorText(x)),
     );
   });
@@ -862,7 +862,7 @@
   .tabs2 button.on { background: #fff; color: #0a0a0b; }
   .tabs2 sup { margin-left: 4px; font-size: 10px; }
   .who { margin: 10px 2px 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
-  .queue { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; overflow-y: auto; flex: 1; min-height: 0; }
+  .queue { display: grid; align-content: start; gap: 6px; margin: 0; padding: 0; list-style: none; overflow-y: auto; flex: 1; min-height: 0; }
   .queue li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #ffffff14; border-radius: 16px; background: #17171a; }
   .queue li.now { border-color: #fff; }
   .queue li.ask { border-style: dashed; }

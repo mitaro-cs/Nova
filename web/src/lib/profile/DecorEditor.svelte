@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, del, errorText, patch } from '$lib/api';
   import Poster from '$lib/discover/Poster.svelte';
+  import { peekDetail } from '$lib/discover/details';
   import { MAX_DIRECTORS as MAX_D, MAX_FAVORITES as MAX } from '$lib/social/favorites';
   import PosterWall from '$lib/social/PosterWall.svelte';
   import { session } from '$lib/session.svelte';
@@ -26,6 +27,11 @@
 
   const keyOf = (i: { card?: { id: number }; ext?: { id: string } }) => (i.card ? `t:${i.card.id}` : `x:${i.ext!.id}`);
   const favKeys = $derived(decor?.favorites.map((f) => f.key) ?? []);
+  /** Кадр первого любимого фильма - для предпросмотра обложки «Кадр любимого фильма». */
+  const frame = $derived.by(() => {
+    const f = decor?.favorites[0];
+    return f?.card?.backdrop ?? (f?.ext ? (peekDetail(f.ext.id)?.backdrop ?? null) : null);
+  });
 
   // Любое кино: поиск по всему IMDb, найденное можно сразу сделать любимым (не только отмеченное «Хочу»/«Просмотрел»).
   let query = $state('');
@@ -108,7 +114,7 @@
     director = '';
   }
 
-  function setKind(k: 'ribbon' | 'image') {
+  function setKind(k: 'ribbon' | 'image' | 'frame') {
     if (!decor) return;
     decor.coverKind = k;
     save({ coverKind: k });
@@ -144,11 +150,12 @@
   <h2 id="decor">Оформление страницы</h2>
   {#if decor}
     <div class="kinds" role="radiogroup" aria-label="Обложка">
-      <button class="chip" role="radio" aria-checked={decor.coverKind === 'ribbon'} class:on={decor.coverKind === 'ribbon'} onclick={() => setKind('ribbon')}>Фон из просмотренного</button>
+      <button class="chip" role="radio" aria-checked={decor.coverKind === 'ribbon'} class:on={decor.coverKind === 'ribbon'} onclick={() => setKind('ribbon')}>Лента просмотренного</button>
+      <button class="chip" role="radio" aria-checked={decor.coverKind === 'frame'} class:on={decor.coverKind === 'frame'} disabled={!decor.favorites.length} title={decor.favorites.length ? '' : 'Сначала выберите любимый фильм'} onclick={() => setKind('frame')}>Кадр любимого фильма</button>
       <button class="chip" role="radio" aria-checked={decor.coverKind === 'image'} class:on={decor.coverKind === 'image'} disabled={!decor.cover} onclick={() => setKind('image')}>Своя картинка</button>
     </div>
     <div class="cover" style:--acc={decor.accent ?? '#3a3a3c'}>
-      {#if decor.coverKind === 'image' && decor.cover}<img src={decor.cover} alt="" decoding="async" />{:else}<PosterWall posters={decor.ribbon} accent={decor.accent} />{/if}
+      {#if decor.coverKind === 'image' && decor.cover}<img src={decor.cover} alt="" decoding="async" />{:else if decor.coverKind === 'frame' && frame}<img src={frame} alt="" decoding="async" />{:else}<PosterWall posters={decor.ribbon} accent={decor.accent} />{/if}
       <div class="cover-acts">
         <label class="btn sm" class:busy>
           <Icon name="image" size={14} />

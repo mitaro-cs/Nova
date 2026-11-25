@@ -53,7 +53,8 @@
 {/each}
 
 <style>
-  .heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; margin-bottom: 16px; }
+  .heading h2 { min-width: 0; }
   .heading h2 { margin: 0; }
   .arrows { display: flex; gap: 6px; flex: none; }
   .forward { transform: rotate(180deg); display: flex; }
@@ -72,10 +73,13 @@
     grid-auto-flow: column;
     grid-auto-columns: calc(var(--pw) - 10px);
     gap: 14px;
-    margin: 0;
-    padding: 4px 2px 8px;
+    /* Запас со всех сторон: поднятый под мышью постер и рамка «Этот фильм» не режутся краем ленты (25.11). */
+    margin: -14px -12px -4px;
+    padding: 14px 12px 8px;
+    scroll-padding: 0 12px;
     list-style: none;
     overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: none;
     overscroll-behavior-x: contain;
   }

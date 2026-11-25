@@ -542,6 +542,9 @@ async fn feed_marks_wishes_groups_links() {
     assert_eq!(page["decor"]["coverKind"], "ribbon");
     assert_eq!(page["decor"]["ribbon"], json!([format!("/img/{poster}")]));
     assert_eq!(anna.send("PATCH", "/api/me/profile", json!({"coverKind": "video"})).await.status(), 400);
+    // Кадр любимого фильма - отдельный вариант обложки (25.11).
+    assert!(anna.send("PATCH", "/api/me/profile", json!({"coverKind": "frame"})).await.status().is_success());
+    assert_eq!(host.json(&format!("/api/members/{pa}")).await["decor"]["coverKind"], "frame");
     assert_eq!(page["stats"]["months"].as_array().unwrap().len(), 12);
 
     // Смена пароля закрывает остальные входы (украденная сессия перестаёт работать).

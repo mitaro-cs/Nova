@@ -23,6 +23,7 @@
     skipTo = null,
     skipCredits = false,
     onskipcredits,
+    onwatchcredits,
     next = null,
     onback,
     onretry,
@@ -53,6 +54,7 @@
     /** Начались титры фильма (дальше серии нет) - «Пропустить титры» ведёт к экрану конца. */
     skipCredits?: boolean;
     onskipcredits?: () => void;
+    onwatchcredits?: () => void;
     next?: { title: string; still: string | null; countdown: number | null; inCredits: boolean } | null;
     onback: () => void;
     onretry: () => void;
@@ -126,7 +128,17 @@
 {#if skipTo !== null}
   <button class="skip" class:low={!shown} onclick={() => onskipintro(skipTo)}>Пропустить заставку</button>
 {:else if skipCredits && onskipcredits}
-  <button class="skip" class:low={!shown} onclick={onskipcredits}>Пропустить титры</button>
+  <!-- Начались титры фильма (25.11, «сразу предлагал выйти»): карточка как у следующей серии - досмотреть титры или завершить. -->
+  <div class="nextcard endcard" class:low={!shown} role="group" aria-label="Начались титры">
+    <div class="nc">
+      <span class="muted">Начались титры</span>
+      <b>Фильм закончился</b>
+      <div class="ncb">
+        <button class="btn sm" onclick={onwatchcredits}>Смотреть титры</button>
+        <button class="btn sm white go" onclick={onskipcredits}><Icon name="check" size={13} /> Завершить</button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 {#if next}

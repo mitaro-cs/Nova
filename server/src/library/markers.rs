@@ -191,17 +191,27 @@ pub async fn tail_frames(ffmpeg: &Path, file: &Path, from: f64) -> anyhow::Resul
 /// Файл в очереди: id, путь, ffprobe, фильм, вид, сезон.
 type Next = (i64, String, Option<String>, i64, String, Option<i32>);
 
+/// Файлы, которые разбираются прямо сейчас: открытый в плеере фильм не берётся второй раз фоновой очередью.
+static INFLIGHT: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<i64>>> =
+    std::sync::LazyLock::new(Default::default);
+
+const PICK: &str =
+    "SELECT f.id, f.path, f.probe, f.title_id, t.kind, f.season FROM files f JOIN titles t ON t.id = f.title_id";
+
 /// Следующий начатый файл без найденных отметок: отпечатки начала (сериал) и титры. true - что-то сделано.
 pub async fn auto_one(app: &Arc<App>, ffmpeg: &Path) -> bool {
+    let busy: Vec<i64> = INFLIGHT.lock().map(|s| s.iter().copied().collect()).unwrap_or_default();
+    let skip = busy.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
     let next: Option<Next> = app
         .db
         .with(|c| {
             c.query_row(
-                "SELECT f.id, f.path, f.probe, f.title_id, t.kind, f.season FROM files f JOIN titles t ON t.id = f.title_id
-                 WHERE f.auto_markers IS NULL AND f.missing = 0 AND f.probe IS NOT NULL
-                   AND EXISTS (SELECT 1 FROM progress p JOIN files pf ON pf.id = p.file_id WHERE pf.title_id = f.title_id)
-                 ORDER BY (SELECT MAX(p.updated_at) FROM progress p JOIN files pf ON pf.id = p.file_id WHERE pf.title_id = f.title_id) DESC,
-                          f.season, f.episode LIMIT 1",
+                &format!(
+                    "{PICK} WHERE f.auto_markers IS NULL AND f.missing = 0 AND f.probe IS NOT NULL AND f.id NOT IN ({skip})
+                       AND EXISTS (SELECT 1 FROM progress p JOIN files pf ON pf.id = p.file_id WHERE pf.title_id = f.title_id)
+                     ORDER BY (SELECT MAX(p.updated_at) FROM progress p JOIN files pf ON pf.id = p.file_id WHERE pf.title_id = f.title_id) DESC,
+                              f.season, f.episode LIMIT 1"
+                ),
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
             )
@@ -209,7 +219,52 @@ pub async fn auto_one(app: &Arc<App>, ffmpeg: &Path) -> bool {
         })
         .ok()
         .flatten();
-    let Some((id, path, probe, title, kind, season)) = next else { return false };
+    let Some(next) = next else { return false };
+    process(app, ffmpeg, next).await;
+    true
+}
+
+/// Открыли в плеере файл, где заставку и титры ещё не искали: ищем сразу, не дожидаясь фоновой очереди (просьба
+/// владельца 25.11: титры «Матрицы» не нашлись - очередь шла после кадров перемотки всей библиотеки). У сериала заодно
+/// соседние серии - без них заставку не с чем сравнить.
+pub fn detect_now(app: &Arc<App>, file_id: i64) {
+    let Some(ffmpeg) = app.tools.read().ffmpeg.clone() else { return };
+    let rows: Vec<Next> = app
+        .db
+        .with(|c| {
+            let mut st = c.prepare(&format!(
+                "{PICK} WHERE f.missing = 0 AND f.probe IS NOT NULL AND f.auto_markers IS NULL
+                   AND (f.id = ?1 OR (t.kind = 'series' AND f.title_id = (SELECT title_id FROM files WHERE id = ?1)
+                        AND COALESCE(f.season, 0) = (SELECT COALESCE(season, 0) FROM files WHERE id = ?1)
+                        AND ABS(COALESCE(f.episode, 0) - (SELECT COALESCE(episode, 0) FROM files WHERE id = ?1)) <= 1))
+                 ORDER BY f.id != ?1, f.episode"
+            ))?;
+            let r =
+                st.query_map([file_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?;
+            r.collect()
+        })
+        .unwrap_or_default();
+    let rows: Vec<Next> = {
+        let Ok(mut set) = INFLIGHT.lock() else { return };
+        rows.into_iter().filter(|r| set.insert(r.0)).collect()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    tokio::spawn(async move {
+        for r in rows {
+            process(&app, &ffmpeg, r).await;
+        }
+    });
+}
+
+/// Разобрать один файл: титры по кадрам конца, у сериала - отпечатки начала и заставки сезона.
+async fn process(app: &Arc<App>, ffmpeg: &Path, next: Next) {
+    let (id, path, probe, title, kind, season) = next;
+    if let Ok(mut set) = INFLIGHT.lock() {
+        set.insert(id);
+    }
     let p: probe::Probe = probe.and_then(|p| serde_json::from_str(&p).ok()).unwrap_or_default();
     let file = Path::new(&path);
     let mut found = Auto::default();
@@ -234,7 +289,21 @@ pub async fn auto_one(app: &Arc<App>, ffmpeg: &Path) -> bool {
     if kind == "series" {
         match_season(app, title, season);
     }
-    true
+    if let Ok(mut set) = INFLIGHT.lock() {
+        set.remove(&id);
+    }
+}
+
+/// Идёт ли сейчас поиск заставки и титров в этом файле (плеер переспрашивает, пока идёт).
+pub fn pending(app: &App, file_id: i64) -> bool {
+    INFLIGHT.lock().map(|s| s.contains(&file_id)).unwrap_or(false)
+        || app
+            .db
+            .with(|c| {
+                c.query_row("SELECT auto_markers IS NULL FROM files WHERE id = ?", [file_id], |r| r.get::<_, bool>(0))
+            })
+            .unwrap_or(false)
+            && app.tools.read().ffmpeg.is_some()
 }
 
 /// Заставки сезона: каждую серию с отпечатками сравниваем с соседними (по номеру) и берём самый длинный общий ряд.

@@ -23,16 +23,19 @@
   const favTitle = $derived(fav?.card?.title ?? fav?.ext?.title ?? '');
   let extFrame = $state<string | null>(null);
   $effect(() => {
-    const id = fav && !fav.card?.backdrop ? fav.ext?.id : null;
+    const id = p.decor.coverKind === 'frame' && fav && !fav.card?.backdrop ? fav.ext?.id : null;
     extFrame = id ? (peekDetail(id)?.backdrop ?? null) : null;
     if (!id || extFrame) return;
     let live = true;
     getDetail(id).then((d) => live && (extFrame = d.backdrop ?? null), () => {});
     return () => (live = false);
   });
+  // Обложка - то, что выбрано (25.11): своя картинка, кадр любимого фильма или лента просмотренного. Кадр больше не
+  // подменяет ленту сам: это отдельный вариант.
   const ownCover = $derived(p.decor.coverKind === 'image' ? p.decor.cover : null);
-  const art = $derived(ownCover ?? fav?.card?.backdrop ?? (extFrame ? artW(extFrame, 1920) : null));
-  const caption = $derived(!ownCover && art && favTitle ? `Кадр: ${favTitle} · любимый фильм` : '');
+  const frameArt = $derived(p.decor.coverKind === 'frame' ? (fav?.card?.backdrop ?? (extFrame ? artW(extFrame, 1920) : null)) : null);
+  const art = $derived(ownCover ?? frameArt);
+  const caption = $derived(frameArt && favTitle ? `Кадр: ${favTitle} · любимый фильм` : '');
 
   const nums = $derived(
     s
@@ -63,6 +66,7 @@
     {#if art}<img use:fadeIn src={art} alt="" decoding="async" />{:else}<div class="wall"><PosterWall posters={p.decor.ribbon} accent={p.decor.accent} prominent /></div>{/if}
     {#if caption}<span class="cap">{caption}</span>{/if}
   </div>
+  {#if p.me}<a class="cover-edit" href="/profile#decor"><Icon name="image" size={14} /> Обложка</a>{/if}
 
   <div class="id">
     <span class="face"><Avatar avatar={p.person.avatar} photo={p.person.photo} size={96} /></span>
@@ -96,6 +100,9 @@
   .wall :global(.wall) { position: absolute; inset: 0; }
   .art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 35%; }
   .art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #0b0b0d66 0%, #0b0b0d00 30%, #0b0b0d 97%), linear-gradient(90deg, #0b0b0d 0%, #0b0b0d00 18%, #0b0b0d00 82%, #0b0b0d 100%); }
+  /* Обложку меняют прямо с неё (25.11: «верхнюю плашку не могу настроить»). */
+  .cover-edit { position: absolute; z-index: 2; right: var(--pf-side); top: calc(var(--header) + 44px); display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; background: #0000008c; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .cover-edit:hover { background: #000000bf; }
   .cap { position: absolute; z-index: 1; right: var(--pf-side); top: calc(var(--header) + 18px); color: #ffffffa6; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
 
   .id { position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px 22px; padding-inline: var(--pf-side); }

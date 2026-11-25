@@ -128,7 +128,7 @@ fn item_for(app: &App, v: &Viewer, file: Option<i64>, link: Option<i64>) -> ApiR
                 })?
                 .ok_or_else(ApiError::not_found)?;
             item.link_id = Some(l);
-            item.label = label;
+            item.label = super::links::display_title(app, l).unwrap_or(label);
             item.source = match kind.as_str() {
                 "rutube" => "Rutube",
                 "vk" => "VK",

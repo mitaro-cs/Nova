@@ -191,6 +191,48 @@ const COLS: &str = "l.id, l.kind, l.url, l.embed, l.label, NULLIF(l.thumb, ''), 
     EXISTS (SELECT 1 FROM settings pref WHERE pref.key = ('video.preferred.' || COALESCE('t' || l.title_id, 'e' || l.ext_id) || '.' || COALESCE(l.season, -1) || '.' || COALESCE(l.episode, -1)) AND pref.value = CAST(l.id AS TEXT)), \
     (SELECT domain FROM catalog_links WHERE link_id = l.id)";
 
+/// Подпись ролика без мусора сайта: «Начало | Inception (2010, 4K)» - «Начало». Берём русскую часть до « | » или « / »,
+/// убираем скобки с годом или качеством и хвосты «4K», «1080p», «смотреть онлайн» (просьба владельца 25.11).
+pub fn tidy_label(label: &str) -> String {
+    static JUNK: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"(?i)\s*[\(\[][^\)\]]*(?:\b(?:19|20)\d{2}\b|\b\d{3,4}p\b|\b[48]k\b|\bu?hd\b|hdr|rip|web)[^\)\]]*[\)\]]|\s*\b(?:\d{3,4}p|[48]k|u?hd|full\s*hd|hdr)\b|\s*смотреть(?:\s+(?:онлайн|бесплатно|в хорошем качестве))*").unwrap()
+    });
+    let cyr = |s: &str| s.chars().any(|c| ('а'..='я').contains(&c.to_lowercase().next().unwrap_or(c)) || c == 'ё');
+    let parts: Vec<&str> = label.split(" | ").flat_map(|p| p.split(" / ")).collect();
+    let part = parts.iter().find(|p| cyr(p)).or(parts.first()).copied().unwrap_or(label);
+    let s = JUNK.replace_all(part, "");
+    let s = s.trim().trim_end_matches([',', '-', '·', ':', '|']).trim();
+    if s.is_empty() { label.trim().to_string() } else { s.to_string() }
+}
+
+/// Что показывать в плеере и очереди комнаты: у ссылки фильма - его название (с сезоном и серией), иначе - подпись без мусора.
+pub fn display_title(app: &App, id: i64) -> Option<String> {
+    app.db
+        .with(|c| {
+            c.query_row(
+                "SELECT l.label, COALESCE(t.title, e.title), l.season, l.episode FROM links l
+                 LEFT JOIN titles t ON t.id = l.title_id LEFT JOIN ext_titles e ON e.id = l.ext_id WHERE l.id = ?",
+                [id],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<i64>>(2)?,
+                        r.get::<_, Option<i64>>(3)?,
+                    ))
+                },
+            )
+            .optional()
+        })
+        .ok()
+        .flatten()
+        .map(|(label, film, season, episode)| match (film.filter(|f| !f.trim().is_empty()), season, episode) {
+            (Some(f), Some(s), Some(e)) => format!("{f} - {s} сезон, {e} серия"),
+            (Some(f), _, _) => f,
+            (None, _, _) => tidy_label(&label),
+        })
+}
+
 /// Ссылки с автором и местом, где остановился этот зритель (`?1` - его профиль).
 const FROM: &str = "links l LEFT JOIN profiles p ON p.id = l.added_by
     LEFT JOIN link_progress lp ON lp.link_id = l.id AND lp.profile_id = ?1";
@@ -205,6 +247,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "progress": r.get::<_, Option<f64>>(12)?.map(|p| json!({"position": p, "duration": r.get::<_, Option<f64>>(13).ok().flatten().unwrap_or(0.0)})),
         "season": r.get::<_, Option<i64>>(14)?, "episode": r.get::<_, Option<i64>>(15)?, "preferred": r.get::<_, bool>(16)?,
         "catalogDomain": r.get::<_, Option<String>>(17)?,
+        "display": tidy_label(&r.get::<_, String>(4)?),
     }))
 }
 
@@ -341,11 +384,14 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<ListQu
 pub async fn one(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
     crate::own_sites::link_enabled(&app, id)?;
     let sql = format!("SELECT {COLS} FROM {FROM} WHERE l.id = ?2");
-    Ok(Json(
-        app.db
-            .with(|c| c.query_row(&sql, params![v.profile.id, id], row).optional())?
-            .ok_or_else(ApiError::not_found)?,
-    ))
+    let mut one = app
+        .db
+        .with(|c| c.query_row(&sql, params![v.profile.id, id], row).optional())?
+        .ok_or_else(ApiError::not_found)?;
+    if let Some(t) = display_title(&app, id) {
+        one["display"] = json!(t);
+    }
+    Ok(Json(one))
 }
 
 #[derive(Deserialize)]
@@ -829,6 +875,16 @@ pub async fn resume(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tidy_labels() {
+        assert_eq!(tidy_label("Начало | Inception (2010, 4K)"), "Начало");
+        assert_eq!(tidy_label("Interstellar / Интерстеллар [1080p]"), "Интерстеллар");
+        assert_eq!(tidy_label("Дюна 4K смотреть онлайн"), "Дюна");
+        assert_eq!(tidy_label("Матрица (1999)"), "Матрица");
+        assert_eq!(tidy_label("Мой фильм (режиссёрская версия)"), "Мой фильм (режиссёрская версия)");
+        assert_eq!(tidy_label("Big Buck Bunny"), "Big Buck Bunny");
+    }
 
     #[test]
     fn parses_links() {

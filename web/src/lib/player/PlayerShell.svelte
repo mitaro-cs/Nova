@@ -490,7 +490,25 @@
   const inIntro = $derived(inIntroAt(time, intro));
   // Титры фильма (или последней серии): дальше смотреть нечего - «Пропустить титры» сразу ведёт к экрану конца,
   // а место «на титрах» сервер уже считает досмотренным.
-  const movieCredits = $derived(!canNext && !sync && !ended && !error && info?.markers.credits != null && time >= info.markers.credits && time < duration - 1);
+  const movieCredits = $derived(!canNext && !sync && !ended && !error && !creditsSkipped && info?.markers.credits != null && time >= info.markers.credits && time < duration - 1);
+  // Титры ищутся по кадрам сразу при открытии фильма (25.11): пока сервер ищет - переспрашиваем, найденное ставим на ходу.
+  $effect(() => {
+    const i = info;
+    if (!i || src || !i.markersPending) return;
+    const id = fileId;
+    let live = true;
+    let n = 0;
+    const t = setInterval(async () => {
+      const r = await api<{ markers: PlayInfo['markers']; pending: boolean }>(`/api/files/${id}/markers`).catch(() => null);
+      if (!live || !r || info !== i) return;
+      i.markers = r.markers;
+      if (!r.pending || ++n > 30) i.markersPending = false;
+    }, 8000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  });
   function skipCredits() {
     video?.pause();
     onEnded();
@@ -1041,6 +1059,7 @@
     skipTo={inIntro && intro ? intro[1] : null}
     skipCredits={movieCredits}
     onskipcredits={skipCredits}
+    onwatchcredits={() => (creditsSkipped = true)}
     next={(inCredits || (nextEpisode.left !== null && !inCredits)) && canNext
       ? { title: nextSource?.title ?? info?.nextInfo?.label ?? '', still: info?.nextInfo?.still ?? null, countdown: nextEpisode.left, inCredits }
       : null}

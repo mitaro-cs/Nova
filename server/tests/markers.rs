@@ -126,13 +126,14 @@ async fn started_movie_gets_credits_and_is_watched_on_them() {
     assert!(until(|| async { host.json("/api/admin/status").await["unprobed"] == 0 }).await);
     let title = host.json("/api/titles").await[0]["id"].as_i64().unwrap();
     let file = host.json(&format!("/api/titles/{title}")).await["files"][0]["id"].as_i64().unwrap();
-    assert_eq!(host.json(&format!("/api/files/{file}/info")).await["markers"]["credits"], serde_json::Value::Null);
-    host.send("PUT", &format!("/api/progress/{file}"), json!({"position": 10.0, "duration": 500.0})).await;
-    // Обход, ffprobe, кадры перемотки, потом титры - не дольше 90 с.
+    // Открыли в плеере - поиск идёт сразу (не ждёт фоновую очередь), плеер переспрашивает `/markers`.
+    let info = host.json(&format!("/api/files/{file}/info")).await;
+    assert_eq!(info["markersPending"], true, "поиск титров начат");
     let mut credits = 0.0;
-    for _ in 0..900 {
-        credits = host.json(&format!("/api/files/{file}/info")).await["markers"]["credits"].as_f64().unwrap_or(0.0);
-        if credits > 0.0 {
+    for _ in 0..600 {
+        let m = host.json(&format!("/api/files/{file}/markers")).await;
+        if m["pending"] == false {
+            credits = m["markers"]["credits"].as_f64().unwrap_or(0.0);
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;

@@ -735,6 +735,11 @@ UPDATE ext_people SET at = 0;
 ALTER TABLE files ADD COLUMN auto_markers TEXT;
 ALTER TABLE files ADD COLUMN head_hash BLOB;
 "#,
+    // 40: обложка «кадр любимого фильма» (25.11) - отдельный вариант. У `cover_kind` CHECK только ribbon|image, а менять
+    // CHECK в SQLite - пересборка таблицы; поэтому флаг: `cover_kind = 'ribbon'` + `cover_frame = 1` отдаётся как `frame`.
+    r#"
+ALTER TABLE profiles ADD COLUMN cover_frame INTEGER NOT NULL DEFAULT 0;
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

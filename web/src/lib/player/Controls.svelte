@@ -217,6 +217,8 @@
   }
   .bottom {
     bottom: 0;
+    /* Над слоем паузы: её затемнение не должно гасить значки управления. */
+    z-index: 4;
     padding-top: 28px;
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
     background: linear-gradient(0deg, rgba(0, 0, 0, 0.8), transparent);
@@ -406,7 +408,7 @@
   .ends { display: none; }
   .paused { display: none; }
   @media (min-width: 701px) {
-    .top { background: none; padding-inline: clamp(18px, 3vw, 44px); }
+    .top { background: linear-gradient(180deg, #00000099, #00000040 55%, transparent); padding-inline: clamp(18px, 3vw, 44px); padding-bottom: 48px; }
     .top .name { padding: 0; border: 0; background: none; }
     .top .name b { font-size: 15px; opacity: 0.9; }
     .top .ibtn { width: 40px; height: 40px; border: 0; background: none; }
@@ -420,6 +422,11 @@
       position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: flex-end;
       padding: 0 clamp(28px, 4.5vw, 72px) 150px; pointer-events: none;
       text-shadow: 0 2px 24px #00000080, 0 1px 3px #00000066;
+      /* Пауза (просьба владельца 25.11 «совсем нет затемнения»): мягкая тень снизу-слева под названием и кнопкой,
+         середина кадра остаётся светлой - лицо и картинка видны. */
+      background:
+        linear-gradient(90deg, #000000b8 0%, #00000066 34%, transparent 62%),
+        linear-gradient(0deg, #000000b0 0%, #00000040 40%, transparent 65%);
       animation: swap 0.25s ease-out;
     }
     .paused * { pointer-events: auto; }
