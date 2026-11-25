@@ -15,7 +15,7 @@ const WEEK: i64 = 7 * 86_400_000;
 const SEARCH: &str = r#"query S($t: String!) { mainSearch(first: 3, options: { searchTerm: $t, type: NAME, includeAdult: false }) {
   edges { node { entity { ... on Name { id nameText { text } } } } } } }"#;
 
-const NAME: &str = r#"query N($id: ID!, $cats: [ID!]) { name(id: $id) { nameText { text } primaryImage { url }
+const NAME: &str = r#"query N($id: ID!, $cats: [ID!]) { name(id: $id) { nameText { text } primaryImage { url } bio { text { plainText } }
   credits(first: 80, filter: { categories: $cats }) { edges { node { title {
     id titleText { text } originalTitleText { text } titleType { id isSeries }
     releaseYear { year } ratingsSummary { aggregateRating voteCount }
@@ -159,7 +159,7 @@ pub async fn fetch(app: &Arc<App>, id: &str, role: &str) -> anyhow::Result<()> {
     })?;
     let has_works: bool = app.db.with(|c| {
         c.query_row(
-            "SELECT EXISTS(SELECT 1 FROM ext_people WHERE id = ? AND role = ? AND works != '[]')",
+            "SELECT EXISTS(SELECT 1 FROM ext_people WHERE id = ? AND role = ? AND works != '[]' AND bio IS NOT NULL)",
             params![id, role],
             |r| r.get(0),
         )
@@ -170,13 +170,15 @@ pub async fn fetch(app: &Arc<App>, id: &str, role: &str) -> anyhow::Result<()> {
     let cats: &[&str] = if role == "actor" { &["actor", "actress"] } else { &["director"] };
     let v = Imdb::new(app.http.clone()).data(NAME, json!({ "id": id, "cats": cats }), "name").await?;
     // Только фильмы и сериалы: серии сериалов (у них свои названия, вроде имени героя), игры и ролики в работы
-    // не идут - иначе на странице человека появляются «фильмы» без постера и описания.
+    // не идут - иначе на странице человека появляются «фильмы» без постера и описания. Без единой картинки на IMDb -
+    // тоже нет: это незаконченные и потерянные работы (у Эрика Крипке - «Haunted» 2013 без постера и сюжета).
     const KINDS: &[&str] = &["movie", "tvSeries", "tvMiniSeries", "tvMovie", "tvSpecial"];
     let edges: Vec<Value> = v["credits"]["edges"]
         .as_array()
         .into_iter()
         .flatten()
         .filter(|e| e["node"]["title"]["titleType"]["id"].as_str().is_none_or(|t| KINDS.contains(&t)))
+        .filter(|e| e["node"]["title"]["primaryImage"]["url"].is_string())
         .map(|e| json!({ "node": e["node"]["title"] }))
         .collect();
     let mut works = parse_chart(&json!({ "edges": edges }));
@@ -196,11 +198,13 @@ pub async fn fetch(app: &Arc<App>, id: &str, role: &str) -> anyhow::Result<()> {
         posters_of(app, &ids),
     );
     let name = v["nameText"]["text"].as_str().unwrap_or_default().to_string();
+    // Биография IMDb (по-русски при заголовке ru-RU); нет - пустая строка, чтобы не спрашивать каждый раз.
+    let bio = v["bio"]["text"]["plainText"].as_str().map(str::trim).unwrap_or_default().to_string();
     app.db.with(|c| {
         c.execute(
-            "INSERT INTO ext_people (id, role, name, photo, works, at) VALUES (?1, ?6, ?2, ?3, ?4, ?5)
-             ON CONFLICT(id, role) DO UPDATE SET name = ?2, photo = COALESCE(?3, photo), works = ?4, at = ?5",
-            params![id, name, photo, serde_json::to_string(&ids).unwrap_or_else(|_| "[]".into()), now_ms(), role],
+            "INSERT INTO ext_people (id, role, name, photo, works, at, bio) VALUES (?1, ?6, ?2, ?3, ?4, ?5, ?7)
+             ON CONFLICT(id, role) DO UPDATE SET name = ?2, photo = COALESCE(?3, photo), works = ?4, at = ?5, bio = ?7",
+            params![id, name, photo, serde_json::to_string(&ids).unwrap_or_else(|_| "[]".into()), now_ms(), role, bio],
         )
     })?;
     Ok(())

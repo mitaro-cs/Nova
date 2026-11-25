@@ -1160,12 +1160,14 @@ pub async fn director(
             info = data;
         }
     }
-    type Row = (String, Option<String>, String);
+    type Row = (String, Option<String>, String, Option<String>);
     let row: Option<Row> = match &id {
         Some(id) => app.db.with(|c| {
-            c.query_row("SELECT name, photo, works FROM ext_people WHERE id = ? AND role = ?", params![id, role], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })
+            c.query_row(
+                "SELECT name, photo, works, bio FROM ext_people WHERE id = ? AND role = ?",
+                params![id, role],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
             .optional()
         })?,
         None => None,
@@ -1177,10 +1179,16 @@ pub async fn director(
         }
     }
     let works_json = serde_json::to_string(&ids).unwrap_or_else(|_| "[]".into());
+    // Работы без единой картинки (постера нет ни у нас, ни на IMDb) не показываем: пустая плитка с названием - это
+    // незаконченный или потерянный фильм, о нём нечего рассказать. Пока IMDb не ответил - показываем всё, что есть.
     let works = ext_cards(
         &app,
         &v,
-        "e.id IN (SELECT value FROM json_each(?2))",
+        if imdb_ok {
+            "e.id IN (SELECT value FROM json_each(?2)) AND (COALESCE(e.poster, '') != '' OR COALESCE(e.poster_url, '') != '')"
+        } else {
+            "e.id IN (SELECT value FROM json_each(?2))"
+        },
         "(SELECT key FROM json_each(?2) j WHERE j.value = e.id)",
         &[&works_json],
     )?;
@@ -1200,6 +1208,20 @@ pub async fn director(
         ],
     )?;
     crate::taste::Taste::load(&app, v.profile.id)?.apply(&mut local);
+    // Биография: русская статья Википедии, иначе - с IMDb (имя в ней латиницей - меняем на русское из Викиданных).
+    if info["biography"].as_str().is_none_or(|b| b.trim().is_empty())
+        && let Some(bio) = row.as_ref().and_then(|r| r.3.clone()).filter(|b| !b.is_empty())
+    {
+        let bio = match (row.as_ref().map(|r| r.0.as_str()), info["nameRu"].as_str()) {
+            (Some(en), Some(ru)) if !en.is_empty() => bio.replace(en, ru),
+            _ => bio,
+        };
+        if !info.is_object() {
+            info = json!({});
+        }
+        info["biography"] = json!(bio);
+        info["bioSource"] = json!("imdb");
+    }
     Ok(Json(json!({
         "name": name, "imdbName": row.as_ref().map(|r| r.0.clone()), "id": id, "role": role,
         "photo": super::img(row.and_then(|r| r.1).or_else(|| info["photo"].as_str().map(String::from))), "works": works, "local": local,

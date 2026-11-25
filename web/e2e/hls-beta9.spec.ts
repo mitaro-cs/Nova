@@ -27,7 +27,7 @@ test('HLS: ручное качество и кадр сохраняются на
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.readyState)).toBeGreaterThanOrEqual(2);
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(0);
   await page.mouse.move(100,150);
-  await page.locator('.cbig.main[aria-label="Пауза"]').click();
+  await page.locator('.ibtn.mouse[aria-label="Пауза"]').click();
   const settings=page.getByRole('button',{name:'Настройки плеера',exact:true});
   await settings.click();await page.getByRole('menuitem',{name:/Качество/}).click();
   await page.getByRole('menuitemradio',{name:'360p',exact:true}).click();
@@ -43,7 +43,7 @@ test('HLS: ручное качество и кадр сохраняются на
   await settings.click();await page.getByRole('menuitem',{name:/Качество/}).click();
   await expect(page.getByRole('menuitemradio',{name:'360p',exact:true})).toHaveAttribute('aria-checked','true');
   await page.keyboard.press('Escape');
-  await page.locator('.cbig.main[aria-label="Смотреть"]').click();
+  await page.locator('.ibtn.mouse[aria-label="Смотреть"]').click();
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(pausedAt+1);
   expect(await page.evaluate(()=>(window as any).__hlsReloads)).toBe(0);
  } finally {rmSync(temp,{recursive:true,force:true});}

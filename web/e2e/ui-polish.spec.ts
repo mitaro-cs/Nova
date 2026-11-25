@@ -58,7 +58,7 @@ test('постер загружается с устройства без ожи�
   }
   const dialog=page.getByRole('dialog',{name:'Постер и фон'});await expect(dialog).toBeVisible();
   const uploaded=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/image/poster'));
-  await dialog.getByLabel('Загрузить постер',{exact:true}).setInputFiles({name:'my-poster.jpg',mimeType:'image/jpeg',buffer:bytes});
+  await dialog.getByLabel('Свой постер',{exact:true}).setInputFiles({name:'my-poster.jpg',mimeType:'image/jpeg',buffer:bytes});
   expect((await uploaded).ok()).toBe(true);await expect(dialog).toBeHidden();release();
   await expectClean(page,'свой постер');
   const shots=resolve('../docs/design/ui-polish');mkdirSync(shots,{recursive:true});await page.screenshot({path:resolve(shots,`title-${info.project.name}.png`)});

@@ -958,6 +958,35 @@ pub async fn set_ext_soon(
     Ok(Json(json!({"ok": true, "soon": b.on})))
 }
 
+#[derive(Deserialize)]
+pub struct HiddenBody {
+    hidden: bool,
+}
+
+/// Убрать фильм ленты из Nova (или вернуть). Строку не удаляем: на неё ссылаются отзывы, сообщения и отметки.
+pub async fn set_ext_hidden(
+    State(app): State<Arc<App>>,
+    _m: Manager,
+    Path(id): Path<String>,
+    Json(b): Json<HiddenBody>,
+) -> Out {
+    let n = app.db.with(|c| {
+        if !c.query_row("SELECT EXISTS(SELECT 1 FROM ext_titles WHERE id = ?)", [&id], |r| r.get::<_, bool>(0))? {
+            return Ok(0);
+        }
+        if b.hidden {
+            c.execute("INSERT OR IGNORE INTO ext_hidden (id, at) VALUES (?, ?)", params![id, now_ms()])?;
+        } else {
+            c.execute("DELETE FROM ext_hidden WHERE id = ?", [&id])?;
+        }
+        Ok(1)
+    })?;
+    if n == 0 {
+        return Err(ApiError::not_found());
+    }
+    Ok(Json(json!({"ok": true, "hidden": b.hidden})))
+}
+
 /// Фильм из ленты IMDb: поставить обложкой или фоном выбранную картинку (скачивается к нам в нужном качестве).
 pub async fn set_ext_imdb_image(
     State(app): State<Arc<App>>,

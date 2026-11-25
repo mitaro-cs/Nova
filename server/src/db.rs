@@ -740,6 +740,13 @@ ALTER TABLE files ADD COLUMN head_hash BLOB;
     r#"
 ALTER TABLE profiles ADD COLUMN cover_frame INTEGER NOT NULL DEFAULT 0;
 "#,
+    // 41 (25.11): хост убирает фильм ленты из Nova («такого фильма нет») - он пропадает отовсюду, строка остаётся
+    // (на неё ссылаются отзывы и сообщения, удаление стёрло бы их каскадом). Биография человека с IMDb - запасная,
+    // когда у Википедии нет статьи на русском.
+    r#"
+CREATE TABLE ext_hidden (id TEXT PRIMARY KEY, at INTEGER NOT NULL);
+ALTER TABLE ext_people ADD COLUMN bio TEXT;
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

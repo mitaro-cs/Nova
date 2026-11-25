@@ -739,6 +739,34 @@ async fn manager_marks_feed_film_as_not_released_yet() {
     running.shutdown().await;
 }
 
+/// «Убрать из Nova»: фильм ленты пропадает для всех (страница - 404), обновление ленты его не возвращает; зрителю
+/// убирать нельзя; хост возвращает обратно.
+#[tokio::test(flavor = "multi_thread")]
+async fn manager_hides_feed_film_everywhere() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    fsfy::discover::upsert(&running.app, &[ext("tt0000778", "Пустой фильм", false)]).unwrap();
+    assert_eq!(host.get("/api/discover/title/tt0000778").await.status(), 200);
+    let public = format!("http://127.0.0.1:{}", running.app.ports.0);
+    let mut anna = Client::new(public);
+    anna.send(
+        "POST",
+        "/api/auth/register",
+        json!({"consent": 1,"name": "Анна", "login": "anna", "password": "пароль-12345"}),
+    )
+    .await;
+    assert_eq!(anna.send("PUT", "/api/admin/ext/tt0000778/hidden", json!({"hidden": true})).await.status(), 403);
+    assert!(host.send("PUT", "/api/admin/ext/tt0000778/hidden", json!({"hidden": true})).await.status().is_success());
+    assert_eq!(host.get("/api/discover/title/tt0000778").await.status(), 404);
+    assert_eq!(anna.get("/api/discover/title/tt0000778").await.status(), 404);
+    fsfy::discover::upsert(&running.app, &[ext("tt0000778", "Пустой фильм", false)]).unwrap();
+    assert_eq!(host.get("/api/discover/title/tt0000778").await.status(), 404, "лента не возвращает убранное");
+    assert!(host.send("PUT", "/api/admin/ext/tt0000778/hidden", json!({"hidden": false})).await.status().is_success());
+    assert_eq!(host.get("/api/discover/title/tt0000778").await.status(), 200);
+    assert_eq!(host.send("PUT", "/api/admin/ext/tt9999999/hidden", json!({"hidden": true})).await.status(), 404);
+    running.shutdown().await;
+}
+
 /// Фон и обложка, выбранные хостом среди картинок IMDb, не заменяются своими картинками IMDb и обновлением ленты.
 #[tokio::test(flavor = "multi_thread")]
 async fn picked_feed_art_survives_refresh() {

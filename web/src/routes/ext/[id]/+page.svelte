@@ -19,6 +19,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, del, errorText, patch, post, put } from '$lib/api';
+  import { ask } from '$lib/ui/dialogs.svelte';
   import { clock, count, date, kindLabel, runtime, votes } from '$lib/fmt';
   import { session } from '$lib/session.svelte';
   import { marksChanged, extSheet, remember } from '$lib/discover/sheet.svelte';
@@ -469,6 +470,26 @@
       toast(errorText(e));
     }
   }
+  // Хост убирает фильм из Nova (просьба владельца 25.11: «такого фильма вообще нет»): пропадает из рядов, поиска и у
+  // людей; отметки и отзывы остаются. Вернуть - кнопкой в уведомлении.
+  async function removeTitle() {
+    if (!c) return;
+    const id = c.id;
+    const title = c.title;
+    if (!(await ask(`Убрать «${title}» из Nova? Фильм пропадёт из подборок, поиска и у людей.`, 'Убрать', true))) return;
+    try {
+      await put(`/api/admin/ext/${id}/hidden`, { hidden: true });
+      extSheet.version++;
+      toast(`«${title}» убран из Nova`, 6000, {
+        label: 'Вернуть',
+        run: () => void put(`/api/admin/ext/${id}/hidden`, { hidden: false }).then(() => { extSheet.version++; goto(`/ext/${id}`); }, (e) => toast(errorText(e))),
+      });
+      if (history.length > 1) history.back();
+      else goto('/discover');
+    } catch (e) {
+      toast(errorText(e));
+    }
+  }
   const mobilePlay = $derived.by(() => {
     if (!c) return null;
     if (c.local) return { label: 'Смотреть на Nova', href: `/title/${c.local}` };
@@ -582,7 +603,7 @@
       <StarInput value={mine?.stars ?? null} onchange={setStars} size={24} label="Ваша оценка" />
       <button class="btn block" onclick={() => { moreOpen = false; lists = true; }}>В список</button>
       <button class="btn block" onclick={() => { moreOpen = false; writeReview(); }}>Написать отзыв</button>
-      {#if session.me?.manage}<button class="btn block" onclick={()=>{moreOpen=false;imdbArt=true;}}><Icon name="image" size={16} /> Постер и фон</button>{/if}
+      {#if session.me?.manage}<button class="btn block" onclick={()=>{moreOpen=false;imdbArt=true;}}><Icon name="image" size={16} /> Постер и фон</button><button class="btn block danger" onclick={() => { moreOpen = false; void removeTitle(); }}><Icon name="trash" size={16} /> Убрать из Nova</button>{/if}
       <button class="btn block" onclick={() => (moreOpen = false)}>Готово</button>
     </div>
   </Modal>
@@ -627,6 +648,7 @@
           </div>
         {/if}
         {#if !c.local}<button class="btn block" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={15} /> Смотреть вместе</button>{/if}
+        {#if session.me?.manage}<button class="btn block" onclick={() => { moreOpen = false; imdbArt = true; }}><Icon name="image" size={15} /> Постер и фон</button><button class="btn block danger" onclick={() => { moreOpen = false; void removeTitle(); }}><Icon name="trash" size={15} /> Убрать из Nova</button>{/if}
         {#if c.id.startsWith('tt')}<a class="btn block" href="https://www.imdb.com/title/{c.id}/" target="_blank" rel="noopener noreferrer"><b class="imdb">IMDb</b> Открыть</a>{/if}
   {/snippet}
   {#if !phone.current}
@@ -669,6 +691,7 @@
         {#if session.me?.manage}
           <button class="glass" onclick={() => (imdbArt = true)}><Icon name="image" size={15} /> Обложка и фон с IMDb</button>
           <button class="glass" class:on={c.soon} aria-pressed={!!c.soon} disabled={!d} onclick={toggleSoon}><Icon name="clock" size={15} /> {c.soon ? 'Снять «Ещё не вышел»' : 'Ещё не вышел'}</button>
+          <button class="glass" onclick={removeTitle}><Icon name="trash" size={15} /> Убрать из Nova</button>
         {/if}
       {/snippet}
       {#snippet under()}

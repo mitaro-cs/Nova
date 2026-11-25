@@ -22,26 +22,38 @@ export function scrollToTop(top: number) {
 
 /**
  * Вернуться на прежнее место (25.11: «когда перехожу обратно в прошлые вкладки - не кидало наверх»). Страница
- * достраивается после перехода (каталог, ряды, картинки), поэтому пробуем до 2,5 с, пока высоты не хватит; если человек
- * сам начал прокручивать - не мешаем.
+ * достраивается после перехода (герой-карусель, ряды, картинки), поэтому держим место до 2,5 с, пока высота страницы не
+ * успокоится. Якорение прокрутки браузера на это время выключено: иначе, когда сверху дорастает герой, браузер сдвигает
+ * страницу на его высоту (с главной на фильм и назад уносило на 1600 px ниже). Человек сам начал прокручивать - не мешаем.
  */
 export function restoreScroll(top: number) {
   if (top <= 0) return;
+  const roots = [document.documentElement, document.body];
+  const anchors = roots.map((el) => el.style.overflowAnchor);
+  for (const el of roots) el.style.overflowAnchor = 'none';
   let stop = false;
   const quit = () => (stop = true);
   addEventListener('wheel', quit, { once: true, passive: true });
   addEventListener('touchstart', quit, { once: true, passive: true });
   addEventListener('keydown', quit, { once: true });
   const end = performance.now() + 2500;
+  let height = 0;
+  let calm = 0;
+  const done = () => {
+    roots.forEach((el, i) => (el.style.overflowAnchor = anchors[i]));
+    removeEventListener('wheel', quit);
+    removeEventListener('touchstart', quit);
+    removeEventListener('keydown', quit);
+  };
   const step = () => {
-    if (stop) return;
-    scrollToTop(top);
-    if (Math.abs(scrolledBy() - top) > 2 && performance.now() < end) requestAnimationFrame(step);
-    else {
-      removeEventListener('wheel', quit);
-      removeEventListener('touchstart', quit);
-      removeEventListener('keydown', quit);
-    }
+    if (stop) return done();
+    if (Math.abs(scrolledBy() - top) > 2) scrollToTop(top);
+    const h = document.documentElement.scrollHeight;
+    calm = h === height && Math.abs(scrolledBy() - top) <= 2 ? calm + 1 : 0;
+    height = h;
+    // Пятнадцать кадров подряд та же высота и то же место - страница достроилась.
+    if (calm < 15 && performance.now() < end) requestAnimationFrame(step);
+    else done();
   };
   step();
 }

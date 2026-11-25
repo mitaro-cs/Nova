@@ -46,6 +46,27 @@ test('возврат на раздел вкладкой - на то же мес�
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(was - 60);
 });
 
+test('с фильма назад на главную - на то же место (герой дорастает сверху, страница не уезжает)', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'на касании прокручивается body, проверяем на компьютере');
+  await page.goto(url('/'));
+  await page.waitForLoadState('networkidle');
+  await page.mouse.wheel(0, 1200);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(800);
+  const was = await page.evaluate(() => scrollY);
+  await page.evaluate(() => {
+    const a = [...document.querySelectorAll<HTMLAnchorElement>('main a[href^="/title/"]')].find((x) => {
+      const r = x.getBoundingClientRect();
+      return r.top > 100 && r.bottom < innerHeight;
+    });
+    a?.click();
+  });
+  await expect(page).toHaveURL(/\/title\//);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await page.waitForTimeout(1500);
+  expect(Math.abs((await page.evaluate(() => scrollY)) - was)).toBeLessThan(40);
+});
+
 test('мастер: шаги переключаются нажатием и цифрой, замер не зацикливается', async ({ page }) => {
   await page.goto(url('/admin?tab=setup'));
   const steps = page.getByRole('list', { name: 'Шаги настройки' });

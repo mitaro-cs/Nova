@@ -89,7 +89,7 @@
     {:else if items === null}
       <p class="muted">Загружаем картинки с IMDb…</p>
     {:else if !items.length}
-      <p class="muted">У этого фильма на IMDb нет картинок. Загрузите свою кнопкой внизу.</p>
+      <p class="muted">У этого фильма на IMDb нет картинок. Загрузите свой постер или фон кнопками внизу.</p>
     {:else}
       <div class="grid" class:frames={tab === 'frame'}>
         {#each shown as a (a.url)}
@@ -108,7 +108,11 @@
         <button class="btn" disabled={!!busy} onclick={() => apply('poster')}><Icon name="image" size={16} /> {busy === 'poster' ? 'Загружаем…' : 'Обложкой'}</button>
         <button class="btn" disabled={!!busy} onclick={() => apply('backdrop')}><Icon name="image" size={16} /> {busy === 'backdrop' ? 'Загружаем…' : 'Фоном'}</button>
       {/if}
-      <label class="btn primary upload"><Icon name="image" size={16} />{tab === 'poster' ? 'Загрузить постер' : 'Загрузить фон'}<input aria-label={tab === 'poster' ? 'Загрузить постер' : 'Загрузить фон'} type="file" accept="image/*" disabled={!!busy} onchange={(e) => { void upload(tab === 'poster' ? 'poster' : 'backdrop', e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></label>
+      <!-- Своя картинка - и постером, и фоном, на любой вкладке (раньше «фон» был только во вкладке «Кадры», и у фильма без
+           картинок IMDb его было не найти). -->
+      {#each [{ w: 'poster', l: 'Свой постер' }, { w: 'backdrop', l: 'Свой фон' }] as u (u.w)}
+        <label class="btn upload" class:primary={!picked}><Icon name="image" size={16} />{busy === u.w ? 'Загружаем…' : u.l}<input aria-label={u.l} type="file" accept="image/*" disabled={!!busy} onchange={(e) => { void upload(u.w as 'poster' | 'backdrop', e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></label>
+      {/each}
     </div>
   </div>
 </Modal>

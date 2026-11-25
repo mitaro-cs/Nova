@@ -25,7 +25,7 @@
     works: ExtCard[];
     local: Card[];
     availability?: 'full' | 'partial' | 'unavailable';
-    info?: { nameRu?: string | null; biography?: string | null; description?: string | null; birthDate?: string | null; source?: string; wiki?: string | null } | null;
+    info?: { nameRu?: string | null; biography?: string | null; description?: string | null; birthDate?: string | null; source?: string; wiki?: string | null; bioSource?: 'imdb' } | null;
   };
 
   const name = $derived(page.url.searchParams.get('name') ?? '');
@@ -267,8 +267,8 @@
         {#if bio}
           <p class="text" class:clamp={!more && bio.length > 420}>{bio}</p>
           {#if bio.length > 420}<button class="link" onclick={() => (more = !more)}>{more ? 'Свернуть' : 'Читать дальше'}</button>{/if}
-        {:else}<p class="muted">Не удалось загрузить биографию на русском. Попробуйте обновить сведения или откройте страницу источника.</p><button class="btn sm" onclick={() => retry++}>Обновить сведения</button>{/if}
-        {#if d.info?.source}<p class="sources">Источники: <a href={d.info.source} target="_blank" rel="noopener noreferrer">Викиданные</a>{#if d.info.wiki} · <a href={d.info.wiki} target="_blank" rel="noopener noreferrer">Википедия</a>{/if}</p>{/if}
+        {:else}<p class="muted">Биографии пока нет ни в Википедии, ни на IMDb. Сведения обновляются раз в неделю.</p><button class="btn sm" onclick={() => retry++}>Обновить сведения</button>{/if}
+        {#if d.info?.source || d.info?.bioSource === 'imdb'}<p class="sources">Источники: {#if d.info?.source}<a href={d.info.source} target="_blank" rel="noopener noreferrer">Викиданные</a>{/if}{#if d.info?.wiki} · <a href={d.info.wiki} target="_blank" rel="noopener noreferrer">Википедия</a>{/if}{#if d.info?.bioSource === 'imdb' && d.id}{d.info?.source ? ' · ' : ''}<a href="https://www.imdb.com/name/{d.id}/bio/" target="_blank" rel="noopener noreferrer">IMDb</a>{/if}</p>{/if}
       </section>
       {#if d.local.length}
         <section aria-labelledby="h-local">
@@ -631,7 +631,9 @@
   .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: #fff; vertical-align: -1px; }
   .legend i.u { background: #3d3d44; }
   .tlwrap { overflow-x: auto; scrollbar-width: thin; padding-bottom: 6px; }
-  .tl { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(104px, 1fr)); gap: 12px; align-items: end; margin: 0; padding: 0 0 4px; list-style: none; min-width: min-content; }
+  /* Постер - постоянной ширины: при двух-трёх работах колонки 1fr растягивали его на треть экрана (25.11, «всё съехало»).
+     Мало работ - стоят по линии с равными промежутками, много - лента прокручивается. */
+  .tl { position: relative; display: grid; grid-template-columns: repeat(var(--n), clamp(104px, 9vw, 150px)); justify-content: space-between; column-gap: 12px; align-items: end; margin: 0; padding: 0 0 4px; list-style: none; min-width: min-content; }
   .tl::before { content: ''; position: absolute; left: 0; right: 0; bottom: 27px; height: 2px; background: #ffffff26; }
   .tl li { position: relative; display: grid; justify-items: center; gap: 6px; padding-bottom: 22px; }
   .tl li::after { content: ''; position: absolute; bottom: 23px; width: 10px; height: 10px; border-radius: 50%; background: #3d3d44; }

@@ -1011,6 +1011,7 @@ pub struct ExtCard {
     pub anime: bool,
 }
 
+/// Карточки фильмов ленты. Убранные хостом (`ext_hidden`) не попадают никуда - ни в ряды, ни в поиск, ни к людям.
 pub fn card_sql(kids: bool) -> String {
     format!(
         "SELECT e.id, e.kind, COALESCE((SELECT title FROM title_localizations l WHERE l.id=e.id),e.title),
@@ -1025,7 +1026,7 @@ pub fn card_sql(kids: bool) -> String {
              OR ((e.genres LIKE '%Мульт%' OR e.genres LIKE '%Анимац%' OR e.genres LIKE '%Animation%')
                  AND (COALESCE(e.extra, '') LIKE '%Япония%' OR COALESCE(e.extra, '') LIKE '%Japan%'))
              OR EXISTS (SELECT 1 FROM ext_charts c WHERE c.ext_id = e.id AND c.chart LIKE 'anime%'), 0)
-         FROM ext_titles e",
+         FROM (SELECT * FROM ext_titles WHERE id NOT IN (SELECT id FROM ext_hidden)) e",
         crate::api::visible(kids)
     )
 }

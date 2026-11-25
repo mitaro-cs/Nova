@@ -237,6 +237,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/admin/imdb-art/preview", get(admin::imdb_art_preview))
         .route("/api/admin/ext/{id}/imdb-art", get(admin::ext_imdb_art))
         .route("/api/admin/ext/{id}/soon", put(admin::set_ext_soon))
+        .route("/api/admin/ext/{id}/hidden", put(admin::set_ext_hidden))
         .route(
             "/api/admin/ext/{id}/image/{which}",
             put(admin::upload_ext_image).layer(axum::extract::DefaultBodyLimit::max(crate::images::MAX_IMAGE + 1024)),
