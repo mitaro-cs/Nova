@@ -85,8 +85,10 @@
       window.removeEventListener('nova-tour', early);
     };
   });
+  // Заставка выключена (25.11): владелец не одобрил ни один вариант и пришлёт примеры. Включить - INTRO = true.
+  const INTRO = false;
   $effect(() => {
-    if (!session.me || navigator.webdriver || IntroView) return;
+    if (!INTRO || !session.me || navigator.webdriver || IntroView) return;
     let seen = false;
     try {
       seen = sessionStorage.getItem('nova-intro') === '1';
