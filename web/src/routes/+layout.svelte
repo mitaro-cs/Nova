@@ -85,8 +85,8 @@
       window.removeEventListener('nova-tour', early);
     };
   });
-  // Заставка выключена (25.11): владелец не одобрил ни один вариант и пришлёт примеры. Включить - INTRO = true.
-  const INTRO = false;
+  // Заставка - «Тушь» (выбор владельца 25.11). Выключить - INTRO = false.
+  const INTRO = true;
   $effect(() => {
     if (!INTRO || !session.me || navigator.webdriver || IntroView) return;
     let seen = false;
