@@ -23,6 +23,8 @@
     skipTo = null,
     skipCredits = false,
     onskipcredits,
+    series = false,
+    nextPending = false,
     onwatchcredits,
     next = null,
     onback,
@@ -54,6 +56,9 @@
     /** Начались титры фильма (дальше серии нет) - «Пропустить титры» ведёт к экрану конца. */
     skipCredits?: boolean;
     onskipcredits?: () => void;
+    /** Конец серии сериала (а не фильма) и «следующая серия ещё ищется». */
+    series?: boolean;
+    nextPending?: boolean;
     onwatchcredits?: () => void;
     next?: { title: string; still: string | null; countdown: number | null; inCredits: boolean } | null;
     onback: () => void;
@@ -129,13 +134,14 @@
   <button class="skip" class:low={!shown} onclick={() => onskipintro(skipTo)}>Пропустить заставку</button>
 {:else if skipCredits && onskipcredits}
   <!-- Начались титры фильма (25.11, «сразу предлагал выйти»): карточка как у следующей серии - досмотреть титры или завершить. -->
-  <div class="nextcard endcard" class:low={!shown} role="group" aria-label="Начались титры">
+  <!-- У серии (26.11): «Следующая серия» ещё ищется или её нет - не «Фильм закончился», а честно про серию и «Выйти». -->
+  <div class="nextcard endcard" class:low={!shown} role="group" aria-label={series ? 'Серия заканчивается' : 'Начались титры'}>
     <div class="nc">
-      <span class="muted">Начались титры</span>
-      <b>Фильм закончился</b>
+      <span class="muted">{series ? 'Серия заканчивается' : 'Начались титры'}</span>
+      <b>{series ? (nextPending ? 'Ищем следующую серию…' : 'Следующей серии нет') : 'Фильм закончился'}</b>
       <div class="ncb">
-        <button class="btn sm" onclick={onwatchcredits}>Смотреть титры</button>
-        <button class="btn sm white go" onclick={onskipcredits}><Icon name="check" size={13} /> Завершить</button>
+        <button class="btn sm" onclick={onwatchcredits}>{series ? 'Досмотреть' : 'Смотреть титры'}</button>
+        <button class="btn sm white go" onclick={series ? onback : onskipcredits}>{#if series}Выйти{:else}<Icon name="check" size={13} /> Завершить{/if}</button>
       </div>
     </div>
   </div>
@@ -145,19 +151,23 @@
   <div class="nextcard" class:low={!shown}>
     {#if next.still}<img src={artW(next.still, 640)} alt="" />{/if}
     <div class="nc">
-      <span class="muted">Следующая серия</span>
+      <span class="muted">Дальше</span>
       <b>{next.title}</b>
+      <!-- Перейти на следующую серию или выйти (26.11); «Досмотреть» - мелко, остаться на этой. -->
       <div class="ncb">
-        <button class="btn sm" onclick={onstaycredits}>{next.inCredits ? 'Смотреть титры' : 'Остаться'}</button>
+        <button class="btn sm" onclick={onback}>Выйти</button>
         <button class="btn sm white go" onclick={onnext} style:--p="{next.countdown === null ? 0 : ((10 - next.countdown) / 10) * 100}%">
-          <Icon name="play" size={13} /> Смотреть{next.countdown !== null ? ` · ${next.countdown}` : ''}
+          <Icon name="next" size={13} /> Следующая серия{next.countdown !== null ? ` · ${next.countdown}` : ''}
         </button>
       </div>
+      <button class="stay" onclick={onstaycredits}>Досмотреть эту серию</button>
     </div>
   </div>
 {/if}
 
 <style>
+  .stay { justify-self: start; margin-top: 2px; padding: 2px 0; border: 0; background: none; color: #a1a1aa; font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .stay:hover { color: #fff; }
   .jump {
     position: absolute;
     top: 50%;

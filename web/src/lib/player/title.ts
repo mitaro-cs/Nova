@@ -9,7 +9,7 @@ export function playbackTitle(value:string):string {
 }
 
 /** Номер сезона/серии из подписи, которую отдаёт сервер («1 сезон, 2 серия · Название»). */
-function numbers(text:string):{season:number|null;episode:number|null} {
+export function numbers(text:string):{season:number|null;episode:number|null} {
   const both = text.match(/(\d+)\s*сезон(?:а|ов)?\s*[,·]?\s*(\d+)\s*серия/u);
   if (both) return {season:Number(both[1]),episode:Number(both[2])};
   const one = text.match(/(\d+)\s*серия/u);

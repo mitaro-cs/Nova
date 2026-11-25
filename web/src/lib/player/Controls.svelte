@@ -444,12 +444,15 @@
 
   /* ---------- Телефон и планшет (палец), 26.11 «на телефоне всё налезает» ---------- */
   .slabel { display: none; }
+  /* Одно меню на всех устройствах (26.11 «всё в одном едином центре, не считая качества»): в строке - пауза, ±10 и время
+     слева; справа следующая серия, качество, «Настройки» (озвучка, субтитры, скорость, громкость, серии, момент, картинка в
+     картинке) и полный экран. */
+  .extra { display: none !important; }
+  .slabel { display: inline; margin-left: 6px; font-size: 13px; font-weight: 600; }
+  .row > .ibtn:has(.slabel) { display: inline-flex; padding: 0 14px 0 10px; border: 1px solid #ffffff2e; }
+  .row > .ibtn.q { display: inline-grid !important; }
   @media not ((hover: hover) and (pointer: fine)) {
-    /* Строка внизу - только главное: время, следующая серия, одно меню «Настройки» (там озвучка, субтитры, качество,
-       скорость, громкость, серии, момент, картинка в картинке), полный экран. */
-    .extra { display: none !important; }
-    .slabel { display: inline; margin-left: 6px; font-size: 13px; font-weight: 600; }
-    .row > .ibtn:has(.slabel) { display: inline-flex; padding: 0 14px 0 10px; border: 1px solid #ffffff2e; }
+    .row > .ibtn.q { display: none !important; }
     /* На паузе - экран паузы с «Продолжить», крупные кнопки по центру не дублируют его. */
     .center.rest { opacity: 0; visibility: hidden; }
     .center.rest .cbig { pointer-events: none; }

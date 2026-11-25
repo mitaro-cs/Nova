@@ -24,6 +24,7 @@
   import { levelLabel, qualityName, qualityTier } from './quality-label';
   import { createVolumeControl } from './volume';
   import EndScreen from './EndScreen.svelte';
+  import { numbers } from './title';
   import Icon from '$lib/ui/Icon.svelte';
   import { loadCatalog } from '$lib/catalog.svelte';
   import { marksChanged } from '$lib/discover/sheet.svelte';
@@ -53,6 +54,7 @@
     onwrong,
     expect = null,
     nextSource = null,
+    nextPending = false,
     onnext,
     onfinish,
     onNearEnd,
@@ -61,7 +63,9 @@
   }: {
     fileId?: number;
     /** `linkId` - ссылка, у которой сохраняем место; `start` - откуда начать (где остановился). */
-    src?: { url: string; hls: boolean; dash?: boolean; title: string; linkId?: number; start?: number; season?: number | null; episodeNo?: number | null } | null;
+    src?: { url: string; hls: boolean; dash?: boolean; title: string; linkId?: number; start?: number; season?: number | null; episodeNo?: number | null; series?: string | null } | null;
+    /** Следующую серию по ссылке ещё ищем. */
+    nextPending?: boolean;
     onfail?: () => void;
     sync?: PlayerSync | null;
     sidebar?: boolean;
@@ -145,7 +149,34 @@
   const waiting = $derived(!info && !localError ? true : session?.state === 'loading' || session?.state === 'buffering');
   const duration = $derived(info?.play.duration || (mediaDuration ? offset + mediaDuration : 0));
   const time = $derived(offset + current);
-  const intro = $derived(info?.markers.intro ?? null);
+  // Заставка у видео по ссылке (26.11 «не могу пропустить»): кадры чужого сайта мы не разбираем, поэтому запоминаем, что
+  // зритель сам перемотал в начале серии (рывок на 25-200 с в первые 7 минут), и в следующих сериях этого сериала
+  // показываем «Пропустить заставку» на том же месте. Хранится у зрителя (`nova-intro:<сериал>`).
+  let learnedIntro = $state<[number, number] | null>(null);
+  const introKey = $derived(src?.series ? `nova-intro:${src.series}` : null);
+  $effect(() => {
+    const k = introKey;
+    learnedIntro = null;
+    if (!k) return;
+    try {
+      const v = JSON.parse(localStorage.getItem(k) ?? 'null');
+      if (Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === 'number')) learnedIntro = [v[0], v[1]];
+    } catch {
+      /* без хранилища - без подсказки */
+    }
+  });
+  function learnIntro(from: number, to: number) {
+    if (!introKey || !src || info?.kind !== 'series') return;
+    if (from > 420 || to - from < 25 || to - from > 200) return;
+    const r: [number, number] = [Math.max(0, Math.floor(from) - 2), Math.round(to)];
+    learnedIntro = r;
+    try {
+      localStorage.setItem(introKey, JSON.stringify(r));
+    } catch {
+      /* не запомнили - не страшно */
+    }
+  }
+  const intro = $derived(info?.markers.intro ?? (src ? learnedIntro : null));
   const hevcOk = $derived.by(() => {
     if (!info?.play.hevc) return true;
     const caps = detectCaps(video);
@@ -326,7 +357,7 @@
         untrack(() => {
           info = {
             play: { direct: !s.hls, remux: false, transcode: false, hevc: false, tenBit: false, duration: null, width: null, height: null, audio: [], subs: [] },
-            titleId: 0, kind: s.season != null && s.episodeNo != null ? 'series' : 'movie', title: s.title, episode: '', prev: null, next: null, nextInfo: null, season: s.season ?? null, position: 0,
+            titleId: 0, kind: (s.season != null && s.episodeNo != null) || numbers(s.title).episode != null ? 'series' : 'movie', title: s.title, episode: '', prev: null, next: null, nextInfo: null, season: s.season ?? null, position: 0,
             markers: { intro: null, credits: null, manual: false }, trickplay: null, hls: false,
           };
           begin(s.start && s.start > 5 ? s.start : 0);
@@ -490,9 +521,9 @@
   // Видео по ссылке не знает, где титры (глав нет, кадры не разбираем): считаем титрами хвост по тому же правилу, что и
   // «досмотрено» на сервере (`play::finished`: 8 % видео, от 20 с до 10 мин, не больше четверти). Так и у сериала по
   // ссылке есть «Следующая серия», и у фильма - «Завершить» (26.11: «нет возможности пропустить титры»).
-  const linkCredits = $derived(
-    src && duration > 60 ? duration - Math.min(Math.max(duration * 0.08, 20), 600, duration * 0.25) : null,
-  );
+  // Карточка - только в последние 90 секунд (26.11: «сериал ещё идёт, а он уже предлагает завершить» - 8 % у серии на
+  // 56 минут это четыре с половиной минуты). «Досмотрено» на сервере считается по-прежнему.
+  const linkCredits = $derived(src && duration > 60 ? duration - Math.min(Math.max(duration * 0.03, 20), 90) : null);
   const creditsAt = $derived(info?.markers.credits ?? linkCredits);
   const isSeries = $derived(info?.kind === 'series');
   const inIntro = $derived(inIntroAt(time, intro));
@@ -596,6 +627,7 @@
   function seek(t: number, report = true) {
     if (!video || !duration || !session) return;
     t = Math.max(0, Math.min(duration - 1, t));
+    if (report && !sync) learnIntro(time, t);
     if (mode === 'remux') {
       const local = t - offset;
       // Внутри уже полученного куска - обычная перемотка, иначе новый поток с нужного места.
@@ -1066,6 +1098,8 @@
     failedLink={!!src}
     skipTo={inIntro && intro ? intro[1] : null}
     skipCredits={movieCredits}
+    series={isSeries}
+    {nextPending}
     onskipcredits={skipCredits}
     onwatchcredits={() => (creditsSkipped = true)}
     next={(inCredits || (nextEpisode.left !== null && !inCredits)) && canNext
