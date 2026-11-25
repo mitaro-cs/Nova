@@ -41,16 +41,16 @@ test('десять зрителей: реальные плееры приним�
    await p.locator('video').evaluate(v=>{(window as any).__reloads=0;v.addEventListener('loadstart',()=>{(window as any).__reloads++})});
   }));
   await expect.poll(async()=>(await (await page.request.get(url(`/api/rooms/${room}`))).json()).members.length).toBe(10);
-  await pages[0].locator('.ibtn.mouse[aria-label="Смотреть"]').click();
+  await pages[0].locator('.ibtn.mouse[aria-label="Смотреть"], .paused .go').filter({visible:true}).first().click();
   await Promise.all(pages.map(p=>expect.poll(()=>p.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(false)));
-  await pages[9].locator('.ibtn.mouse[aria-label="Пауза"]').click();
+  await pages[9].locator('.ibtn.mouse[aria-label="Пауза"], .cbig.main[aria-label="Пауза"]').filter({visible:true}).first().click();
   await Promise.all(pages.map(async p=>{
    await expect.poll(()=>p.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
    expect(await p.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(6);
    expect(await p.evaluate(()=>(window as any).__reloads)).toBe(0);
   }));
   await pages[0].screenshot({path:'test-results/party-ten-browser.png'});
-  await pages[0].locator('.ibtn.mouse[aria-label="Смотреть"]').click();
+  await pages[0].locator('.ibtn.mouse[aria-label="Смотреть"], .paused .go').filter({visible:true}).first().click();
   await Promise.all(pages.map(p=>expect.poll(()=>p.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(false)));
   await Promise.all(contexts.map(ctx=>ctx.setOffline(true)));
   // Chromium's offline emulation leaves already-open SSE sockets alive. Leaving
@@ -98,9 +98,9 @@ test('два плеера: поздний вход, пауза без перез
    expect(await p.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
    await p.locator('video').evaluate(v=>{(window as any).__partyVideo=v;(window as any).__reloads=0;v.addEventListener('loadstart',()=>{(window as any).__reloads++})});
   }
-  await page.locator('.ibtn.mouse[aria-label="Смотреть"]').filter({visible:true}).first().evaluate((b:HTMLButtonElement)=>b.click());
+  await page.locator('.ibtn.mouse[aria-label="Смотреть"], .paused .go').filter({visible:true}).first().evaluate((b:HTMLButtonElement)=>b.click());
   for(const p of [page,other])await expect.poll(()=>p.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(false);
-  await other.locator('.ibtn.mouse[aria-label="Пауза"]').filter({visible:true}).first().evaluate((b:HTMLButtonElement)=>b.click());
+  await other.locator('.ibtn.mouse[aria-label="Пауза"], .cbig.main[aria-label="Пауза"]').filter({visible:true}).first().evaluate((b:HTMLButtonElement)=>b.click());
   for(const p of [page,other]) {
    await expect.poll(()=>p.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
    expect(await p.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(10);
@@ -110,9 +110,13 @@ test('два плеера: поздний вход, пауза без перез
   const position=await page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime);
   await page.waitForTimeout(3500);
   expect(Math.abs(await page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)-position)).toBeLessThan(.5);
-  await page.locator('.ibtn.mouse[aria-label="Смотреть"]').filter({visible:true}).first().evaluate((b:HTMLButtonElement)=>b.click());
+  await page.locator('.ibtn.mouse[aria-label="Смотреть"], .paused .go').filter({visible:true}).first().evaluate((b:HTMLButtonElement)=>b.click());
   await page.mouse.move(80,120);
   await expect(page.getByRole('group',{name:'Реакции',exact:true})).toBeHidden({timeout:6000});
+  // На телефоне чат сначала закрыт (кадр важнее) - открываем кнопкой.
+  // (кнопка в покое плеера спрятана - нажимаем напрямую).
+  const showChat=page.locator('button.toggle[aria-expanded="false"]');
+  if(await showChat.count()) await showChat.evaluate((b:HTMLButtonElement)=>b.click());
   await expect(page.getByRole('complementary',{name:'Смотрим вместе'})).toBeVisible();
   const input=page.getByRole('textbox',{name:'Сообщение в комнату'});
   await input.fill('тест с пробелом');

@@ -3,17 +3,18 @@ import { expectClean, url } from './util';
 
 // Сама проверка вёрстки должна ловить ошибки, иначе её зелёный цвет ничего не значит.
 test('самопроверка: наложение ловится', async ({ page }) => {
-  // Обзор: заголовок и текст под ним есть на любом экране (у главной и поиска на телефоне заголовка нет).
-  await page.goto(url('/discover'));
-  await page.waitForSelector('main h1');
+  // Своя проба на странице: заголовок и абзац под ним (страницы меняют вид, проба - нет). Абзац заезжает на заголовок.
+  await page.goto(url('/my'));
+  await page.waitForSelector('main');
   await page.evaluate(() => {
-    const h = document.querySelector('h1')!;
-    // Абзац под заголовком заезжает на него наполовину при любой высоте заголовка (телефон - ниже).
-    h.style.marginBottom = `-${Math.round(h.getBoundingClientRect().height / 2)}px`;
+    const box = document.createElement('section');
+    box.id = 'probe';
+    box.innerHTML = '<h2 style="font-size:32px;margin:0 0 -20px">Проба заголовка</h2><p style="margin:0">Текст под заголовком</p>';
+    document.querySelector('main')!.prepend(box);
   });
   await expect(expectClean(page, 'проба')).rejects.toThrow(/пересекаются/);
   await page.evaluate(() => {
-    document.querySelector('h1')!.style.marginBottom = '';
+    document.getElementById('probe')!.remove();
     const d = document.createElement('div');
     d.style.cssText = 'width:2000px;height:10px';
     d.textContent = 'x';
