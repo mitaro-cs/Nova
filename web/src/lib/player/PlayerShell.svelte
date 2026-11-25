@@ -326,7 +326,7 @@
         untrack(() => {
           info = {
             play: { direct: !s.hls, remux: false, transcode: false, hevc: false, tenBit: false, duration: null, width: null, height: null, audio: [], subs: [] },
-            titleId: 0, kind: 'movie', title: s.title, episode: '', prev: null, next: null, nextInfo: null, season: s.season ?? null, position: 0,
+            titleId: 0, kind: s.season != null && s.episodeNo != null ? 'series' : 'movie', title: s.title, episode: '', prev: null, next: null, nextInfo: null, season: s.season ?? null, position: 0,
             markers: { intro: null, credits: null, manual: false }, trickplay: null, hls: false,
           };
           begin(s.start && s.start > 5 ? s.start : 0);
@@ -398,7 +398,7 @@
     if (video.buffered.length) buffered = video.buffered.end(video.buffered.length - 1);
     session?.setPlace(time);
     progress.save();
-    if (src && nearEnd(time, duration) && !nextPrepared) {
+    if (src && (nearEnd(time, duration) || (linkCredits !== null && time >= linkCredits - 30)) && !nextPrepared) {
       nextPrepared = true;
       onNearEnd?.();
     }
@@ -487,10 +487,18 @@
 
   // ---------- заставка, титры, следующая серия ----------
   const canNext = $derived(!!info?.next || !!nextSource);
+  // Видео по ссылке не знает, где титры (глав нет, кадры не разбираем): считаем титрами хвост по тому же правилу, что и
+  // «досмотрено» на сервере (`play::finished`: 8 % видео, от 20 с до 10 мин, не больше четверти). Так и у сериала по
+  // ссылке есть «Следующая серия», и у фильма - «Завершить» (26.11: «нет возможности пропустить титры»).
+  const linkCredits = $derived(
+    src && duration > 60 ? duration - Math.min(Math.max(duration * 0.08, 20), 600, duration * 0.25) : null,
+  );
+  const creditsAt = $derived(info?.markers.credits ?? linkCredits);
+  const isSeries = $derived(info?.kind === 'series');
   const inIntro = $derived(inIntroAt(time, intro));
   // Титры фильма (или последней серии): дальше смотреть нечего - «Пропустить титры» сразу ведёт к экрану конца,
   // а место «на титрах» сервер уже считает досмотренным.
-  const movieCredits = $derived(!canNext && !sync && !ended && !error && !creditsSkipped && info?.markers.credits != null && time >= info.markers.credits && time < duration - 1);
+  const movieCredits = $derived(!canNext && !ended && !error && !creditsSkipped && creditsAt != null && time >= creditsAt && time < duration - 1 && (!sync || !isSeries));
   // Титры ищутся по кадрам сразу при открытии фильма (25.11): пока сервер ищет - переспрашиваем, найденное ставим на ходу.
   $effect(() => {
     const i = info;
@@ -514,7 +522,7 @@
     onEnded();
   }
   const inCredits = $derived(
-    inCreditsAt(time, { credits: info?.markers.credits ?? null, hasNext: !!info?.next, series: info?.kind === 'series', skipped: creditsSkipped, failed: !!error }),
+    inCreditsAt(time, { credits: creditsAt, hasNext: canNext, series: isSeries, skipped: creditsSkipped, failed: !!error }),
   );
 
   $effect(() => {
@@ -1092,7 +1100,8 @@
   />
 
   <!-- Совместный просмотр: чат и реакции поверх видео (видны и во весь экран). -->
-  {#if ended && !canNext && !sync && !error && info}
+  <!-- Экран конца с оценкой - только у фильма: у сериала после серии - следующая серия (или выбор серии). -->
+  {#if ended && !canNext && !sync && !error && info && !isSeries}
     <EndScreen titleId={info.titleId} linkId={src?.linkId ?? null} title={src?.title ?? info.title} onreplay={() => { ended = false; seek(0); toggle(); }} onback={back} />
   {/if}
   {#if markedWatched}
@@ -1193,6 +1202,8 @@
       skipAlways={info?.kind === 'series' && !src && intro ? skipAlways : null}
       onskipalways={toggleSkipAlways}
       onlook={setLook}
+      onmoment={duration ? markMoment : undefined}
+      onpip={pipOk ? () => { panel = ''; void pip(); } : undefined}
       onrate={setRate}
       onquality={setQuality}
       onlevel={pickLevel}
@@ -1212,7 +1223,8 @@
     -webkit-user-select: none;
     user-select: none;
   }
-  @media (min-width: 801px) {
+  /* Чат комнаты сбоку - только на большом экране; на телефоне лёжа (низкий экран) он ложится поверх кадра. */
+  @media (min-width: 801px) and (min-height: 501px) {
     .player.with-sidebar video {
       width: calc(100% - 360px);
     }

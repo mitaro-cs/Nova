@@ -30,7 +30,8 @@
   let members = $state<Who[]>([]);
   let chat = $state<RoomChat[]>([]);
   let error = $state('');
-  let side = $state(true);
+  // На телефоне чат сначала закрыт: кадр важнее (26.11 «всё ужато»); открывается кнопкой справа сверху.
+  let side = $state(typeof matchMedia === 'undefined' || !matchMedia('(max-height: 500px), (max-width: 640px)').matches);
   // Очередь просмотра: порядок задаёт создатель, остальные предлагают. Вкладка боковой панели - «Очередь» или «Чат».
   let queue = $state<RoomItem[]>([]);
   let current = $state<number | null>(null);
@@ -850,7 +851,7 @@
       height: auto;
     }
   }
-  @media (min-width: 801px) {
+  @media (min-width: 801px) and (min-height: 501px) {
     .room:not(.closed) .side { top:0; bottom:0; right:0; width:360px; border-radius:0; height:100%; padding-top:24px; }
     .room:not(.closed) .toggle { right:372px; }
     .room:not(.closed) .reacts { left:calc((100% - 360px) / 2); }
@@ -890,4 +891,34 @@
   .er-who { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
   .er-who li { padding: 6px 12px; border-radius: 999px; background: #ffffff12; font-size: 12.5px; font-weight: 600; }
   @media (max-width: 480px) { .er-in { flex-direction: column; } }
+
+  /* ---------- Телефон (26.11): ничего не налезает на управление ---------- */
+  @media (max-height: 500px), (max-width: 640px) {
+    /* «Смотрим вместе · N участн.» - в чате, на кадре не нужен. */
+    .room-status { display: none; }
+    /* Реакции - столбиком у правого края между верхней и нижней строкой плеера; прячутся вместе с управлением. */
+    .reacts {
+      left: auto !important;
+      right: max(10px, env(safe-area-inset-right));
+      top: calc(var(--top-h, 60px) + 54px);
+      bottom: auto !important;
+      max-height: calc(100% - var(--top-h, 60px) - var(--bottom-h, 90px) - 62px);
+      transform: none !important;
+      flex-direction: column;
+      justify-content: flex-start;
+      max-width: none !important;
+      width: 44px;
+      padding: 4px !important;
+      overflow-y: auto;
+      scrollbar-width: none;
+      border-radius: 22px !important;
+    }
+    .reacts::-webkit-scrollbar { display: none; }
+    .reacts button { flex: none; width: 36px !important; height: 36px !important; font-size: 19px; }
+    :global(.player.idle) .reacts { opacity: 0; visibility: hidden; }
+    .seats { display: none; }
+    .fly { bottom: calc(var(--bottom-h, 90px) + 20px); }
+    /* Размытие под чатом и реакциями на телефоне - лишняя работа видеокарте поверх видео: плотный фон. */
+    .reacts, .side { backdrop-filter: none !important; background: #111114f2 !important; }
+  }
 </style>

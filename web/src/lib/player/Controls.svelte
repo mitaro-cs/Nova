@@ -137,7 +137,7 @@
 </div>
 
 {#if !busy}
-  <div class="center" class:hide={!shown && !paused} class:covered={!!panel}>
+  <div class="center" class:hide={!shown && !paused} class:covered={!!panel} class:rest={paused && !panel}>
     <button class="cbig" aria-label="Назад на 10 секунд" onclick={() => onskip(-10)}>
       <svg class="skip" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.62 5.25A8 8 0 1 0 15.38 5.25M16.54 8.45 15.38 5.25 18.58 4.09" /><text x="12" y="15.5">10</text></svg>
     </button>
@@ -174,21 +174,21 @@
     <span class="time">{clock(time)} <span class="faint">/ {clock(duration)}</span></span>
     <span class="grow"></span>
     {#if canNext}<button class="ibtn tip" data-tip="Следующая серия (N)" aria-label="Следующая серия" onclick={onnext}><Icon name="next" size={22} /></button>{/if}
-    {#if showEpisodes}<button class="ibtn tip" class:on={panel === 'episodes'} data-tip="Серии" aria-label="Серии" onclick={() => onpanel('episodes')}><Icon name="tv" size={21} /></button>{/if}
-    <div class="vol">
+    {#if showEpisodes}<button class="ibtn tip extra" class:on={panel === 'episodes'} data-tip="Серии" aria-label="Серии" onclick={() => onpanel('episodes')}><Icon name="tv" size={21} /></button>{/if}
+    <div class="vol extra">
       <button class="ibtn tip" data-tip={muted ? 'Включить звук (M)' : 'Звук (M)'} aria-label={muted ? 'Включить звук' : 'Выключить звук'} onclick={() => onvolume(muted ? -1 : 0)}>
         <Icon name={muted || volume === 0 ? 'mute' : 'volume'} size={22} />
       </button>
       <input type="range" min="0" max="2" step="0.02" value={muted ? 0 : volume} oninput={(e) => onvolume(Number((e.target as HTMLInputElement).value))} aria-label="Громкость" aria-valuetext={`${Math.round(volume*100)}%`} />
       <span class="volume-label">{Math.round((muted?0:volume)*100)}%</span>
     </div>
-    {#if showAudio}<button class="ibtn tip" class:on={panel === 'audio'} data-tip="Озвучка" aria-label="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
-    {#if showSubs}<button class="ibtn tip" class:on={panel === 'subs' || subsOn} data-tip="Субтитры (C)" aria-label="Субтитры" onclick={() => onpanel('subs')}><Icon name="captions" size={22} /></button>{/if}
+    {#if showAudio}<button class="ibtn tip extra" class:on={panel === 'audio'} data-tip="Озвучка" aria-label="Озвучка" onclick={() => onpanel('audio')}><Icon name="audio" size={22} /></button>{/if}
+    {#if showSubs}<button class="ibtn tip extra" class:on={panel === 'subs' || subsOn} data-tip="Субтитры (C)" aria-label="Субтитры" onclick={() => onpanel('subs')}><Icon name="captions" size={22} /></button>{/if}
     <!-- Качество - текстом («1080p», «Авто»), а не вторым значком «ползунки»: раньше их было два одинаковых рядом. -->
-    {#if showQuality}<button class="ibtn tip q" class:on={panel === 'quality'} data-tip="Качество" aria-label="Качество" onclick={() => onpanel('quality')}><span class="qtext">{qualityLabel || 'Авто'}</span></button>{/if}
-    <button class="ibtn tip" class:on={panel === 'settings'} data-tip="Настройки" aria-label="Настройки плеера" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /></button>
-    {#if onmoment}<button class="ibtn tip" data-tip="Отметить момент" aria-label="Отметить момент" onclick={onmoment}><Icon name="bookmark" size={20} /></button>{/if}
-    {#if pipOk}<button class="ibtn tip" data-tip="Картинка в картинке (P)" aria-label="Картинка в картинке" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
+    {#if showQuality}<button class="ibtn tip q extra" class:on={panel === 'quality'} data-tip="Качество" aria-label="Качество" onclick={() => onpanel('quality')}><span class="qtext">{qualityLabel || 'Авто'}</span></button>{/if}
+    <button class="ibtn tip" class:on={panel === 'settings'} data-tip="Настройки" aria-label="Настройки плеера" onclick={() => onpanel('settings')}><Icon name="sliders" size={22} /><span class="slabel">Настройки</span></button>
+    {#if onmoment}<button class="ibtn tip extra" data-tip="Отметить момент" aria-label="Отметить момент" onclick={onmoment}><Icon name="bookmark" size={20} /></button>{/if}
+    {#if pipOk}<button class="ibtn tip extra" data-tip="Картинка в картинке (P)" aria-label="Картинка в картинке" onclick={onpip}><Icon name="copy" size={20} /></button>{/if}
     <button class="ibtn tip" data-tip={full ? 'Выйти из полного экрана (F)' : 'Во весь экран (F)'} aria-label="Во весь экран" onclick={onfullscreen}><Icon name={full ? 'exitfs' : 'fullscreen'} size={22} /></button>
   </div>
   </div>
@@ -440,5 +440,50 @@
     .paused .left { margin-left: 18px; font-size: 14px; opacity: 0.7; }
     /* Большие кнопки по центру на паузе не нужны: есть «Продолжить». */
     .center.covered, .center.hide { opacity: 0; }
+  }
+
+  /* ---------- Телефон и планшет (палец), 26.11 «на телефоне всё налезает» ---------- */
+  .slabel { display: none; }
+  @media not ((hover: hover) and (pointer: fine)) {
+    /* Строка внизу - только главное: время, следующая серия, одно меню «Настройки» (там озвучка, субтитры, качество,
+       скорость, громкость, серии, момент, картинка в картинке), полный экран. */
+    .extra { display: none !important; }
+    .slabel { display: inline; margin-left: 6px; font-size: 13px; font-weight: 600; }
+    .row > .ibtn:has(.slabel) { display: inline-flex; padding: 0 14px 0 10px; border: 1px solid #ffffff2e; }
+    /* На паузе - экран паузы с «Продолжить», крупные кнопки по центру не дублируют его. */
+    .center.rest { opacity: 0; }
+    .center.rest .cbig { pointer-events: none; }
+  }
+  /* Низкий экран (телефон лёжа): всё компактнее, чтобы кадр было видно. */
+  @media (max-height: 500px) {
+    .top { padding: calc(8px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 18px max(14px, env(safe-area-inset-left)); gap: 8px; }
+    .top .name b { font-size: 14px; }
+    .ends { font-size: 12px !important; }
+    .bottom { padding: 26px max(14px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)) !important; }
+    .ibtn { height: 36px; min-width: 36px; }
+    .cbig { width: 50px; height: 50px; }
+    .cbig.main { width: 64px; height: 64px; }
+    .skip { width: 36px; height: 36px; }
+    .center { gap: 40px; }
+    .paused { padding: 0 max(20px, env(safe-area-inset-left)) calc(var(--bottom-h, 90px) + 14px) !important; }
+    .paused small { display: none; }
+    .paused h2 { margin: 0 !important; max-width: 60% !important; font-size: 24px !important; letter-spacing: -0.03em !important; }
+    .paused p { display: none; }
+    .paused .go { margin-top: 12px !important; padding: 10px 20px !important; font-size: 14px !important; }
+    .paused .left { font-size: 12px !important; margin-left: 12px !important; }
+  }
+  /* Телефон стоя: экран паузы тоже есть (раньше - только с 701 px), компактный. */
+  @media (max-width: 700px) and (pointer: coarse) {
+    .paused {
+      position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 0 16px calc(var(--bottom-h, 90px) + 14px); pointer-events: none;
+      background: linear-gradient(0deg, #000000c0 0%, #00000040 45%, transparent 70%);
+    }
+    .paused * { pointer-events: auto; }
+    .paused.away { opacity: 0; }
+    .paused small, .paused p { display: none; }
+    .paused h2 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.1; }
+    .paused .go { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 10px 18px; border: 0; border-radius: 999px; background: #fff; color: #0a0a0b; font: inherit; font-size: 14px; font-weight: 700; }
+    .paused .left { margin-left: 10px; font-size: 12px; opacity: 0.7; }
   }
 </style>

@@ -10,3 +10,8 @@ it('заголовок - фильм и серия, без подписей ис�
   expect(playbackHeading('Друзья','',1,5)).toBe('Друзья · 1 сезон, 5 серия');
   expect(playbackHeading('Тёмный рыцарь | The Dark Knight','')).toBe('Тёмный рыцарь');
 });
+it('серия уже в названии ссылки - не повторяем', () => {
+  expect(playbackHeading('The Sopranos - 4 сезон, 7 серия', '', 4, 7)).toBe('The Sopranos - 4 сезон, 7 серия');
+  expect(playbackHeading('Клан Сопрано', '', 4, 7)).toBe('Клан Сопрано · 4 сезон, 7 серия');
+  expect(playbackHeading('Сериал 14 сезон, 7 серия', '', 4, 7)).toBe('Сериал 14 сезон, 7 серия · 4 сезон, 7 серия');
+});

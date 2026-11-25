@@ -25,7 +25,10 @@ export function playbackHeading(title:string, episode:string, season?:number|nul
   const found = numbers(episode ?? '');
   const s = season ?? found.season;
   const e = episodeNo ?? found.episode;
-  if (s != null && e != null) return `${name} · ${s} сезон, ${e} серия`;
+  // В названии уже есть «4 сезон, 7 серия» (у видео по ссылке так собирает сервер) - второй раз не пишем.
+  const has = (n: number, w: string) => new RegExp(`(^|\\D)${n}\\s*${w}`, 'u').test(name);
+  if (s != null && e != null) return has(s, 'сезон') && has(e, 'сери') ? name : `${name} · ${s} сезон, ${e} серия`;
+  if (e != null && has(e, 'сери')) return name;
   if (e != null) return `${name} · ${e} серия`;
   return name;
 }

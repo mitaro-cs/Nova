@@ -54,6 +54,8 @@
     onnight,
     skipAlways = null,
     onskipalways,
+    onmoment,
+    onpip,
   }: {
     panel: string;
     info: PlayInfo;
@@ -94,6 +96,9 @@
     /** Сериал с отмеченной заставкой: пропускать её самим (null - не сериал или заставки нет). */
     skipAlways?: boolean | null;
     onskipalways?: () => void;
+    /** На телефоне в строке плеера только главное (26.11): остальное - здесь. */
+    onmoment?: () => void;
+    onpip?: () => void;
   } = $props();
 
   // Одно меню (23.11): озвучка, субтитры, качество и скорость - вкладками одной панели.
@@ -147,7 +152,9 @@
     {#if info.play.audio.length > 1}<button role="menuitem" onclick={() => onpanel('audio')}><Icon name="audio" size={18} /> Озвучка</button>{/if}
     {#if linked && alts.length > 1}<button role="menuitem" onclick={() => onpanel('sources')}><Icon name="link" size={18} /> Источник видео</button>{/if}
     {#if linked && canReportWrong}<button role="menuitem" onclick={() => onwrong?.()}><Icon name="flag" size={18} /> Это не тот фильм</button>{/if}
-    <button role="menuitem" onclick={() => onpanel('keys')}><Icon name="info" size={18} /> Горячие клавиши</button>
+    {#if onmoment}<button role="menuitem" onclick={onmoment}><Icon name="bookmark" size={18} /> Отметить момент</button>{/if}
+    {#if onpip}<button role="menuitem" onclick={onpip}><Icon name="copy" size={18} /> Картинка в картинке</button>{/if}
+    <button role="menuitem" class="keys" onclick={() => onpanel('keys')}><Icon name="info" size={18} /> Горячие клавиши</button>
   {:else if panel === 'sources'}
     <h4>Источник видео</h4>
     {#each alts as a (a.id)}
