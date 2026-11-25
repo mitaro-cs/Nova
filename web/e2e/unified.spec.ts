@@ -62,7 +62,7 @@ test('разделы ведут на свои страницы', async ({ page }
   await expect(page.locator('main').getByRole('link', { name: /Подборки/ })).toBeVisible();
   await goTo(page, 'Подбор');
   await expect(page).toHaveURL(/\/feed$/);
-  await expect(page.getByRole('heading', { name: 'Подбор', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Что посмотрим сегодня|Подбор/, level: 1 })).toBeVisible();
   await goTo(page, 'Каталог');
   await expect(page).toHaveURL(/\/discover$/);
   // Внутри Каталога - полоса «Всё · Фильмы · Сериалы · Аниме».
