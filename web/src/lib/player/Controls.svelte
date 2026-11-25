@@ -451,7 +451,7 @@
     .slabel { display: inline; margin-left: 6px; font-size: 13px; font-weight: 600; }
     .row > .ibtn:has(.slabel) { display: inline-flex; padding: 0 14px 0 10px; border: 1px solid #ffffff2e; }
     /* На паузе - экран паузы с «Продолжить», крупные кнопки по центру не дублируют его. */
-    .center.rest { opacity: 0; }
+    .center.rest { opacity: 0; visibility: hidden; }
     .center.rest .cbig { pointer-events: none; }
   }
   /* Низкий экран (телефон лёжа): всё компактнее, чтобы кадр было видно. */

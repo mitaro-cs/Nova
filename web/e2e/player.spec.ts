@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './util-test';
-import { env, url } from './util';
+import { env, playerButton, url } from './util';
 
 // Плеер на настоящем видео демо-данных: запуск, управление, переход по цепочке режимов при сбое,
 // понятная ошибка, качество, серии и «Следующая серия». Видео короткое (6 с).
@@ -42,7 +42,7 @@ const ready = (page: Page) => page.evaluate(() => document.querySelector('video'
 
 // Запустить, если ещё не идёт (разрешён ли автозапуск без нажатия, зависит от политики браузера).
 async function play(page: Page) {
-  if ((await state(page)).paused) await page.getByRole('button', { name: 'Смотреть', exact: true }).first().click();
+  if ((await state(page)).paused) await page.getByRole('button', { name: /^(Смотреть|Продолжить)$/ }).filter({ visible: true }).first().click();
 }
 
 test('плеер: запускается по нажатию, пауза и перемотка с клавиатуры', async ({ page }) => {
@@ -105,9 +105,11 @@ test('плеер: смена качества не теряет место, сп
   await play(page);
   await expect.poll(async () => (await state(page)).t).toBeGreaterThan(1);
   const before = (await state(page)).t;
-  await page.getByRole('button', { name: 'Качество' }).click();
+  await playerButton(page, 'Качество');
   await page.getByRole('menuitemradio', { name: /Авто/ }).click();
-  await expect(page.getByRole('button', { name: 'Качество' })).toContainText('Авто');
+  // На компьютере качество видно текстом на кнопке; на телефоне кнопки нет - оно в меню «Настройки».
+  const q = page.getByRole('button', { name: 'Качество', exact: true }).filter({ visible: true });
+  if (await q.count()) await expect(q).toContainText('Авто');
   await expect.poll(async () => (await state(page)).t, { timeout: 15_000 }).toBeGreaterThanOrEqual(before);
   await page.getByRole('button', { name: 'Настройки плеера' }).click();
   await page.getByRole('menuitem', { name: 'Сезоны и серии' }).click();

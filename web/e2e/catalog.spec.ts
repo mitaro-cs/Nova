@@ -81,6 +81,8 @@ test('смотреть вместе: комната, чат, назад к фи�
   await expect(page).toHaveURL(/\/room\/[a-z0-9]+/);
   const side = page.getByRole('complementary', { name: 'Смотрим вместе' });
   // Чат в комнате открыт сразу; если закрыт - открываем.
+  // На телефоне чат сначала закрыт (кадр важнее) - открываем кнопкой.
+  await expect(page.getByRole('button', { name: /^(Показать|Спрятать) чат$/ })).toBeVisible();
   const showChat = page.getByRole('button', { name: 'Показать чат', exact: true });
   if (await showChat.count()) await showChat.click();
   await expect(side).toBeVisible();

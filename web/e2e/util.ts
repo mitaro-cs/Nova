@@ -234,3 +234,11 @@ export async function choose(page: Page, name: string, option: string | RegExp, 
 export async function expectHome(page: Page) {
   await expect(page.getByRole('region', { name: 'Рекомендуем' })).toBeVisible();
 }
+
+/** Кнопка плеера: на компьютере - в строке управления, на телефоне - пункт меню «Настройки» (26.11: одно меню). */
+export async function playerButton(page: Page, name: string, item: string | RegExp = name) {
+  const direct = page.getByRole('button', { name, exact: true }).filter({ visible: true });
+  if (await direct.count()) return direct.first().click();
+  await page.getByRole('button', { name: 'Настройки плеера' }).click();
+  await page.getByRole('menuitem', { name: item }).first().click();
+}

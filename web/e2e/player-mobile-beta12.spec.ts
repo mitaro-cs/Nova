@@ -28,11 +28,15 @@ test('сенсорные кнопки перематывают, ставят п�
   const controls=page.locator('.center');
   await page.locator('video').evaluate(async(v:HTMLVideoElement)=>{v.muted=true;await v.play();});
   await page.getByRole('application',{name:'Видеоплеер'}).dispatchEvent('pointermove');
-  await controls.getByRole('button',{name:'Пауза',exact:true}).click();
-  await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
   await controls.getByRole('button',{name:'Вперёд на 10 секунд'}).click();
   await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeGreaterThan(9);
-  await controls.getByRole('button',{name:'Смотреть',exact:true}).click();
+  await page.getByRole('application',{name:'Видеоплеер'}).dispatchEvent('pointermove');
+  await controls.getByRole('button',{name:'Пауза',exact:true}).click();
+  await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
+  // На паузе (26.11) - экран паузы с «Продолжить», крупные кнопки по центру спрятаны и значки не двоятся.
+  await expect(controls).toHaveClass(/rest/);
+  await expect(controls.getByRole('button',{name:'Смотреть',exact:true})).toBeHidden();
+  await page.getByRole('button',{name:'Продолжить'}).click();
   await expect(controls).toHaveClass(/hide/,{timeout:7000});
   await page.setViewportSize({width:844,height:390});
   await page.getByRole('application',{name:'Видеоплеер'}).dispatchEvent('pointermove');

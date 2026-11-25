@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './util-test';
-import { env, url } from './util';
+import { env, url, playerButton } from './util';
 
 // Плеер, раунд 23.11 (выбор владельца): одно меню вкладками, ночной звук, ссылка на момент (`?t=`), окно «Отметить
 // момент», экран конца фильма с оценкой. Видео демо короткое (6 с).
@@ -40,7 +40,7 @@ test('плеер: одно меню вкладками и ночной звук'
   const id = await fileOf(page, 'Ла-Ла Ленд');
   await page.goto(url(`/watch/${id}`));
   await expect.poll(async () => (await state(page)).ready).toBeGreaterThanOrEqual(3);
-  await page.getByRole('button', { name: 'Качество' }).click();
+  await playerButton(page, 'Качество');
   const tabs = page.getByRole('tablist', { name: 'Настройки звука и картинки' });
   await expect(tabs.getByRole('tab', { name: 'Качество' })).toHaveAttribute('aria-selected', 'true');
   await tabs.getByRole('tab', { name: 'Скорость' }).click();
@@ -60,7 +60,7 @@ test('плеер: ссылка на момент открывает видео �
   const id = await fileOf(page, 'Ла-Ла Ленд');
   await page.goto(url(`/watch/${id}?t=3`));
   await expect.poll(async () => (await state(page)).t).toBeGreaterThanOrEqual(2.9);
-  await page.getByRole('button', { name: 'Отметить момент' }).click();
+  await playerButton(page, 'Отметить момент');
   const sheet = page.getByRole('dialog', { name: 'Отметить момент' });
   await expect(sheet).toContainText('Момент 0:0');
   await expect(sheet.getByRole('textbox', { name: 'Подпись к моменту' })).toBeVisible();
