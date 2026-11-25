@@ -197,7 +197,7 @@
     {/each}
   {:else if feed.rows.length}
     {#if popMovies && popMovies.items.length >= 3}<TopTen items={top(popMovies)} title="Топ-10 фильмов мира сейчас" id="top-m" />{/if}
-    {#if popSeries && popSeries.items.length >= 3}<TopTen items={top(popSeries)} title="Топ-10 сериалов мира сейчас" id="top-s" />{/if}
+    {#if popSeries && popSeries.items.length >= 3}<TopTen items={top(popSeries)} title="Топ-10 сериалов мира сейчас" id="top-s" chart />{/if}
     {#if friendRows.length}<PosterRow title="Друзья смотрят" items={friendRows} />{/if}
     <GenreTiles rows={genreRows} />
     {#each restRows as row, i (row.key)}

@@ -989,3 +989,58 @@ async fn admin_imports_real_series_playlist() {
     );
     running.shutdown().await;
 }
+
+/// Свой фильм, открытый по ссылке (26.11 «то, что смотрю, не сохраняется»): середина - «Смотрю» и «Продолжить»,
+/// досмотрел - «Просмотрено» и из «Продолжить» уходит.
+#[tokio::test(flavor = "multi_thread")]
+async fn own_title_watched_by_link_is_saved() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    running
+        .app
+        .db
+        .with(|c| {
+            c.execute(
+                "INSERT INTO titles(id,kind,key,title,meta_status,added_at,updated_at) VALUES(9100,'movie','by-link','Фильм по ссылке','manual',0,0)",
+                [],
+            )?;
+            c.execute("INSERT INTO files(title_id,path,size,mtime,added_at) VALUES(9100,'by-link.mp4',1048576,0,0)", [])
+        })
+        .unwrap();
+    let link: Value = host
+        .send(
+            "POST",
+            "/api/links",
+            json!({"url":"https://example.com/own-film.mp4","titleId":9100,"label":"Фильм по ссылке"}),
+        )
+        .await
+        .json()
+        .await
+        .unwrap();
+    let id = link["id"].as_i64().unwrap_or_else(|| panic!("ссылка не создана: {link}"));
+    let r = host.send("PUT", &format!("/api/links/{id}/progress"), json!({"position":600,"duration":6000})).await;
+    assert!(r.status().is_success());
+    let status = |app: &fsfy::App, table: &str| -> bool {
+        app.db
+            .with(|c| {
+                c.query_row(&format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE title_id = 9100)"), [], |r| r.get(0))
+            })
+            .unwrap()
+    };
+    assert!(status(&running.app, "watching"), "в середине - «Смотрю»");
+    let resume = host.json("/api/continue").await;
+    assert_eq!(resume[0]["key"], "t:9100");
+    assert_eq!(resume[0]["href"], format!("/watch/link/{id}"));
+    let done: Value = host
+        .send("PUT", &format!("/api/links/{id}/progress"), json!({"position":5800,"duration":6000}))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(done["watched"], json!(true));
+    assert!(status(&running.app, "watched"), "досмотрел - «Просмотрено»");
+    assert!(!status(&running.app, "watching"));
+    let resume = host.json("/api/continue").await;
+    assert!(resume.as_array().unwrap().iter().all(|i| i["key"] != "t:9100"));
+    running.shutdown().await;
+}

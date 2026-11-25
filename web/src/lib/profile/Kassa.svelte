@@ -57,9 +57,17 @@
   const recentTitle = $derived(p.me ? 'Вы недавно смотрели' : 'Недавно смотрел(а)');
 
   // Свежие отзывы - два последних, карточкой с постером (вместо одинокой кнопки «Отзывы · N» внизу).
+  // Свежие отзывы карточками (26.11 «отзывы не очень выглядят»): постер, название со ссылкой, пять звёзд с половинками,
+  // дата; текст - если он есть, иначе одна тихая строка «Только оценка».
   const fresh = $derived(
-    p.reviews.slice(0, 2).map((r) => ({ id: r.id, stars: r.stars, body: r.body, name: r.title?.title ?? r.ext?.title ?? '', poster: r.title?.poster ?? r.ext?.poster ?? null })),
+    p.reviews.slice(0, 3).map((r) => ({
+      id: r.id, stars: r.stars, body: r.body?.trim() ?? '', at: r.createdAt,
+      name: r.title?.title ?? r.ext?.title ?? '', year: r.title?.year ?? r.ext?.year ?? null,
+      poster: r.title?.poster ?? r.ext?.poster ?? null,
+      href: r.title ? `/title/${r.title.id}` : r.ext ? `/ext/${r.ext.id}` : null,
+    })),
   );
+  const fill = (stars: number, i: number) => Math.max(0, Math.min(1, (stars - i * 2) / 2));
   const director = $derived(p.decor.directorsInfo?.[0] ?? (p.decor.directors[0] ? { name: p.decor.directors[0], photo: null, seen: null } : null));
 
   type Quick = { href?: string; act?: () => void; icon: IconName; label: string; hint: string; count?: number; out?: boolean };
@@ -138,8 +146,20 @@
         <ul class="revs">
           {#each fresh as r (r.id)}
             <li>
-              <span class="rp" style:background={placeholder(r.name)}>{#if r.poster}<img src={artW(r.poster, 200)} alt="" loading="lazy" decoding="async" width="44" height="66" />{/if}</span>
-              <span><b>{r.name}</b>{#if r.stars}<i class="st"> ★ {(r.stars / 2).toFixed(1).replace('.0', '').replace('.', ',')}</i>{/if}{#if r.body}<p>{r.body}</p>{/if}</span>
+              <svelte:element this={r.href ? 'a' : 'div'} class="rv" href={r.href ?? undefined}>
+                <span class="rp" style:background={placeholder(r.name)}>{#if r.poster}<img src={artW(r.poster, 200)} alt="" loading="lazy" decoding="async" width="56" height="84" />{/if}</span>
+                <span class="rt">
+                  <b>{r.name}{#if r.year}<small> · {r.year}</small>{/if}</b>
+                  {#if r.stars}
+                    <span class="stars" role="img" aria-label="Оценка {(r.stars / 2).toFixed(1).replace('.0', '').replace('.', ',')} из 5">
+                      {#each [0, 1, 2, 3, 4] as i (i)}<i style:--f={fill(r.stars, i)}></i>{/each}
+                      <em>{(r.stars / 2).toFixed(1).replace('.0', '').replace('.', ',')}</em>
+                    </span>
+                  {/if}
+                  {#if r.body}<span class="tx">{r.body}</span>{:else}<span class="only">Только оценка</span>{/if}
+                  <small class="dt">{day(r.at)}</small>
+                </span>
+              </svelte:element>
             </li>
           {/each}
         </ul>
@@ -243,13 +263,22 @@
   .boxes.empty { grid-template-columns: repeat(5, minmax(0, 72px)); gap: 8px; }
   .boxes.empty .slot { border-radius: 10px; }
 
-  .revs { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
-  .revs li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; }
-  .rp { width: 44px; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; }
+  /* Отзывы - карточки в ряд (на узком - лента вбок): постер, звёзды, текст или «Только оценка», дата. */
+  .revs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .rv { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 14px; height: 100%; padding: 12px; border: 1px solid #ffffff0f; border-radius: 16px; background: #1a1a1e; color: inherit; text-decoration: none; transition: background 0.2s; }
+  a.rv:hover { background: #212126; }
+  .rp { width: 56px; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; }
   .rp img { width: 100%; height: 100%; object-fit: cover; }
-  .revs b { font-size: 14px; }
-  .st { color: #d4d4d8; font-size: 12px; font-style: normal; }
-  .revs p { margin: 4px 0 0; color: #c9c9cf; font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .rt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .rt b { overflow: hidden; font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+  .rt b small { color: #8c8c96; font-size: 12px; font-weight: 500; }
+  .stars { display: inline-flex; align-items: center; gap: 2px; }
+  .stars i { position: relative; width: 14px; height: 14px; background: #ffffff2e; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+  .stars i::after { content: ''; position: absolute; inset: 0; background: #fff; transform-origin: left; transform: scaleX(var(--f)); }
+  .stars em { margin-left: 6px; color: #d4d4d8; font-size: 12px; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tx { color: #c9c9cf; font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .only { color: #8c8c96; font-size: 12.5px; }
+  .dt { margin-top: auto; color: #71717a; font-size: 11.5px; }
 
   /* Значки - сетка 3 × 2 в узкой колонке. */
   .medals ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 6px; margin: 0; padding: 0; list-style: none; }

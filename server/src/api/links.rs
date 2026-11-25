@@ -418,13 +418,14 @@ pub async fn progress(
 /// Записать место профиля в видео по ссылке (и «Смотрю»/«Просмотрел» у фильма из ленты).
 /// Вернуть (досмотрено, фильм ленты стал «Просмотрено» только что).
 pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration: f64) -> ApiResult<(bool, bool)> {
-    let target: Option<(Option<String>, Option<i64>, Option<i64>)> = app.db.with(|c| {
-        c.query_row("SELECT ext_id, season, episode FROM links WHERE id = ?", [id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+    type Target = (Option<String>, Option<i64>, Option<i64>, Option<i64>);
+    let target: Option<Target> = app.db.with(|c| {
+        c.query_row("SELECT ext_id, season, episode, title_id FROM links WHERE id = ?", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })
         .optional()
     })?;
-    let (ext, season, episode) = target.ok_or_else(ApiError::not_found)?;
+    let (ext, season, episode, title) = target.ok_or_else(ApiError::not_found)?;
     let now = now_ms();
     let b = ProgressBody { position, duration };
     let done = super::play::finished(b.position.min(b.duration), b.duration, None);
@@ -456,6 +457,34 @@ pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration:
                 params![me, e, status, now],
             )?;
             return Ok(status == "watched" && before.as_deref() != Some("watched"));
+        }
+        // Ссылка у своего фильма или сериала (26.11: «то, что смотрю, не сохраняется» - место было только у ссылки, а «Смотрю»,
+        // «Продолжить» и «Просмотрено» про неё не знали): то же, что делает статус в каталоге.
+        if let Some(t) = title {
+            let series: bool =
+                c.query_row("SELECT kind = 'series' FROM titles WHERE id = ?", [t], |r| r.get(0)).optional()?.unwrap_or(false);
+            c.execute("DELETE FROM dropped WHERE profile_id = ? AND title_id = ?", params![me, t])?;
+            let was: bool = c.query_row(
+                "SELECT EXISTS(SELECT 1 FROM watched WHERE profile_id = ? AND title_id = ?)",
+                params![me, t],
+                |r| r.get(0),
+            )?;
+            if done && !series {
+                c.execute("DELETE FROM watching WHERE profile_id = ? AND title_id = ?", params![me, t])?;
+                c.execute("DELETE FROM my_list WHERE profile_id = ? AND title_id = ?", params![me, t])?;
+                c.execute(
+                    "INSERT INTO watched (profile_id, title_id, at) VALUES (?1, ?2, ?3) ON CONFLICT DO UPDATE SET at = excluded.at",
+                    params![me, t, now],
+                )?;
+                return Ok(!was);
+            }
+            if !was {
+                c.execute("DELETE FROM my_list WHERE profile_id = ? AND title_id = ?", params![me, t])?;
+                c.execute(
+                    "INSERT INTO watching (profile_id, title_id, at) VALUES (?1, ?2, ?3) ON CONFLICT DO UPDATE SET at = excluded.at",
+                    params![me, t, now],
+                )?;
+            }
         }
         Ok(false)
     })?;

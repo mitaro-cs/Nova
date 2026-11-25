@@ -537,6 +537,35 @@ pub struct WatchedQuery {
 
 /// Что человек смотрел: фильмы или сериалы (с сервиса и из Обзора), свежее первым. Чужое - только если
 /// человек не скрыл, что смотрит.
+/// Что человек посмотрел (своё и из ленты) одного вида - и для вкладки «Просмотрено», и для числа на ней (26.11: на вкладке
+/// было 408 - фильмы плюс отдельные серии, а в списке 316 - фильмы и сериалы, и список обрезался на 300).
+pub fn watched_ids(app: &App, id: i64, kind: &str) -> ApiResult<(Vec<i64>, Vec<String>)> {
+    let local: Vec<i64> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT t.id FROM titles t WHERE t.kind = ?2 AND (
+               EXISTS (SELECT 1 FROM watched w WHERE w.title_id = t.id AND w.profile_id = ?1)
+               OR EXISTS (SELECT 1 FROM progress p JOIN files f ON f.id = p.file_id WHERE f.title_id = t.id AND p.profile_id = ?1))
+             ORDER BY COALESCE((SELECT MAX(w.at) FROM watched w WHERE w.title_id = t.id AND w.profile_id = ?1), 0) DESC, t.id DESC
+             LIMIT 5000",
+        )?;
+        let r = st.query_map(params![id, kind], |r| r.get(0))?;
+        r.collect()
+    })?;
+    let ext: Vec<String> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT x.id FROM (
+               SELECT m.ext_id id, m.at at FROM ext_marks m WHERE m.profile_id = ?1 AND m.status IN ('watched', 'watching')
+               UNION ALL SELECT s.ext_id, MAX(s.at) FROM ext_seen s WHERE s.profile_id = ?1 GROUP BY s.ext_id) x
+             JOIN ext_titles e ON e.id = x.id
+             WHERE e.kind = ?2 AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.imdb_id = e.id)
+             GROUP BY x.id ORDER BY MAX(x.at) DESC LIMIT 5000",
+        )?;
+        let r = st.query_map(params![id, kind], |r| r.get(0))?;
+        r.collect()
+    })?;
+    Ok((local, ext))
+}
+
 pub async fn watched(
     State(app): State<Arc<App>>,
     v: Viewer,
@@ -554,29 +583,7 @@ pub async fn watched(
     if !allowed(&app, v.profile.id, id, &visibility(&app, id)?.watched) {
         return Err(ApiError::new(StatusCode::FORBIDDEN, "hidden", "Скрыто владельцем"));
     }
-    let local: Vec<i64> = app.db.with(|c| {
-        let mut st = c.prepare(
-            "SELECT t.id FROM titles t WHERE t.kind = ?2 AND (
-               EXISTS (SELECT 1 FROM watched w WHERE w.title_id = t.id AND w.profile_id = ?1)
-               OR EXISTS (SELECT 1 FROM progress p JOIN files f ON f.id = p.file_id WHERE f.title_id = t.id AND p.profile_id = ?1))
-             ORDER BY COALESCE((SELECT MAX(w.at) FROM watched w WHERE w.title_id = t.id AND w.profile_id = ?1), 0) DESC, t.id DESC
-             LIMIT 300",
-        )?;
-        let r = st.query_map(params![id, kind], |r| r.get(0))?;
-        r.collect()
-    })?;
-    let ext: Vec<String> = app.db.with(|c| {
-        let mut st = c.prepare(
-            "SELECT x.id FROM (
-               SELECT m.ext_id id, m.at at FROM ext_marks m WHERE m.profile_id = ?1 AND m.status IN ('watched', 'watching')
-               UNION ALL SELECT s.ext_id, MAX(s.at) FROM ext_seen s WHERE s.profile_id = ?1 GROUP BY s.ext_id) x
-             JOIN ext_titles e ON e.id = x.id
-             WHERE e.kind = ?2 AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.imdb_id = e.id)
-             GROUP BY x.id ORDER BY MAX(x.at) DESC LIMIT 300",
-        )?;
-        let r = st.query_map(params![id, kind], |r| r.get(0))?;
-        r.collect()
-    })?;
+    let (local, ext) = watched_ids(&app, id, kind)?;
     let cards = super::cards_by_ids(&app, v.profile.kids, &local)?;
     let ext_cards: Vec<_> = ext.iter().filter_map(|e| super::discover::ext_card(&app, &v, e).ok()).collect();
     Ok(Json(json!({"kind": kind, "local": cards, "ext": ext_cards})))

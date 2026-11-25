@@ -25,7 +25,7 @@
   let q = $state('');
   let kind = $state<'all' | 'movie' | 'series'>('all');
   let order = $state<string>('recent');
-  let limit = $state(12);
+  let limit = $state(30);
   const n = $derived({ all: rows.length, movie: rows.filter((r) => r.kind === 'movie').length, series: rows.filter((r) => r.kind === 'series').length });
   const list = $derived.by(() => {
     const needle = q.trim().toLowerCase().replaceAll('ё', 'е');
@@ -41,7 +41,7 @@
   $effect(() => {
     void q;
     void kind;
-    limit = 12;
+    limit = 30;
   });
   const fmt1 = (x: number) => (x % 1 ? x.toFixed(1).replace('.', ',') : String(x));
   const short = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '') : '');
@@ -83,7 +83,7 @@
   </ul>
   {#if list.length > limit}
     <div class="more">
-      <button class="btn" type="button" onclick={() => (limit += 20)}>Показать ещё {Math.min(20, list.length - limit)}</button>
+      <button class="btn" type="button" onclick={() => (limit += 60)}>Показать ещё {Math.min(60, list.length - limit)}</button>
       <small class="muted">Показано {limit} из {list.length}</small>
     </div>
   {/if}
@@ -117,9 +117,11 @@
   .seg button.on { background: #fff; color: #0a0a0b; }
   .seg button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
-  .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px 14px; margin: 0; padding: 0; list-style: none; }
+  /* Постеры как в остальной Nova (26.11: «очень большие банеры»): ширина постера, а не четверть окна - на широком экране
+     в ряд встаёт столько, сколько помещается. */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); gap: 24px 14px; margin: 0; padding: 0; list-style: none; }
   .grid a { display: grid; gap: 4px; }
-  .art { position: relative; display: block; aspect-ratio: 4 / 5; margin-bottom: 8px; overflow: hidden; border-radius: 18px; transition: transform 0.3s var(--ease, ease); }
+  .art { position: relative; display: block; aspect-ratio: 2 / 3; margin-bottom: 8px; overflow: hidden; border-radius: 18px; transition: transform 0.3s var(--ease, ease); }
   .grid a:hover .art { transform: translate3d(0, -4px, 0); }
   .art img { width: 100%; height: 100%; object-fit: cover; }
   .art em { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; background: #000000c2; font-size: 11.5px; font-style: normal; font-weight: 700; }
@@ -139,11 +141,10 @@
   .foot { margin: 22px 0 0; font-size: 12px; }
   .foot a { color: #e4e4e7; text-decoration: underline; text-underline-offset: 3px; }
 
-  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 760px) {
     .tools { grid-template-columns: minmax(0, 1fr); }
     .seg { overflow-x: auto; scrollbar-width: none; }
     .seg button { flex: 1; min-height: 34px; }
-    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 10px; }
   }
 </style>

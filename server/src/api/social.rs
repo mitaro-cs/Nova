@@ -512,7 +512,9 @@ pub async fn member(
         Value::Null
     } else {
         let mut stats = super::profile::stats(&app, id, crate::util::now_ms(), q.tz.unwrap_or(0).clamp(-840, 840))?;
-        stats["watched"] = json!(stats["movies"].as_i64().unwrap_or(0) + stats["episodes"].as_i64().unwrap_or(0));
+        // Число на вкладке «Просмотрено» - ровно то, что в ней лежит: фильмы и сериалы (не отдельные серии).
+        let n = |kind| super::profile::watched_ids(&app, id, kind).map(|(l, e)| (l.len() + e.len()) as i64);
+        stats["watched"] = json!(n("movie")? + n("series")?);
         stats
     };
     let decor = super::profile::decor(&app, &v, id)?;

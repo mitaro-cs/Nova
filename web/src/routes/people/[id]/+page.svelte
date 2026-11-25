@@ -10,7 +10,7 @@
   import { TABS, type ProfilePage, type ProfileTab } from '$lib/profile/types';
   import VisPick from '$lib/profile/VisPick.svelte';
   import WatchedTab from '$lib/profile/WatchedTab.svelte';
-  import type { ExtCard, VisLevel } from '$lib/types';
+  import type { Card, ExtCard, VisLevel } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
   import { toast } from '$lib/ui/toast.svelte';
 
@@ -60,6 +60,8 @@
 
   const hidden = $derived(p?.hidden ?? { stats: false, watched: false, reviews: false });
   let externalWatched = $state<ExtCard[]>([]);
+  // Своё просмотренное - тоже полным списком с сервера (в данных профиля только последние 24: 26.11 на вкладке было 408, а в списке меньше).
+  let localWatched = $state<Card[] | null>(null);
   let watchedLoading = $state(false);
   let watchedError = $state(false);
   $effect(() => {
@@ -67,12 +69,15 @@
     if (!p || hidden.watched || shown !== 'watched') return;
     const controller = new AbortController();
     externalWatched = [];
+    localWatched = null;
     watchedLoading = true;
     watchedError = false;
     Promise.all(['movie', 'series'].map(kind =>
-      api<{ ext: ExtCard[] }>(`/api/people/${who}/watched?kind=${kind}`, { signal: controller.signal })
+      api<{ local: Card[]; ext: ExtCard[] }>(`/api/people/${who}/watched?kind=${kind}`, { signal: controller.signal })
     )).then(results => {
-      if (!controller.signal.aborted) externalWatched = results.flatMap(result => result.ext);
+      if (controller.signal.aborted) return;
+      externalWatched = results.flatMap(result => result.ext);
+      localWatched = results.flatMap(result => result.local);
     }).catch(() => {
       if (!controller.signal.aborted) watchedError = true;
     }).finally(() => {
@@ -170,7 +175,7 @@
               {#if hidden.watched}
                 <LockBox />
               {:else}
-                <WatchedTab local={p.watched} ext={externalWatched} loading={watchedLoading} failed={watchedError} me={p.me} personId={p.person.id} />
+                <WatchedTab local={localWatched ?? p.watched} ext={externalWatched} loading={watchedLoading} failed={watchedError} me={p.me} personId={p.person.id} />
               {/if}
             {:else if hidden.reviews}
               <LockBox />

@@ -28,6 +28,44 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
         out.push(json!({"key":format!("t:{}",c.id),"href":format!("/watch/{}",p.file_id),"position":p.position,"duration":p.duration,"label":p.label,
             "at":at,"art":c.backdrop_small.as_ref().or(c.poster.as_ref()),"card":c}));
     }
+    // Свой фильм или сериал, который смотрели по ссылке (Rutube, VK, сайт), а не файлом: тоже «Продолжить» (26.11).
+    type OwnLink = (i64, i64, f64, f64, i64, Option<i64>, Option<i64>);
+    let own: Vec<OwnLink> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT l.id, l.title_id, p.position, p.duration, p.updated_at, l.season, l.episode
+             FROM link_progress p JOIN links l ON l.id = p.link_id WHERE p.profile_id = ?1 AND l.title_id IS NOT NULL
+             AND p.position > 0 AND p.duration > 0 AND p.position < p.duration - MIN(MAX(p.duration*0.08,20),600,p.duration*0.25)
+             AND NOT EXISTS(SELECT 1 FROM dropped d WHERE d.profile_id = ?1 AND d.title_id = l.title_id)
+             AND NOT EXISTS(SELECT 1 FROM watched w WHERE w.profile_id = ?1 AND w.title_id = l.title_id)
+             AND NOT EXISTS(SELECT 1 FROM link_progress newer JOIN links nl ON nl.id = newer.link_id WHERE newer.profile_id = ?1
+               AND nl.title_id = l.title_id AND (newer.updated_at > p.updated_at OR (newer.updated_at = p.updated_at AND nl.id > l.id)))
+             ORDER BY p.updated_at DESC LIMIT 50",
+        )?;
+        let r = st.query_map([v.profile.id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))
+        })?;
+        r.collect()
+    })?;
+    for (link, title, position, duration, at, season, episode) in own {
+        let key = format!("t:{title}");
+        if let Some(i) = out.iter().position(|i| i["key"] == key) {
+            // Файлом смотрели позже - остаётся файл.
+            if out[i]["at"].as_i64().unwrap_or(0) >= at {
+                continue;
+            }
+            out.remove(i);
+        }
+        let Some(mut card) = super::cards(&app, v.profile.kids, "t.id = ?1", "t.id", 1, &[&title])?.pop() else {
+            continue;
+        };
+        taste.apply(std::slice::from_mut(&mut card));
+        let label = match (season, episode) {
+            (Some(s), Some(e)) => format!("{s} сезон, {e} серия"),
+            _ => "Фильм".into(),
+        };
+        out.push(json!({"key":key,"href":format!("/watch/link/{link}"),"position":position,"duration":duration,"label":label,"at":at,
+            "season":season,"episode":episode,"art":card.backdrop_small.as_ref().or(card.poster.as_ref()),"card":card}));
+    }
     type LinkResume = (i64, String, f64, f64, i64, Option<i64>, Option<i64>);
     let rows:Vec<LinkResume>=app.db.with(|c|{
         let mut st=c.prepare("SELECT l.id,l.ext_id,p.position,p.duration,p.updated_at,l.season,l.episode
