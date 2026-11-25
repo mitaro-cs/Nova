@@ -3,7 +3,7 @@
   import type { Component } from 'svelte';
   import '$lib/ui/rewind.css';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
-  import { lockZoom, touchShell } from '$lib/scroll';
+  import { lockZoom, restoreScroll, scrolledBy, touchShell } from '$lib/scroll';
   import Loading from '$lib/ui/Loading.svelte';
   import { applyMotion } from '$lib/motion';
   import { installDiag } from '$lib/diag';
@@ -95,17 +95,21 @@
     }
     if (!seen) void import('$lib/ui/Intro.svelte').then((m) => (IntroView = m.default));
   });
+  // Место на странице - на всех устройствах (25.11): «Назад» и возврат на раздел вкладкой (Главная, Подбор, Каталог,
+  // Моё, Поиск, профиль) открывают то же место, остальные переходы - сверху. Повторный клик по своей вкладке - наверх.
   const places = new Map<string, number>();
   const placeOf = (u: URL) => u.pathname + u.search;
+  const SECTIONS = ['/', '/feed', '/discover', '/my', '/search', '/lists'];
+  const section = (u: URL) => SECTIONS.includes(u.pathname) || u.pathname.startsWith('/people/');
   beforeNavigate(({ from }) => {
-    if (touchShell() && from?.url) places.set(placeOf(from.url), document.body.scrollTop);
+    if (from?.url) places.set(placeOf(from.url), scrolledBy());
   });
   afterNavigate(({ type, from, to }) => {
-    if (!touchShell() || !to?.url || (from?.url && from.url.pathname === to.url.pathname)) return;
-    const top = type === 'popstate' ? (places.get(placeOf(to.url)) ?? 0) : 0;
-    document.body.scrollTop = top;
-    // Страница достраивается после перехода: повторяем, пока не доехали до нужного места.
-    if (top) for (const ms of [120, 400, 900]) setTimeout(() => (document.body.scrollTop = top), ms);
+    if (!to?.url || type === 'enter' || (from?.url && placeOf(from.url) === placeOf(to.url))) return;
+    const back = type === 'popstate' || (type === 'link' && section(to.url));
+    const top = back ? (places.get(placeOf(to.url)) ?? 0) : 0;
+    if (top) restoreScroll(top);
+    else if (touchShell()) document.body.scrollTop = 0;
   });
 
   // Навигация без искусственной задержки: пока открывается страница, старая лишь тускнеет (мгновенный

@@ -7,7 +7,7 @@
   import FeedCard from '$lib/ui/FeedCard.svelte';
   import BrowseGenres from '$lib/ui/BrowseGenres.svelte';
 
-  // Только описанное по IMDb (свои фильмы без описания в ленту не идут). «Подбор» (бывшее «Что смотреть»): афиша, «Под настроение» и вертикальная лента карточек, на экране играет трейлер одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
+  // Только описанное по IMDb (свои фильмы без описания в ленту не идут). «Подбор» (бывшее «Что смотреть»): афиша, «Жанры» и вертикальная лента карточек, на экране играет трейлер одной. Свои фильмы и подборки IMDb вперемешку (два из ленты, один свой); отмеченное «Просмотрено» и
   // «Не интересно» не показываем. Подгружается по шесть, когда лента подходит к концу.
   type Item = { key: string; card?: Card; ext?: ExtCard };
   type Feed = { rows: { key: string; items: ExtCard[] }[] };
@@ -70,8 +70,8 @@
     <div class="skeleton" aria-busy="true"></div>
   {:else}
     <Afisha items={catalog.items} ext={feed.rows.flatMap((r) => r.items)} />
-    <!-- «Под настроение» переехало сюда из Каталога (разделы S1, 23.11): подбор - здесь, каталог - про всё кино. -->
-    <div class="moods"><BrowseGenres /></div>
+    <!-- «Жанры» (бывшее «Под настроение», 25.11): веер постеров жанра из своих фильмов и ленты IMDb. -->
+    <div class="moods"><BrowseGenres pool={[...catalog.items, ...feed.rows.flatMap((r) => r.items)]} /></div>
   {#if !items.length}
     <p class="note">{failed ? 'Подборки сейчас недоступны. Проверьте связь и зайдите позже.' : 'Пока нечего предложить - загляните позже.'}</p>
   {:else}
@@ -104,7 +104,8 @@
     letter-spacing: -0.02em;
     line-height: 1.15;
   }
-  .moods { margin: 8px 0 28px; }
+  /* Свои поля: у страницы боковых отступов нет (25.11: «упёрлось в стену»). */
+  .moods { margin: 8px var(--gutter) 28px; }
   .lenta {
     margin: 34px var(--gutter) 14px;
     font-size: 24px;

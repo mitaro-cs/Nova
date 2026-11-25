@@ -133,7 +133,7 @@ test('«Подбор»: кадр из фильма и краткая инфор�
   await expect(card).toBeVisible();
   await expect(card.locator('h2')).not.toBeEmpty();
   await expect(card.locator('.facts')).toContainText(/\d{4}/);
-  await expect(card.locator('.shot img')).toBeVisible();
+  await expect(card.locator('.shot img:not(.backfill)')).toBeVisible();
 });
 
 test('«Подбор» на компьютере - на всю ширину, кадр слева', async ({ page }, info) => {

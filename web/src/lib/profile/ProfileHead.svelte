@@ -99,7 +99,7 @@
   .wall { position: absolute; inset: 0; }
   .wall :global(.wall) { position: absolute; inset: 0; }
   .art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 35%; }
-  .art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #0b0b0d66 0%, #0b0b0d00 30%, #0b0b0d 97%), linear-gradient(90deg, #0b0b0d 0%, #0b0b0d00 18%, #0b0b0d00 82%, #0b0b0d 100%); }
+  .art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #0b0b0d 0%, #0b0b0db3 calc(var(--header) + 4px), #0b0b0d26 calc(var(--header) + 90px), #0b0b0d00 45%, #0b0b0d 97%), linear-gradient(90deg, #0b0b0d 0%, #0b0b0d00 18%, #0b0b0d00 82%, #0b0b0d 100%); }
   /* Обложку меняют прямо с неё (25.11: «верхнюю плашку не могу настроить»). */
   .cover-edit { position: absolute; z-index: 2; right: var(--pf-side); top: calc(var(--header) + 44px); display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; background: #0000008c; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; }
   .cover-edit:hover { background: #000000bf; }

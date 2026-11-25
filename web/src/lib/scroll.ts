@@ -14,6 +14,38 @@ export function scrolledBy(): number {
   return touchShell() ? document.body.scrollTop : window.scrollY;
 }
 
+/** Прокрутить страницу (в оболочке - `body`). */
+export function scrollToTop(top: number) {
+  if (touchShell()) document.body.scrollTop = top;
+  else window.scrollTo({ top, behavior: 'instant' as ScrollBehavior });
+}
+
+/**
+ * Вернуться на прежнее место (25.11: «когда перехожу обратно в прошлые вкладки - не кидало наверх»). Страница
+ * достраивается после перехода (каталог, ряды, картинки), поэтому пробуем до 2,5 с, пока высоты не хватит; если человек
+ * сам начал прокручивать - не мешаем.
+ */
+export function restoreScroll(top: number) {
+  if (top <= 0) return;
+  let stop = false;
+  const quit = () => (stop = true);
+  addEventListener('wheel', quit, { once: true, passive: true });
+  addEventListener('touchstart', quit, { once: true, passive: true });
+  addEventListener('keydown', quit, { once: true });
+  const end = performance.now() + 2500;
+  const step = () => {
+    if (stop) return;
+    scrollToTop(top);
+    if (Math.abs(scrolledBy() - top) > 2 && performance.now() < end) requestAnimationFrame(step);
+    else {
+      removeEventListener('wheel', quit);
+      removeEventListener('touchstart', quit);
+      removeEventListener('keydown', quit);
+    }
+  };
+  step();
+}
+
 /** Запрет масштабирования щипком и двойным касанием: интерфейс всегда в своём размере. */
 export function lockZoom(): () => void {
   if (!touchShell()) return () => {};

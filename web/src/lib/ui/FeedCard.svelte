@@ -128,6 +128,8 @@
   <div class="shot">
     <a class="cover" {href} onclick={() => ext && remember(ext)} aria-label={c.title}>
       <span class="cover-fallback" style:background={placeholder(c.title)} aria-hidden="true"><i>{c.kind==='series'?'СЕРИАЛ':'ФИЛЬМ'}</i><b>{c.title}</b>{#if c.year}<small>{c.year}</small>{/if}</span>
+      <!-- Кадра нет: тот же постер растянут и притемнён фоном (25.11 - вместо пустой цветной заливки по бокам). -->
+      {#if shot && !framed}<img class="backfill" src={artW(shot, 342)} alt="" aria-hidden="true" loading="lazy" decoding="async" />{/if}
       {#if shot}<img class:poster={!framed} src={artW(shot, 640)} srcset={big ? heroSet(big, small) : undefined} sizes="(min-width: 1001px) 60vw, 100vw" alt="" loading="lazy" decoding="async" onerror={(e)=>{const img=e.currentTarget as HTMLImageElement;const fallback=c.poster?artW(c.poster,640):undefined;if(fallback&&img.dataset.posterFallback!=='1'&&img.currentSrc!==fallback){img.dataset.posterFallback='1';img.removeAttribute('srcset');img.src=fallback;}else img.style.display='none';}} />{/if}
       {#if active && TB && imdb}{#key imdb}<TB imdbId={imdb} bare bind:available bind:muted bind:this={tb} />{/key}{/if}
     </a>
@@ -141,9 +143,10 @@
       {#if c.rating}<span class="rate" class:low={c.rating < 7}>{c.rating.toFixed(1)}</span>{/if}
       {#if facts}<span>{facts}</span>{/if}
     </p>
-    <p class="about">{overview}</p>
+    {#if overview}<p class="about">{overview}</p>{:else if !card && !detail}<p class="about wait" aria-hidden="true"></p>{/if}
     <div class="act">
-      <div class="more">
+      <a class="btn primary go" {href} onclick={() => ext && remember(ext)}><Icon name="play" size={16} /> Смотреть</a>
+      <div class="more" style:order="3">
         <button class="dots" aria-label="Ещё" aria-expanded={menu} onclick={() => (menu = !menu)}><Icon name="dots" size={22} /></button>
         {#if menu}
           <div class="pop" role="menu">
@@ -152,7 +155,7 @@
           </div>
         {/if}
       </div>
-      <button class="add" class:on={wanted} aria-pressed={wanted} aria-label={wanted ? 'Убрать из планов' : 'Хочу посмотреть'} onclick={plan}><Icon name={wanted ? 'check' : 'bookmark'} size={20} /></button>
+      <button class="add" class:on={wanted} aria-pressed={wanted} aria-label={wanted ? 'Убрать из планов' : 'Хочу посмотреть'} onclick={plan}><Icon name={wanted ? 'check' : 'bookmark'} size={20} /><span class="lbl">{wanted ? 'В планах' : 'Хочу'}</span></button>
     </div>
   </div>
 </article>
@@ -177,6 +180,11 @@
   .cover-fallback i { font-size:10px; font-style:normal; font-weight:700; letter-spacing:.22em; color:#ffffffa8; }
   .cover-fallback b { max-width:18ch; font-size:clamp(20px,3vw,42px); line-height:1.1; text-wrap:balance; text-shadow:0 3px 18px #000; }
   .cover-fallback small { font-size:12px; color:#ffffffb5; }
+  .cover img.backfill {
+    z-index: 0;
+    opacity: 0.32;
+    transform: scale(1.25);
+  }
   .cover img {
     position: absolute;
     z-index: 1;
@@ -256,13 +264,16 @@
     line-clamp: 3;
     -webkit-box-orient: vertical;
   }
+  .about.wait { border-radius: 8px; background: #ffffff0d; animation: pulse 1.4s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: 0.5; } }
   .act {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 20px;
-    margin-top: 14px;
+    gap: 12px;
+    margin-top: 16px;
   }
+  .go { height: 44px; padding: 0 22px; }
+  .add .lbl { display: none; }
   .more {
     position: relative;
   }
@@ -314,7 +325,12 @@
     }
     .act {
       justify-content: flex-start;
+      margin-top: 24px;
     }
+    .go { height: 50px; padding: 0 28px; font-size: 16px; }
+    .add { display: inline-flex; align-items: center; width: auto; height: 50px; gap: 8px; padding: 0 22px; border-radius: 999px; font: inherit; font-size: 16px; font-weight: 600; }
+    .add .lbl { display: inline; }
+    .dots { width: 50px; height: 50px; background: #2a2a2a; }
   }
   .pop {
     position: absolute;

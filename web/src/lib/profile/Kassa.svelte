@@ -56,6 +56,10 @@
   });
   const recentTitle = $derived(p.me ? 'Вы недавно смотрели' : 'Недавно смотрел(а)');
 
+  // Свежие отзывы - два последних, карточкой с постером (вместо одинокой кнопки «Отзывы · N» внизу).
+  const fresh = $derived(
+    p.reviews.slice(0, 2).map((r) => ({ id: r.id, stars: r.stars, body: r.body, name: r.title?.title ?? r.ext?.title ?? '', poster: r.title?.poster ?? r.ext?.poster ?? null })),
+  );
   const director = $derived(p.decor.directorsInfo?.[0] ?? (p.decor.directors[0] ? { name: p.decor.directors[0], photo: null, seen: null } : null));
 
   type Quick = { href?: string; act?: () => void; icon: IconName; label: string; hint: string; count?: number; out?: boolean };
@@ -65,7 +69,6 @@
     goto('/login');
   }
   const quick = $derived.by<Quick[]>(() => [
-    { href: '/profile', icon: 'pencil', label: 'Оформить', hint: 'Обложка, любимые, о себе' },
     { href: '/chats', icon: 'mail', label: 'Чаты', hint: 'Переписка с друзьями', count: unseen.unread },
     { href: '/people', icon: 'users', label: 'Друзья', hint: 'Найти и позвать', count: unseen.requests },
     { href: '/lists', icon: 'grid', label: 'Подборки', hint: 'Общие списки фильмов' },
@@ -77,44 +80,41 @@
 </script>
 
 <div class="ks">
-  {#if goals.length}
-    <section class="medals" aria-labelledby="ks-b">
-      <div class="h2"><h2 id="ks-b">Значки</h2><small>{goals.filter((g) => g.got).length} из {goals.length}{nextGoal ? ` · ${nextGoal}` : ''}</small></div>
-      <ul>
-        {#each goals as g, i (g.label)}
-          <li class:got={g.got} class="rise" style:--i={i} title={g.got ? g.label : `${g.label}: ${g.hint}`}>
-            <Badge icon={g.icon} tone={i} got={g.got} progress={g.progress} />
-            <b>{g.label}</b><small>{g.hint}</small>
-          </li>
-        {/each}
-      </ul>
-    </section>
+  <!-- Вариант A «Колонка» (выбор владельца 25.11): слева главное, справа узкая колонка; быстрые разделы - выше всего. -->
+  {#if p.me}
+    <nav class="quick" aria-label="Быстрые разделы">
+      {#each quick as q (q.label)}
+        {#if q.href}
+          <a href={q.href}><span class="qi"><Icon name={q.icon} size={17} /></span><b>{q.label}</b>{#if q.count}<em>{q.count}</em>{/if}</a>
+        {:else}
+          <button type="button" class:out={q.out} onclick={q.act}><span class="qi"><Icon name={q.icon} size={17} /></span><b>{q.label}</b></button>
+        {/if}
+      {/each}
+    </nav>
   {/if}
 
-  {#if tickets.length}
-    <section aria-labelledby="ks-t">
-      <div class="h2"><h2 id="ks-t">{recentTitle}</h2>{#if recent.length}<a href="/people/{p.person.id}/watched?kind=movie">Все</a>{/if}</div>
-      <div class="fanwrap">
-        <ul class="fan" style:--n={tickets.length}>
-          {#each tickets as t, i (t.key)}
-            <li style:--r="{(i - (tickets.length - 1) / 2) * 4}deg" style:--y="{Math.abs(i - (tickets.length - 1) / 2) * 8}px">
+  <div class="main">
+    {#if tickets.length}
+      <section class="box" aria-labelledby="ks-t">
+        <div class="h2"><h2 id="ks-t">{recentTitle}</h2>{#if recent.length}<a href="/people/{p.person.id}/watched?kind=movie">Все</a>{/if}</div>
+        <ul class="tickets">
+          {#each tickets as t (t.key)}
+            <li>
               <a class="tk" class:now={t.now} href={t.href}>
-                <span class="tp" style:background={placeholder(t.title)}>{#if t.poster}<img use:fadeIn src={artW(t.poster, 200)} alt="" loading="lazy" decoding="async" width="66" height="99" />{/if}</span>
+                <span class="tp" style:background={placeholder(t.title)}>{#if t.poster}<img use:fadeIn src={artW(t.poster, 200)} alt="" loading="lazy" decoding="async" width="56" height="84" />{/if}</span>
                 <span class="tt"><small>{t.label}</small><b>{t.title}</b><em>{t.note}{t.stars ? ` · ★ ${(t.stars / 2).toFixed(1).replace('.0', '').replace('.', ',')}` : ''}</em></span>
               </a>
             </li>
           {/each}
         </ul>
-      </div>
-    </section>
-  {/if}
+      </section>
+    {/if}
 
-  {#each [{ list: movies, label: 'Любимые фильмы', id: 'ks-m' }, { list: series, label: 'Любимые сериалы', id: 'ks-s' }] as g (g.id)}
-    {#if g.list.length || (p.me && g.id === 'ks-m')}
-      <section aria-labelledby={g.id}>
-        <div class="h2"><h2 id={g.id}>{g.label}</h2>{#if p.me}<a href="/profile">{g.list.length ? 'Изменить' : 'Выбрать'}</a>{/if}</div>
-        {#if g.list.length}
-          <ul class="boxes">
+    {#each [{ list: movies, label: 'Любимые фильмы', id: 'ks-m' }, { list: series, label: 'Любимые сериалы', id: 'ks-s' }] as g (g.id)}
+      {#if g.list.length || (p.me && g.id === 'ks-m')}
+        <section class="box" aria-labelledby={g.id}>
+          <div class="h2"><h2 id={g.id}>{g.label}</h2>{#if p.me}<a href="/profile">{g.list.length ? 'Изменить' : 'Выбрать'}</a>{/if}</div>
+          <ul class="boxes" class:empty={!g.list.length}>
             {#each g.list as f, i (f.key)}
               <li class="rise" style:--i={i}>
                 <a class="lb" href={f.href} title="{f.title}{f.year ? `, ${f.year}` : ''}">
@@ -122,119 +122,152 @@
                 </a>
               </li>
             {/each}
+            {#if p.me}
+              {#each Array(Math.max(0, 5 - g.list.length)) as _, i (i)}<li><a class="slot" href="/profile" aria-label="Добавить: {g.label.toLowerCase()}"><Icon name="plus" size={20} /></a></li>{/each}
+            {/if}
           </ul>
-        {:else}
-          <p class="muted sm">Любимые фильмы - афиша вашего профиля. Выберите их в оформлении.</p>
-        {/if}
+        </section>
+      {/if}
+    {/each}
+
+    {#if fresh.length}
+      <section class="box" aria-labelledby="ks-r">
+        <div class="h2"><h2 id="ks-r">Свежие отзывы</h2><button type="button" class="lnk" onclick={toReviews}>Все {p.stats?.reviews ?? p.reviews.length}</button></div>
+        <ul class="revs">
+          {#each fresh as r (r.id)}
+            <li>
+              <span class="rp" style:background={placeholder(r.name)}>{#if r.poster}<img src={artW(r.poster, 200)} alt="" loading="lazy" decoding="async" width="44" height="66" />{/if}</span>
+              <span><b>{r.name}</b>{#if r.stars}<i class="st"> ★ {(r.stars / 2).toFixed(1).replace('.0', '').replace('.', ',')}</i>{/if}{#if r.body}<p>{r.body}</p>{/if}</span>
+            </li>
+          {/each}
+        </ul>
       </section>
     {/if}
-  {/each}
 
-  {#if director || p.decor.actors?.length || p.me}
-    <section aria-labelledby="ks-p">
-      <div class="h2"><h2 id="ks-p">Любимые люди</h2></div>
-      <div class="people">
+    {#if !tickets.length && !movies.length && !series.length && !p.me}<p class="muted none">Пока здесь пусто: человек ещё ничего не посмотрел.</p>{/if}
+  </div>
+
+  <aside class="side" aria-label="Значки и любимые люди">
+    {#if goals.length}
+      <section class="box medals" aria-labelledby="ks-b">
+        <div class="h2"><h2 id="ks-b">Значки</h2><small>{goals.filter((g) => g.got).length} из {goals.length}</small></div>
+        <ul>
+          {#each goals.slice(0, 6) as g, i (g.label)}
+            <li class:got={g.got} title={g.got ? g.label : `${g.label}: ${g.hint}`}>
+              <Badge icon={g.icon} tone={i} got={g.got} progress={g.progress} />
+              <b>{g.label}</b><small>{g.hint}</small>
+            </li>
+          {/each}
+        </ul>
+        {#if nextGoal}<p class="next">Дальше: {nextGoal}</p>{/if}
+      </section>
+    {/if}
+
+    {#if director || p.decor.actors?.length || p.me}
+      <section class="box" aria-labelledby="ks-p">
+        <div class="h2"><h2 id="ks-p">Любимые люди</h2></div>
         {#if director}
           <a class="dir" href="/person?name={encodeURIComponent(director.name)}&role=director">
-            <span class="ph">{#if director.photo}<img use:fadeIn src={director.photo} alt="" loading="lazy" width="88" height="88" />{:else}<Icon name="film" size={26} />{/if}</span>
-            <span><small>Любимый режиссёр</small><b>{director.name}</b>{#if director.seen}<em>просмотрено {director.seen.seen} из {director.seen.total}{director.seen.avg != null ? ` · в среднем ${director.seen.avg.toFixed(1).replace('.', ',')}` : ''}</em>{/if}</span>
+            <span class="ph">{#if director.photo}<img use:fadeIn src={director.photo} alt="" loading="lazy" width="56" height="56" />{:else}<Icon name="film" size={22} />{/if}</span>
+            <span><small>Режиссёр</small><b>{director.name}</b>{#if director.seen}<em>просмотрено {director.seen.seen} из {director.seen.total}</em>{/if}</span>
           </a>
         {/if}
         <div class="actors"><FavActors bind:actors={p.decor.actors} suggest={(p.stats?.actors ?? []).map((a) => a.name)} editable={p.me} /></div>
-      </div>
-    </section>
-  {/if}
-
-  {#if p.me}
-    <nav class="quick" aria-label="Быстрые разделы">
-      {#each quick as q (q.label)}
-        {#if q.href}
-          <a href={q.href}><span class="qi"><Icon name={q.icon} size={18} /></span><span><b>{q.label}{#if q.count}<em>{q.count}</em>{/if}</b><small>{q.hint}</small></span></a>
-        {:else}
-          <button type="button" class:out={q.out} onclick={q.act}><span class="qi"><Icon name={q.icon} size={18} /></span><span><b>{q.label}</b><small>{q.hint}</small></span></button>
-        {/if}
-      {/each}
-    </nav>
-  {/if}
-
-  {#if !tickets.length && !movies.length && !series.length && !p.me}<p class="muted none">Пока здесь пусто: человек ещё ничего не посмотрел.</p>{/if}
-  {#if p.reviews.length}<p class="more"><button type="button" class="btn sm" onclick={toReviews}><Icon name="edit" size={14} /> Отзывы · {p.stats?.reviews ?? p.reviews.length}</button></p>{/if}
+      </section>
+    {/if}
+  </aside>
 </div>
 
 <style>
-  .ks { display: grid; gap: 44px; min-width: 0; }
+  /* Колонка до 1180 px (ширину задаёт страница - `--pf-side`). Широкое окно: слева главное, справа 340 px. */
+  .ks { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: 'quick quick' 'main side'; gap: 16px; min-width: 0; }
+  .quick { grid-area: quick; }
+  .main { grid-area: main; display: grid; gap: 16px; align-content: start; min-width: 0; }
+  .side { grid-area: side; display: grid; gap: 16px; align-content: start; min-width: 0; }
   section { min-width: 0; }
-  .h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 1px solid #ffffff1a; }
+  .box { padding: 18px; border: 1px solid #ffffff12; border-radius: 20px; background: #131316; }
+  .h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
   .h2 h2 { margin: 0; color: #8c8c96; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-  .h2 a { color: #8c8c96; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; }
-  .h2 a:hover { color: #fff; }
+  .h2 a, .lnk { padding: 0; border: 0; background: none; color: #fff; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; cursor: pointer; }
   .h2 small { color: #8c8c96; font-size: 12px; text-align: right; }
-  .sm { margin: 0; font-size: 13px; }
   .none { padding: 30px 0; text-align: center; }
 
-  /* Значки - друг за другом в один ряд (на узком - прокрутка вбок). */
-  .medals ul { display: flex; gap: 10px; margin: 0; padding: 4px 0 8px; list-style: none; overflow-x: auto; scrollbar-width: none; }
-  .medals li { flex: 1 0 120px; display: grid; justify-items: center; gap: 6px; text-align: center; padding: 14px 8px; border-radius: 18px; }
-  .medals li:hover :global(.badge) { transform: rotate(-12deg) scale(1.08); }
-  .medals b { font-size: 13px; }
-  .medals li:not(.got) b { color: #8c8c96; }
-  .medals small { color: #8c8c96; font-size: 11.5px; line-height: 1.3; }
+  /* Быстрые разделы - сверху, одной строкой капсул (на узком - лентой вбок). */
+  .quick { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+  .quick::-webkit-scrollbar { display: none; }
+  .quick a, .quick button { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 6px; border: 1px solid #ffffff14; border-radius: 999px; background: #151518; color: #fff; font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; transition: background 0.2s; }
+  .quick a:hover, .quick button:hover { background: #1f1f24; }
+  .qi { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #ffffff14; }
+  .quick b { font-weight: 600; }
+  .quick em { padding: 1px 7px; border-radius: 999px; background: #fff; color: #000; font-size: 11px; font-style: normal; font-weight: 700; }
+  .quick .out { color: #ffb4b4; }
 
-  /* Веер билетов. */
-  .fanwrap { overflow-x: auto; scrollbar-width: none; padding: 18px 0 14px; }
-  .fan { display: flex; justify-content: center; margin: 0; padding: 0 20px; list-style: none; min-width: min-content; }
-  .fan li { flex: none; margin: 0 -10px; transform: rotate(var(--r)) translateY(var(--y)); transition: transform 0.3s var(--ease, ease); }
-  .fan li:hover { transform: rotate(0deg) translateY(-8px); z-index: 2; }
-  .tk { position: relative; display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 12px; align-items: center; width: 236px; padding: 10px; border-radius: 16px; background: #f4f4f6; color: #111; text-decoration: none; box-shadow: 0 22px 40px -18px #000; }
-  .tk::before, .tk::after { content: ''; position: absolute; left: 82px; width: 14px; height: 14px; border-radius: 50%; background: #0b0b0d; }
-  .tk::before { top: -7px; } .tk::after { bottom: -7px; }
-  .tk.now { background: #fff; box-shadow: 0 0 0 2px #fff, 0 22px 40px -18px #000; }
-  .tp { width: 66px; aspect-ratio: 2 / 3; border-radius: 7px; overflow: hidden; }
+  /* Билеты сеансов - прямым рядом (было: веер по центру с пустотой по бокам). */
+  .tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .tk { position: relative; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px; border-radius: 14px; background: #f4f4f6; color: #111; text-decoration: none; transition: transform 0.25s var(--ease, ease); }
+  .tk:hover { transform: translateY(-3px); }
+  .tk::before, .tk::after { content: ''; position: absolute; left: 70px; width: 12px; height: 12px; border-radius: 50%; background: #131316; }
+  .tk::before { top: -6px; } .tk::after { bottom: -6px; }
+  .tk.now { box-shadow: 0 0 0 2px #fff; }
+  .tp { width: 56px; aspect-ratio: 2 / 3; border-radius: 7px; overflow: hidden; }
   .tp img { width: 100%; height: 100%; object-fit: cover; }
-  .tt { display: grid; gap: 2px; min-width: 0; padding-left: 6px; }
-  .tt small { color: #0009; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
-  .tk.now .tt small { color: #111; }
-  .tt b { font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt { display: grid; gap: 2px; min-width: 0; padding-left: 4px; }
+  .tt small { color: #0009; font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .tt b { font-size: 14px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tt em { color: #000a; font-size: 12px; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* Любимые - световые короба, как на фасаде кинотеатра. */
-  .boxes { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
-  .lb { display: block; padding: 8px; border-radius: 14px; background: #1a1a1e; box-shadow: inset 0 0 0 1px #ffffff1f, 0 0 34px -10px #ffffff40; transition: transform 0.3s var(--ease, ease), box-shadow 0.3s; }
+  /* Любимые - световые короба; пустые места - «+» (без длинной строки текста). */
+  .boxes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+  .lb { display: block; padding: 6px; border-radius: 14px; background: #1a1a1e; box-shadow: inset 0 0 0 1px #ffffff1f, 0 0 30px -12px #ffffff40; transition: transform 0.3s var(--ease, ease); }
   .lb:hover { transform: translateY(-4px); }
-  .po { display: grid; place-items: center; aspect-ratio: 2 / 3; border-radius: 7px; overflow: hidden; color: #fff; font-size: 13px; font-weight: 700; text-align: center; }
+  .po { display: grid; place-items: center; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; color: #fff; font-size: 13px; font-weight: 700; text-align: center; }
   .po img { width: 100%; height: 100%; object-fit: cover; }
+  .slot { display: grid; place-items: center; aspect-ratio: 2 / 3; border: 1.5px dashed #ffffff2e; border-radius: 14px; color: #8c8c96; transition: border-color 0.2s, color 0.2s; }
+  .slot:hover { border-color: #ffffff80; color: #fff; }
+  /* Пока любимых нет - пять маленьких мест, а не пять больших пустых коробов. */
+  .boxes.empty { grid-template-columns: repeat(5, minmax(0, 72px)); gap: 8px; }
+  .boxes.empty .slot { border-radius: 10px; }
 
-  .people { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 24px; align-items: start; }
-  .dir { display: flex; align-items: center; gap: 16px; padding: 14px; border-radius: 18px; background: #151518; color: #fff; text-decoration: none; }
-  .dir:hover { background: #1c1c20; }
-  .dir .ph { width: 72px; height: 72px; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #ffffff12; color: #8c8c96; }
+  .revs { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  .revs li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; }
+  .rp { width: 44px; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; }
+  .rp img { width: 100%; height: 100%; object-fit: cover; }
+  .revs b { font-size: 14px; }
+  .st { color: #d4d4d8; font-size: 12px; font-style: normal; }
+  .revs p { margin: 4px 0 0; color: #c9c9cf; font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* Значки - сетка 3 × 2 в узкой колонке. */
+  .medals ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 6px; margin: 0; padding: 0; list-style: none; }
+  .medals li { display: grid; justify-items: center; gap: 4px; text-align: center; }
+  .medals li:hover :global(.badge) { transform: rotate(-12deg) scale(1.08); }
+  .medals b { font-size: 12px; }
+  .medals li:not(.got) b { color: #8c8c96; }
+  .medals small { color: #8c8c96; font-size: 10.5px; line-height: 1.25; }
+  .next { margin: 12px 0 0; color: #a1a1aa; font-size: 12px; }
+
+  .dir { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; color: #fff; text-decoration: none; }
+  .dir .ph { width: 48px; height: 48px; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #ffffff12; color: #8c8c96; }
   .dir .ph img { width: 100%; height: 100%; object-fit: cover; }
-  .dir small { display: block; color: #8c8c96; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
-  .dir b { display: block; font-size: 18px; margin-top: 2px; }
-  .dir em { display: block; color: #a1a1aa; font-size: 12.5px; font-style: normal; margin-top: 2px; }
+  .dir small { display: block; color: #8c8c96; font-size: 11px; }
+  .dir b { display: block; font-size: 15px; }
+  .dir em { display: block; color: #a1a1aa; font-size: 12px; font-style: normal; }
   .actors { min-width: 0; }
 
-  .quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-  .quick a, .quick button { display: flex; align-items: center; gap: 12px; padding: 14px; border: 0; border-radius: 16px; background: #151518; color: #fff; font: inherit; text-align: left; text-decoration: none; cursor: pointer; transition: background 0.2s; }
-  .quick a:hover, .quick button:hover { background: #1f1f24; }
-  .qi { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 12px; background: #ffffff14; }
-  .quick b { display: flex; align-items: center; gap: 6px; font-size: 14px; }
-  .quick b em { padding: 1px 7px; border-radius: 999px; background: #fff; color: #000; font-size: 11px; font-style: normal; }
-  .quick small { display: block; color: #8c8c96; font-size: 12px; margin-top: 1px; }
-  .quick .out { color: #ffb4b4; }
-  .more { margin: 0; }
-
+  /* Телефон и планшет: одна колонка - быстрые разделы, главное, потом значки и люди. */
   @media (max-width: 1000px) {
-    .boxes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .people { grid-template-columns: minmax(0, 1fr); }
+    .ks { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'quick' 'main' 'side'; gap: 12px; }
+    .main, .side { gap: 12px; }
+    .box { padding: 14px; border-radius: 18px; }
+    .tickets { display: flex; overflow-x: auto; scrollbar-width: none; }
+    .tickets li { flex: 0 0 min(240px, 74vw); }
+    .medals ul { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   }
   @media (max-width: 640px) {
-    .boxes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .lb { padding: 5px; border-radius: 10px; }
-    .fan { justify-content: flex-start; }
-    .tk { width: 210px; }
-    .medals li { flex-basis: 96px; padding-inline: 4px; }
-    .quick { grid-template-columns: minmax(0, 1fr); }
+    .boxes { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .boxes li:nth-child(n + 5) { display: none; }
+    .lb { padding: 4px; border-radius: 10px; }
+    .slot { border-radius: 10px; }
+    .medals ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .quick a, .quick button { height: 40px; font-size: 13px; }
   }
 </style>
