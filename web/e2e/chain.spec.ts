@@ -1,7 +1,7 @@
 import { expect, test } from './util-test';
 import { expectClean, url } from './util';
 
-// Живая схема цепочки в «Обзоре»: шаги и статусы приходят от сервера, интерфейс только показывает.
+// Живая схема цепочки в «Управление → Каталог»: шаги и статусы приходят от сервера, интерфейс только показывает.
 const chain = {
   ok: false,
   verdict: 'Сайт не отдал поток',
@@ -27,7 +27,7 @@ test('схема цепочки: поиск, шаги и ручная ссылк
     return r.fulfill({ json: chain });
   });
 
-  await page.goto(url('/discover'));
+  await page.goto(url('/admin?tab=catalog'));
   const block = page.getByRole('region', { name: 'Как работает видео' });
   await expect(block).toBeVisible();
 

@@ -18,9 +18,11 @@ test('афиша: запрос словами не ломает страницу
 test('«Спросите Nova»: настроения понимаются и показываются, недолго - про длительность', async ({ page }) => {
   await page.route('**/api/discover', (route) => route.fulfill({ json: { rows: [] } }));
   await page.goto(url('/feed'));
-  const moods = page.getByRole('group', { name: 'Настроение' });
-  await moods.getByRole('button', { name: 'Посмеяться' }).click();
-  await expect(moods.getByRole('button', { name: 'Посмеяться' })).toHaveAttribute('aria-pressed', 'true');
+  // Главные настроения - плитками с кадром, остальные - капсулами под полем.
+  const tiles = page.getByRole('group', { name: 'Настроения' });
+  await tiles.getByRole('button', { name: /Посмеяться/ }).click();
+  await expect(tiles.getByRole('button', { name: /Посмеяться/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Настроение' }).getByRole('button', { name: 'До 90 минут' })).toBeVisible();
   await expect(page.locator('.got')).toContainText('смешное');
   const ask = page.getByRole('textbox', { name: 'Что хотите посмотреть' });
   await ask.fill('пощекотать нервы, но недолго');

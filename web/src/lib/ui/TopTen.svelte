@@ -5,7 +5,8 @@
 
   // «Топ-10 Nova за неделю» (главная «Витрина», 23.11): огромные контурные цифры, как на странице режиссёра, и постер
   // рядом. Лента прокручивается вбок; на широком окне видно пять-шесть мест.
-  let { items }: { items: { card?: Card; ext?: ExtCard; viewers: number }[] } = $props();
+  // Тот же ряд - «Топ-10 мира» в Каталоге (25.11): своё название, без счёта зрителей.
+  let { items, title = 'Топ-10 Nova за неделю', id = 'top10-h' }: { items: { card?: Card; ext?: ExtCard; viewers?: number }[]; title?: string; id?: string } = $props();
   const list = $derived(
     items.map((it) => {
       const c = (it.card ?? it.ext)!;
@@ -15,13 +16,13 @@
   const people = (n: number) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'зритель' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'зрителя' : 'зрителей'}`;
 </script>
 
-<section class="top10" aria-labelledby="top10-h">
-  <h2 id="top10-h">Топ-10 Nova за неделю</h2>
+<section class="top10" aria-labelledby={id}>
+  <h2 {id}>{title}</h2>
   <ol>
     {#each list as it, i (it.key)}
       <li style:--i={i}>
         <span class="n" aria-hidden="true">{i + 1}</span>
-        <a href={it.href} title="{it.title} · {people(it.viewers)}" style:background={placeholder(it.title)}>
+        <a href={it.href} title={it.viewers ? `${it.title} · ${people(it.viewers)}` : it.title} style:background={placeholder(it.title)}>
           {#if it.poster}<img use:fadeIn src={artW(it.poster, 342)} alt={it.title} loading="lazy" decoding="async" width="228" height="342" />{:else}<span>{it.title}</span>{/if}
         </a>
       </li>

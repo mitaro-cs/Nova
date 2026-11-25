@@ -7,6 +7,7 @@
   import Select from '$lib/ui/Select.svelte';
   import { ask } from '$lib/ui/dialogs.svelte';
   import ManualSources from './ManualSources.svelte';
+  import ChainCheck from '$lib/discover/ChainCheck.svelte';
   import HostTitleSource from './HostTitleSource.svelte';
   import { session } from '$lib/session.svelte';
 
@@ -192,6 +193,9 @@
     await patch(`/api/admin/titles/${r.id}`, { hidden: r.hidden }).catch(() => (r.hidden = !r.hidden));
   }
 </script>
+
+<!-- Проверка «Как работает видео» (25.11 - из Каталога сюда: это инструмент хоста, а не витрина). -->
+<ChainCheck />
 
 <div id="sources"><ManualSources /></div>
 {#if session.me?.user.role === 'host'}<HostTitleSource />{/if}

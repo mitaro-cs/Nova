@@ -65,8 +65,8 @@
 <svelte:head><title>Подбор - Nova</title></svelte:head>
 
 <main class="feed">
-  <h1>Подбор</h1>
   {#if feed === null || !catalog.items}
+    <h1>Подбор</h1>
     <div class="skeleton" aria-busy="true"></div>
   {:else}
     <Afisha items={catalog.items} ext={feed.rows.flatMap((r) => r.items)} />
@@ -93,9 +93,13 @@
 </main>
 
 <style>
+  /* Верх «Спросите Nova» сам отступает от шапки (он во всю ширину и заходит под неё). */
   .feed {
     min-height: 100dvh;
-    padding: calc(var(--header) + 24px) 0 calc(48px + var(--tabbar));
+    padding: 0 0 calc(48px + var(--tabbar));
+  }
+  .feed > h1 {
+    padding-top: calc(var(--header) + 24px);
   }
   h1 {
     margin: 0 var(--gutter) 24px;
@@ -131,7 +135,7 @@
     height: 1px;
   }
   @media (max-width: 640px) {
-    .feed {
+    .feed > h1 {
       padding-top: calc(env(safe-area-inset-top) + 56px);
     }
   }

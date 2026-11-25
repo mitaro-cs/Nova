@@ -79,10 +79,12 @@
   ]);
 </script>
 
-<div class="ks">
-  <!-- Вариант A «Колонка» (выбор владельца 25.11): слева главное, справа узкая колонка; быстрые разделы - выше всего. -->
+<div class="ks" class:me={p.me}>
+  <!-- «Широкий экран» A1 (выбор владельца 25.11): три колонки на всю ширину - слева быстрые разделы, в центре главное,
+       справа значки и любимые люди. Уже 1280 px - разделы капсулами сверху, ещё уже - одна колонка. -->
   {#if p.me}
     <nav class="quick" aria-label="Быстрые разделы">
+      <h2 class="qh">Быстрые разделы</h2>
       {#each quick as q (q.label)}
         {#if q.href}
           <a href={q.href}><span class="qi"><Icon name={q.icon} size={17} /></span><b>{q.label}</b>{#if q.count}<em>{q.count}</em>{/if}</a>
@@ -179,8 +181,10 @@
 </div>
 
 <style>
-  /* Колонка до 1180 px (ширину задаёт страница - `--pf-side`). Широкое окно: слева главное, справа 340 px. */
-  .ks { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: 'quick quick' 'main side'; gap: 16px; min-width: 0; }
+  /* Три колонки во всю ширину (A1): у своего профиля слева разделы 280 px, справа 360 px; у чужого - главное и справа. */
+  .ks { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: 'main side'; gap: 20px; min-width: 0; }
+  .ks.me { grid-template-columns: 280px minmax(0, 1fr) 360px; grid-template-areas: 'quick main side'; }
+  .qh { display: none; }
   .quick { grid-area: quick; }
   .main { grid-area: main; display: grid; gap: 16px; align-content: start; min-width: 0; }
   .side { grid-area: side; display: grid; gap: 16px; align-content: start; min-width: 0; }
@@ -201,6 +205,17 @@
   .quick b { font-weight: 600; }
   .quick em { padding: 1px 7px; border-radius: 999px; background: #fff; color: #000; font-size: 11px; font-style: normal; font-weight: 700; }
   .quick .out { color: #ffb4b4; }
+  /* Широкое окно: разделы - список в своей панели слева, панель липнет под шапкой. */
+  @media (min-width: 1281px) {
+    .quick { position: sticky; top: calc(var(--header) + 16px); align-self: start; flex-direction: column; gap: 2px; margin: 0; padding: 14px 10px; overflow: visible; border: 1px solid #ffffff12; border-radius: 20px; background: #131316; }
+    .qh { display: block; margin: 0 8px 8px; color: #8c8c96; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    .quick a, .quick button { height: 46px; padding: 0 12px 0 6px; border: 0; border-radius: 14px; background: none; text-align: left; }
+    .quick a:hover, .quick button:hover { background: #ffffff0f; }
+    .quick em { margin-left: auto; }
+  }
+  @media (max-width: 1280px) {
+    .ks.me { grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: 'quick quick' 'main side'; }
+  }
 
   /* Билеты сеансов - прямым рядом (было: веер по центру с пустотой по бокам). */
   .tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -255,7 +270,7 @@
 
   /* Телефон и планшет: одна колонка - быстрые разделы, главное, потом значки и люди. */
   @media (max-width: 1000px) {
-    .ks { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'quick' 'main' 'side'; gap: 12px; }
+    .ks, .ks.me { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'quick' 'main' 'side'; gap: 12px; }
     .main, .side { gap: 12px; }
     .box { padding: 14px; border-radius: 18px; }
     .tickets { display: flex; overflow-x: auto; scrollbar-width: none; }

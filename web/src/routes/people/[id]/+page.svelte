@@ -188,8 +188,8 @@
 
 <style>
   /* Профиль (шапка «Дневника», вкладка «Касса кинотеатра» с 23.11): шапка на кадре, ниже вкладки текстом; занимает всю ширину окна. */
-  /* Колонка до 1180 px по центру (вариант A, 25.11): шапка профиля и разделы выровнены по одной линии. */
-  .pf { --pf-side: max(var(--gutter), calc((100% - 1180px) / 2)); padding-bottom: calc(48px + var(--tabbar)); background: #0b0b0d; }
+  /* «Широкий экран» A1 (выбор владельца 25.11): на всю ширину окна, поля - только отступ окна, без колонки по центру. */
+  .pf { --pf-side: var(--gutter); padding-bottom: calc(48px + var(--tabbar)); background: #0b0b0d; }
   .body { padding-inline: var(--pf-side); }
   .tabbar { position: relative; display: flex; align-items: center; gap: 20px; margin-top: 30px; border-block: 1px solid #ffffff1a; }
   .tabs { position: relative; display: flex; gap: 28px; min-width: 0; overflow-x: auto; scrollbar-width: none; }

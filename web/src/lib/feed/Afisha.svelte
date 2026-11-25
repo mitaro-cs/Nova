@@ -9,6 +9,8 @@
   import { fadeIn } from '$lib/ui/fade';
   import Icon from '$lib/ui/Icon.svelte';
 
+  // Подбор «Спросите Nova» (выбор владельца 25.11): сверху большой вопрос по центру на стене постеров (это `h1` страницы),
+  // ниже настроения плитками с кадром подходящего фильма, «Фильм дня» - кадр слева, описание справа.
   // «Афиша» страницы «Что смотреть»: фильм дня на кадре из фильма, «Спросите Nova» (запрос словами и чипы),
   // подборки по идее и «Вы не досмотрели». Берём свои фильмы и подборки IMDb вместе (всё описано по IMDb);
   // кадр у фильма из ленты подгружаем отдельно. Считается тут, без новых запросов к серверу, кроме кадров.
@@ -191,6 +193,31 @@
     return () => { live = false; clearTimeout(t); };
   });
 
+  // ---------- плитки настроений и стена постеров ----------
+  const TILES: { label: string; hint: string }[] = [
+    { label: 'Посмеяться', hint: 'комедии, лёгкое' },
+    { label: 'Подумать', hint: 'сюжет с загадкой' },
+    { label: 'Поплакать', hint: 'драмы до мурашек' },
+    { label: 'Пощекотать нервы', hint: 'триллеры, ужасы' },
+    { label: 'Расслабиться', hint: 'приключения, уют' },
+    { label: 'Вдохновиться', hint: 'по реальным событиям' },
+  ];
+  const SMALL = CHIPS.filter((c) => !TILES.some((t) => t.label === c));
+  const artOf = (e: Entry) => e.backdrop ?? null;
+  const posterOf = (e: Entry) => e.card?.poster ?? e.ext?.poster ?? null;
+  // Кадр плитки - лучший по совпадению фильм этого настроения; разные плитки - разные фильмы.
+  const tileArt = $derived.by(() => {
+    const used = new Set<string>();
+    return TILES.map((t) => {
+      const mood = MOODS.find((m) => m.re.test(t.label.toLowerCase()));
+      const fits = entries.filter((e) => !used.has(e.key) && (!mood || has(e, ...mood.stems))).sort(best);
+      const pick = fits.find(artOf) ?? fits.find(posterOf);
+      if (pick) used.add(pick.key);
+      return pick ? { src: artOf(pick) ?? posterOf(pick), frame: !!artOf(pick) } : null;
+    });
+  });
+  const wall = $derived(entries.map(posterOf).filter((x): x is string => !!x).slice(0, 30));
+
   // ---------- ряды ----------
   const resume = $derived(entries.filter((e) => e.resume).slice(0, 18));
   const fresh = $derived(entries.filter((e) => e.card).sort((a, b) => b.card!.addedAt - a.card!.addedAt).slice(0, 18));
@@ -217,19 +244,40 @@
 {/snippet}
 
 <div class="af">
-  <form class="ask" role="search" aria-label="Спросите Nova" onsubmit={(e) => (e.preventDefault(), (idea = ''))}>
-    <div class="field">
-      <span class="spark"><Icon name="sparkle" size={20} /></span>
-      <input bind:value={ask} oninput={() => (idea = '')} placeholder="Что хочется? Например: «посмеяться, но недолго» или «космос 90-х»" aria-label="Что хотите посмотреть" maxlength="80" />
-      {#if ask}<button class="clear" type="button" aria-label="Очистить" onclick={() => (ask = '')}><Icon name="close" size={16} /></button>{/if}
-    </div>
-    <div class="moods" role="group" aria-label="Настроение">
-      {#each CHIPS as c (c)}<button type="button" aria-pressed={ask === c} onclick={() => ((ask = ask === c ? '' : c), (idea = ''))}>{c}</button>{/each}
-    </div>
-    {#if parsed.tags.length}
-      <p class="got" aria-live="polite"><span>Поняли так:</span>{#each parsed.tags as t (t)}<b>{t}</b>{/each}</p>
+  <section class="top" aria-label="Спросите Nova">
+    {#if wall.length >= 10}
+      <div class="wall" aria-hidden="true">{#each wall as src, i (i)}<img use:fadeIn {src} alt="" loading="lazy" decoding="async" />{/each}</div>
     {/if}
-  </form>
+    <div class="center">
+      <h1>Что посмотрим сегодня?</h1>
+      <p class="sub">Напишите как другу - Nova поймёт настроение, время и эпоху.</p>
+      <form class="ask" role="search" aria-label="Спросите Nova" onsubmit={(e) => (e.preventDefault(), (idea = ''))}>
+        <div class="field">
+          <span class="spark"><Icon name="sparkle" size={20} /></span>
+          <input bind:value={ask} oninput={() => (idea = '')} placeholder="посмеяться, но недолго · космос 90-х" aria-label="Что хотите посмотреть" maxlength="80" />
+          {#if ask}<button class="clear" type="button" aria-label="Очистить" onclick={() => (ask = '')}><Icon name="close" size={16} /></button>{/if}
+        </div>
+        <div class="moods" role="group" aria-label="Настроение">
+          {#each SMALL as c (c)}<button type="button" aria-pressed={ask === c} onclick={() => ((ask = ask === c ? '' : c), (idea = ''))}>{c}</button>{/each}
+        </div>
+        {#if parsed.tags.length}
+          <p class="got" aria-live="polite"><span>Поняли так:</span>{#each parsed.tags as t (t)}<b>{t}</b>{/each}</p>
+        {/if}
+      </form>
+    </div>
+  </section>
+
+  <ul class="tiles" role="group" aria-label="Настроения">
+    {#each TILES as t, i (t.label)}
+      {@const a = tileArt[i]}
+      <li>
+        <button type="button" aria-pressed={ask === t.label} onclick={() => ((ask = ask === t.label ? '' : t.label), (idea = ''))}>
+          {#if a?.src}<img use:fadeIn class:po={!a.frame} src={a.src} alt="" loading="lazy" decoding="async" />{/if}
+          <b>{t.label}</b><small>{t.hint}</small>
+        </button>
+      </li>
+    {/each}
+  </ul>
 
   {#if found && !fromIdea}
     {@render results()}
@@ -237,12 +285,12 @@
 
   {#if day}
     <section class="day" aria-label="Фильм дня">
-      <img use:fadeIn src={day.backdrop} alt="" decoding="async" />
-      <i class="shade" aria-hidden="true"></i>
+      <div class="pic"><img use:fadeIn src={day.backdrop} alt="" decoding="async" /></div>
       <div class="txt">
-        <span class="tag">{day.card?.matchPct ? `Фильм дня · совпадение ${day.card.matchPct}%` : 'Фильм дня'}</span>
+        <span class="tag">Фильм дня · для вас</span>
         <h2>{day.title}</h2>
         <p>{lead}</p>
+        {#if day.match >= 50}<p class="why"><b>{day.match}% совпадение</b>{day.card?.matchPct ? ' по вашим оценкам' : ' по оценке IMDb'}</p>{/if}
         {#if dayText}<p class="ov">{dayText}</p>{/if}
         <div class="btns">
           <a class="btn primary big" href={day.href}>Смотреть</a>
@@ -279,31 +327,51 @@
 
 <style>
   .af { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; padding: 0 var(--gutter); }
-  /* «Спросите Nova» (25.11): поле на всю ширину, ниже - настроения (на любой ширине, лентой вбок на узком), под ними - как
-     Nova поняла запрос. */
-  .ask { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
-  .field { display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 8px; border: 1px solid #ffffff33; border-radius: 999px; background: #101012; transition: border-color 0.2s; }
+  /* Верх - во всю ширину окна: стена постеров (только transform), по центру вопрос. */
+  .top { position: relative; isolation: isolate; display: grid; place-items: center; min-height: clamp(400px, 56vh, 560px); margin: 0 calc(-1 * var(--gutter)); padding: calc(var(--header) + 24px) var(--gutter) 70px; overflow: hidden; text-align: center; }
+  .wall { position: absolute; inset: -40px; z-index: -2; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 12px; opacity: 0.32; transform: rotate(-6deg) scale(1.1); }
+  .wall img { width: 100%; max-width: none; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 12px; }
+  .top::after { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(60% 70% at 50% 50%, #000000eb 0%, #000000ad 55%, #00000066 100%), linear-gradient(0deg, var(--bg, #000) 0%, #00000000 34%); }
+  .center { display: grid; justify-items: center; width: min(900px, 100%); min-width: 0; }
+  h1 { margin: 0; font-size: clamp(38px, 5.6vw, 76px); font-weight: 800; letter-spacing: -0.05em; line-height: 1.02; text-wrap: balance; }
+  .sub { margin: 14px 0 26px; color: #ffffffb3; font-size: clamp(15px, 1.4vw, 18px); }
+  .ask { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; min-width: 0; justify-items: center; }
+  .field { display: flex; align-items: center; gap: 14px; width: 100%; padding: 9px 10px 9px 9px; border: 1px solid #ffffff38; border-radius: 999px; background: #121214; box-shadow: 0 20px 60px #000; transition: border-color 0.2s; text-align: left; }
   .field:focus-within { border-color: #fff; }
-  .spark { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #0a0a0b; }
-  .field input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: #fff; font: inherit; font-size: 18px; }
+  .spark { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border-radius: 50%; background: #fff; color: #0a0a0b; }
+  .field input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: #fff; font: inherit; font-size: clamp(16px, 1.5vw, 19px); }
   .field input::placeholder { color: #a1a1aa; }
   .clear { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #ffffff14; color: #fff; cursor: pointer; }
-  .moods { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+  .moods { display: flex; justify-content: center; gap: 8px; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
   .moods::-webkit-scrollbar { display: none; }
-  .moods button { flex: none; height: 40px; padding: 0 18px; border: 1px solid #ffffff24; border-radius: 999px; background: #17171a; color: #fff; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background 0.2s, color 0.2s; }
+  .moods button { flex: none; height: 38px; padding: 0 16px; border: 1px solid #ffffff24; border-radius: 999px; background: #17171ab3; color: #fff; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background 0.2s, color 0.2s; }
   .moods button:hover { background: #26262a; }
   .moods button[aria-pressed='true'] { background: #fff; border-color: #fff; color: #0a0a0b; }
-  .got { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: #a1a1aa; font-size: 13px; }
+  .got { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin: 0; color: #a1a1aa; font-size: 13px; }
   .got b { max-width: 100%; overflow-wrap: anywhere; padding: 3px 10px; border-radius: 999px; background: #ffffff14; color: #fff; font-weight: 600; }
+  /* Настроения плитками с кадром: заходят на низ верхнего блока. */
+  .tiles { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin: -54px 0 0; padding: 0; list-style: none; }
+  .tiles button { position: relative; isolation: isolate; display: block; width: 100%; height: clamp(120px, 11vw, 170px); padding: 0; border: 0; border-radius: 20px; overflow: hidden; background: #17171a; color: #fff; font: inherit; text-align: left; cursor: pointer; }
+  .tiles button::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(0deg, #000000e6 8%, #00000026 72%); }
+  .tiles button::before { content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; box-shadow: inset 0 0 0 2px #fff; opacity: 0; transition: opacity 0.2s; }
+  .tiles button:hover::before, .tiles button:focus-visible::before, .tiles button[aria-pressed='true']::before { opacity: 1; }
+  .tiles img { position: absolute; inset: 0; z-index: -2; width: 100%; max-width: none; height: 100%; object-fit: cover; transition: transform 0.5s var(--ease, ease); }
+  .tiles img.po { object-position: 50% 20%; }
+  .tiles button:hover img { transform: scale(1.05); }
+  .tiles b { position: absolute; left: 16px; right: 12px; bottom: 32px; font-size: clamp(16px, 1.4vw, 20px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  .tiles small { position: absolute; left: 16px; right: 12px; bottom: 13px; color: #ffffffad; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .none { margin: 0; color: var(--muted); }
-  .day { position: relative; min-height: clamp(380px, 40vw, 620px); overflow: hidden; border: 1px solid #ffffff1a; border-radius: 40px; background: #05070d; }
-  .day img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 60% 22%; }
-  .shade { position: absolute; inset: 0; background: linear-gradient(90deg, #05070dee 0%, #05070db3 38%, #05070d33 70%, transparent 100%), linear-gradient(180deg, transparent 55%, #05070d 100%); }
-  .txt { position: absolute; left: clamp(22px, 4vw, 56px); right: 22px; bottom: clamp(24px, 3.4vw, 46px); max-width: 660px; }
-  .tag { display: inline-block; padding: 8px 16px; border-radius: 999px; background: #ffffff1f; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-  .day h2 { margin: 14px 0 0; font-size: clamp(32px, 4.6vw, 60px); font-weight: 800; letter-spacing: -0.045em; line-height: 1; overflow-wrap: anywhere; }
-  .day p { margin: 12px 0 0; color: #d4d4d8; font-size: 16px; }
-  .day .ov { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; max-width: 58ch; font-size: 15px; color: #c4c4cc; }
+  /* Фильм дня: кадр слева, о фильме справа (на узком - друг под другом). */
+  .day { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); overflow: hidden; border-radius: 24px; background: #111113; }
+  .pic { position: relative; min-height: clamp(260px, 26vw, 400px); }
+  .pic img { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%; object-fit: cover; object-position: 60% 22%; }
+  .txt { display: grid; align-content: center; justify-items: start; gap: 10px; min-width: 0; padding: clamp(22px, 3vw, 40px); }
+  .tag { display: inline-block; color: #8c8c96; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+  .day h2 { margin: 0; font-size: clamp(28px, 3.2vw, 44px); font-weight: 800; letter-spacing: -0.045em; line-height: 1.02; overflow-wrap: anywhere; }
+  .day p { margin: 0; color: #d4d4d8; font-size: 15px; }
+  .day .why b { display: inline-block; margin-right: 6px; padding: 3px 10px; border-radius: 999px; background: #fff; color: #000; font-size: 12px; font-weight: 800; }
+  .day .why { color: #a1a1aa; font-size: 13px; }
+  .day .ov { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; max-width: 58ch; color: #c4c4cc; }
   .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .big { min-height: 48px; padding-inline: 26px; border-radius: 999px; font-size: 16px; }
   .ideas { padding: 24px; border: 1px solid #ffffff1a; border-radius: 32px; background: #101012; }
@@ -320,5 +388,15 @@
   .nm b { font-size: 15px; }
   .nm small { color: var(--muted); font-size: 12px; }
   .ideas em { color: #c4c4cc; font-size: 12px; font-style: normal; font-weight: 700; }
-  @media (max-width: 640px) { .day { border-radius: 28px; } .af { gap: 20px; } .ideas { padding: 16px; border-radius: 26px; } }
+  @media (max-width: 1000px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 640px) {
+    .af { gap: 20px; }
+    .ideas { padding: 16px; border-radius: 26px; }
+    .top { min-height: 0; padding: calc(env(safe-area-inset-top) + 72px) var(--gutter) 70px; }
+    .wall { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .moods { justify-content: flex-start; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .day { grid-template-columns: minmax(0, 1fr); border-radius: 22px; }
+    .pic { min-height: 210px; }
+  }
 </style>
