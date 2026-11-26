@@ -1224,8 +1224,13 @@ pub async fn director(
         info["biography"] = json!(bio);
         info["bioSource"] = json!("imdb");
     }
+    // Имя по-русски всегда: из Викиданных, иначе из своего кэша имён или транслитерацией (не латиницей на весь экран).
+    let name_ru = info["nameRu"].as_str().filter(|n| !n.is_empty()).map(String::from).unwrap_or_else(|| {
+        let orig = row.as_ref().map(|r| r.0.as_str()).filter(|n| !n.is_empty()).unwrap_or(name);
+        crate::names::ru_director(&app.db, orig)
+    });
     Ok(Json(json!({
-        "name": name, "imdbName": row.as_ref().map(|r| r.0.clone()), "id": id, "role": role,
+        "name": name, "nameRu": name_ru, "imdbName": row.as_ref().map(|r| r.0.clone()), "id": id, "role": role,
         "photo": super::img(row.and_then(|r| r.1).or_else(|| info["photo"].as_str().map(String::from))), "works": works, "local": local,
         "info": info, "availability": if imdb_ok { "full" } else if !ids.is_empty() { "partial" } else { "unavailable" },
     })))

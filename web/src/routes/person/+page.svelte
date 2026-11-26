@@ -25,7 +25,8 @@
     works: ExtCard[];
     local: Card[];
     availability?: 'full' | 'partial' | 'unavailable';
-    info?: { nameRu?: string | null; biography?: string | null; description?: string | null; birthDate?: string | null; source?: string; wiki?: string | null; bioSource?: 'imdb' } | null;
+    nameRu?: string;
+    info?: { nameRu?: string | null; biography?: string | null; description?: string | null; birthDate?: string | null; deathDate?: string | null; source?: string; wiki?: string | null; bioSource?: 'imdb' } | null;
   };
 
   const name = $derived(page.url.searchParams.get('name') ?? '');
@@ -90,12 +91,23 @@
   }
 
   const works = $derived(d ? d.works.filter((w) => kind === 'all' || w.kind === kind) : []);
-  const years = $derived.by(() => {
-    const ys = (d?.works ?? []).map((w) => w.year).filter((y): y is number => !!y);
-    if (!ys.length) return '';
-    const lo = Math.min(...ys), hi = Math.max(...ys);
-    return lo === hi ? String(lo) : `${lo} - ${hi}`;
+  // Годы жизни (просьба владельца 26.11): жив - только год рождения, умер - «1930-2020». Годы работ здесь не показываем:
+  // «1998-2026» читалось как годы жизни. Даты Викиданных бывают точны до года («1970-00-00»).
+  const yearOf = (iso: string | null | undefined) => (iso && /^\d{4}/.test(iso) ? iso.slice(0, 4) : null);
+  const life = $derived.by(() => {
+    const b = yearOf(d?.info?.birthDate), x = yearOf(d?.info?.deathDate);
+    if (b && x) return { label: 'годы жизни', value: `${b}-${x}` };
+    if (b) return { label: 'год рождения', value: b };
+    if (x) return { label: 'год смерти', value: x };
+    return null;
   });
+  const fullDate = (iso: string | null | undefined) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return null;
+    if (iso.slice(5, 7) === '00') return iso.slice(0, 4);
+    if (iso.slice(8, 10) === '00') return new Date(`${iso.slice(0, 7)}-01T00:00:00Z`).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  };
+  const shownName = $derived(d?.nameRu ?? d?.info?.nameRu ?? nameRuLink ?? name);
   // Лучшие фильмы: по оценке IMDb, у кого уже набралось оценок, сначала фильмы.
   const best = $derived(
     (d?.works ?? [])
@@ -183,16 +195,16 @@
       <div class="veil" aria-hidden="true"></div>
       <div class="head">
         <span class="ph" style:background={d?.photo ? undefined : placeholder(name)}>
-          {#if d?.photo}<img use:fadeIn src={artW(d.photo, 1200)} alt={d?.info?.nameRu ?? nameRuLink ?? name} width="600" height="750" decoding="async" />{:else if d}{initials(d?.info?.nameRu ?? nameRuLink ?? name)}{/if}
+          {#if d?.photo}<img use:fadeIn src={artW(d.photo, 1200)} alt={shownName} width="600" height="750" decoding="async" />{:else if d}{initials(shownName)}{/if}
         </span>
         <div class="who">
           <small>{role === 'actor' ? 'Актёр' : 'Режиссёр'} · ретроспектива</small>
-          <h1>{d?.info?.nameRu ?? nameRuLink ?? name}</h1>
+          <h1>{shownName}</h1>
           {#if d?.imdbName && d.imdbName !== name}<p class="orig">{d.imdbName}</p>{/if}
           {#if d}
             <dl class="facts">
               {#if d.works.length}<div><dt>{count(d.works.length, 'работа', 'работы', 'работ').split(' ')[1]}</dt><dd>{d.works.length}</dd></div>{/if}
-              {#if years}<div><dt>годы</dt><dd>{years.replace(' - ', '-')}</dd></div>{/if}
+              {#if life}<div><dt>{life.label}</dt><dd>{life.value}</dd></div>{/if}
               {#if avgImdb}<div><dt>в среднем на IMDb</dt><dd>{avgImdb}</dd></div>{/if}
               {#if topGenre}<div><dt>чаще всего</dt><dd>{topGenre}</dd></div>{/if}
             </dl>
@@ -263,7 +275,7 @@
 
       <section class="person-summary" aria-label="Кратко о человеке">
         <h2>Биография</h2>
-        {#if d.info?.birthDate}<p class="muted">Дата рождения: {new Date(d.info.birthDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}</p>{/if}
+        {#if fullDate(d.info?.birthDate)}<p class="muted">Дата рождения: {fullDate(d.info?.birthDate)}{#if fullDate(d.info?.deathDate)} · дата смерти: {fullDate(d.info?.deathDate)}{/if}</p>{/if}
         {#if bio}
           <p class="text" class:clamp={!more && bio.length > 420}>{bio}</p>
           {#if bio.length > 420}<button class="link" onclick={() => (more = !more)}>{more ? 'Свернуть' : 'Читать дальше'}</button>{/if}

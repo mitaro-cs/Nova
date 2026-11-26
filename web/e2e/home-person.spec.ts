@@ -49,6 +49,9 @@ test('биография, дата рождения и резервная фил
   await page.goto(url('/person?id=nm1466859&name=Owain%20Yeoman&role=actor'));
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Оуайн Йомен');
   await expect(page.getByText('Дата рождения: 2 июля 1978 г.')).toBeVisible();
+  // Жив - в фактах только год рождения, не годы работ.
+  await expect(page.locator('.facts')).toContainText('год рождения');
+  await expect(page.locator('.facts')).toContainText('1978');
   await expect(page.getByText(/Валлийский актёр/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Викиданные', exact: true })).toHaveAttribute('href', 'https://www.wikidata.org/wiki/Q355049');
   await expect(page.getByText('0 работ')).toHaveCount(0);
@@ -66,4 +69,16 @@ test('информативный график профиля: значения �
   await expect(chart.locator('.chart-detail')).toContainText('досмотрено');
   await expectClean(page, 'график просмотров');
   await page.screenshot({ path: `test-results/stats-${info.project.name}.png` });
+});
+
+test('человек: годы жизни и русское имя без Викиданных', async ({ page }) => {
+  await page.route('**/api/people/imdb?*', (r) => r.fulfill({ json: {
+    id: 'nm0634240', name: 'Christopher Nolan', nameRu: 'Кристофер Нолан', imdbName: 'Christopher Nolan', role: 'director', photo: null, works: [card], local: [], availability: 'partial',
+    info: { birthDate: '1930-05-31', deathDate: '2020-01-02' },
+  } }));
+  await page.goto(url('/person?id=nm0634240&name=Christopher%20Nolan&role=director'));
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Кристофер Нолан');
+  await expect(page.locator('.facts')).toContainText('годы жизни');
+  await expect(page.locator('.facts')).toContainText('1930-2020');
+  await expect(page.locator('.facts')).not.toContainText(/^годы$/);
 });

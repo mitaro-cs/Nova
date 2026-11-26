@@ -220,7 +220,8 @@ pub async fn information(app: &Arc<App>, id: &str, name: &str, role: &str) -> an
     })?;
     if let Some(raw) = cached {
         let data: Value = serde_json::from_str(&raw)?;
-        if data["works"].as_array().is_some_and(|w| !w.is_empty()) {
+        // `v` 2 (26.11): с датой смерти - старые записи без неё запрашиваем заново.
+        if data["works"].as_array().is_some_and(|w| !w.is_empty()) && data["v"].as_i64() >= Some(2) {
             return Ok(data);
         }
     }
@@ -353,14 +354,18 @@ pub async fn information(app: &Arc<App>, id: &str, name: &str, role: &str) -> an
     if let Some(url) = summary["thumbnail"]["source"].as_str() {
         photo = tokio::time::timeout(Duration::from_secs(4), app.images.download(url)).await.ok().and_then(Result::ok);
     }
-    let birth = entity["claims"]["P569"]
-        .as_array()
-        .and_then(|a| a.first())
-        .and_then(|v| v["mainsnak"]["datavalue"]["value"]["time"].as_str())
-        .and_then(|s| s.trim_start_matches('+').get(..10))
-        .map(String::from);
-    let data = json!({ "nameRu": entity["labels"]["ru"]["value"], "description": entity["descriptions"]["ru"]["value"],
-        "biography": summary["extract"], "birthDate": birth, "photo": photo,
+    // Даты Викиданных: «+1970-07-30T00:00:00Z»; при точности до года месяц и день - «00».
+    let date = |prop: &str| {
+        entity["claims"][prop]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|v| v["mainsnak"]["datavalue"]["value"]["time"].as_str())
+            .and_then(|s| s.trim_start_matches('+').get(..10))
+            .map(String::from)
+    };
+    let (birth, death) = (date("P569"), date("P570"));
+    let data = json!({ "v": 2, "nameRu": entity["labels"]["ru"]["value"], "description": entity["descriptions"]["ru"]["value"],
+        "biography": summary["extract"], "birthDate": birth, "deathDate": death, "photo": photo,
         "source": format!("https://www.wikidata.org/wiki/{qid}"), "wiki": summary["content_urls"]["desktop"]["page"],
         "works": works.iter().map(|w| &w.id).collect::<Vec<_>>() });
     app.db.with(|c| c.execute("INSERT INTO person_info(id,data,at) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, at=excluded.at",

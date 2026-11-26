@@ -91,10 +91,14 @@
 
 <style>
   /* Кадр от края до края окна (поля `rw-page` гасим отрицательным отступом), высота - по экрану, но не выше 760. */
+  /* Текст и поиск - в потоке (кадр растёт под длинное название, а не накрывает поиск), картинка - слоем под ними. */
   .ch {
     position: relative;
     isolation: isolate;
-    height: clamp(420px, min(74svh, 52vw), 760px);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-height: clamp(420px, min(74svh, 52vw), 760px);
     margin: 0 calc(-1 * var(--gutter)) 18px;
     overflow: hidden;
     background: #000;
@@ -145,20 +149,17 @@
       linear-gradient(0deg, var(--bg, #000) 0%, #00000000 42%);
   }
   .tools {
-    position: absolute;
+    position: relative;
     z-index: 2;
-    top: 18px;
-    right: var(--gutter);
-    left: var(--gutter);
+    padding: 18px var(--gutter) 0;
     display: flex;
     justify-content: flex-end;
     gap: 10px;
   }
   .text {
-    position: absolute;
+    position: relative;
     z-index: 2;
-    left: var(--gutter);
-    bottom: clamp(48px, 7vh, 84px);
+    margin: auto 0 clamp(48px, 7vh, 84px) var(--gutter);
     width: min(600px, calc(100% - 2 * var(--gutter)));
     display: grid;
     gap: 12px;
@@ -251,7 +252,7 @@
   }
   @media (max-width: 640px) {
     .ch {
-      height: clamp(380px, 60svh, 520px);
+      min-height: clamp(380px, 60svh, 520px);
       margin-top: 0;
     }
     .veil {
@@ -264,7 +265,7 @@
       height: 46%;
     }
     .tools {
-      top: 12px;
+      padding-top: 12px;
     }
     .dots {
       left: var(--gutter);
@@ -272,7 +273,7 @@
       bottom: 18px;
     }
     .text {
-      bottom: 50px;
+      margin-bottom: 50px;
     }
   }
 </style>

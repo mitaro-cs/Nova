@@ -645,6 +645,7 @@ mod tests {
             ("Neil Armstrong", "Нил Армстронг"),
             ("Ed Harris", "Эд Харрис"),
             ("Peter O'Toole", "Питер О'Тул"),
+            ("Christopher Nolan", "Кристофер Нолан"),
         ] {
             assert_eq!(translit(from), to, "{from}");
         }
