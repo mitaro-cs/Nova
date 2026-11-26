@@ -184,14 +184,14 @@
             {:else}
               <!-- Нажали - эта серия выбрана; галочка рядом - «посмотрел» (отдельная кнопка). -->
               <button class="card" aria-current={e.current ? 'true' : undefined} aria-label="{e.episode ?? ''} серия: {localized(e.name, 'Серия')}" onclick={() => onpick?.(e)}>{@render card(e)}</button>
-              {#if onrate && e.episode !== null}
-                <!-- Своя оценка серии - звёздами в углу карточки (отдельно от кнопки серии). -->
-                <div class="rate" class:set={!!e.mine}><StarInput value={e.mine ?? null} size={14} label="Ваша оценка {e.episode} серии" onchange={(v) => onrate?.(e, v)} /></div>
-              {/if}
               {#if onseen}
                 <button class="seen" class:on={e.done} aria-pressed={e.done} aria-label="Посмотрел {e.episode ?? ''} серию" title={e.done ? 'Снять «посмотрел»' : 'Посмотрел (и все раньше)'} onclick={() => onseen?.(e)}>
                   <Icon name="check" size={14} stroke={3} />
                 </button>
+              {/if}
+              {#if onrate && e.episode !== null}
+                <!-- Своя оценка серии - строкой под карточкой (отдельно от кнопки серии). -->
+                <div class="rate" class:set={!!e.mine}><small>Ваша оценка</small><StarInput value={e.mine ?? null} size={14} label="Ваша оценка {e.episode} серии" onchange={(v) => onrate?.(e, v)} /></div>
               {/if}
             {/if}
           </li>
@@ -406,9 +406,9 @@
     animation-delay: calc(min(var(--i, 0), 10) * 35ms);
   }
   /* Галочка «посмотрел» у серии из ленты - в углу кадра, своей кнопкой. */
-  /* Оценка серии - в правом нижнем углу карточки; пустые звёзды тусклые, пока не наведут или не поставят. */
-  .ep { position: relative; }
-  .rate { position: absolute; right: 52px; bottom: 6px; z-index: 2; padding: 2px 6px; border-radius: 999px; background: #000000a6; opacity: 0.55; transition: opacity 0.2s; }
+  /* Оценка серии - тонкой строкой под карточкой (не поверх текста); пустые звёзды тусклые, пока не наведут или не поставят. */
+  .rate { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 2px 14px 10px; opacity: 0.6; transition: opacity 0.2s; }
+  .rate small { color: #8c8c96; font-size: 12px; }
   .ep:hover .rate, .rate.set, .rate:focus-within { opacity: 1; }
   .seen {
     align-self: center;

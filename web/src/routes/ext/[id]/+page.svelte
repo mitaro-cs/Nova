@@ -935,7 +935,7 @@
 {/if}
 
 <style>
-  .series-more summary{list-style:none;cursor:pointer}.series-more summary::-webkit-details-marker{display:none}.series-more[open]{flex-basis:100%}.series-more .iconbar{padding:12px 0}.series-more{min-width:0}@media(max-width:640px){.series-more{display:none}}
+  .series-more summary{list-style:none;cursor:pointer}.series-more summary::-webkit-details-marker{display:none}.series-more[open]{flex-basis:100%}.series-more .iconbar{padding:12px 0}.series-more{min-width:0}@media(max-width:640px){.series-more,.art-btn{display:none}}
   .retry { display: flex; flex-wrap: wrap; gap: 8px; }
   .cinema-stage { height: clamp(260px,60svh,680px); position: relative; margin: 0 calc(-1 * var(--gutter)) 32px; }
   .cinema-stage img { position:absolute; inset:0; width:100%; max-width:none; height:100%; object-fit:cover; object-position:center 30%; }

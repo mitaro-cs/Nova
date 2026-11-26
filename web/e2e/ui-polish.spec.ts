@@ -52,9 +52,9 @@ test('постер загружается с устройства без ожи�
   await page.goto(url('/ext/tt1196946'));
   const mobile=page.getByRole('button',{name:'Ещё действия'});
   if((page.viewportSize()?.width ?? 1440)<=640){
-    await mobile.click();await page.getByRole('button',{name:'Постер и фон',exact:true}).click();
+    await mobile.click();await page.getByRole('dialog').getByRole('button',{name:'Постер и фон',exact:true}).click();
   }else{
-    await page.locator('.series-more summary').click();await page.getByRole('button',{name:'Картинки с IMDb'}).click();
+    await page.getByRole('button',{name:'Постер и фон',exact:true}).filter({visible:true}).first().click();
   }
   const dialog=page.getByRole('dialog',{name:'Постер и фон'});await expect(dialog).toBeVisible();
   const uploaded=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/image/poster'));
