@@ -1,5 +1,6 @@
 use crate::{App, auth::Viewer, error::ApiResult};
 use axum::{Json, extract::State};
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -70,7 +71,8 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
     let rows:Vec<LinkResume>=app.db.with(|c|{
         let mut st=c.prepare("SELECT l.id,l.ext_id,p.position,p.duration,p.updated_at,l.season,l.episode
           FROM link_progress p JOIN links l ON l.id=p.link_id WHERE p.profile_id=?1 AND l.ext_id IS NOT NULL
-          AND p.position>0 AND p.duration>0 AND p.position<p.duration-MIN(MAX(p.duration*0.08,20),600,p.duration*0.25)
+          AND p.position>0 AND p.duration>0
+          AND (p.position<p.duration-MIN(MAX(p.duration*0.08,20),600,p.duration*0.25) OR l.season IS NOT NULL)
           AND NOT EXISTS(SELECT 1 FROM ext_dropped d WHERE d.profile_id=?1 AND d.ext_id=l.ext_id)
           AND NOT EXISTS(SELECT 1 FROM ext_marks m WHERE m.profile_id=?1 AND m.ext_id=l.ext_id AND m.status='watched')
           AND NOT EXISTS(SELECT 1 FROM link_progress newer JOIN links nl ON nl.id=newer.link_id WHERE newer.profile_id=?1 AND nl.ext_id=l.ext_id AND (newer.updated_at>p.updated_at OR(newer.updated_at=p.updated_at AND nl.id>l.id)))
@@ -78,6 +80,38 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
         let rows=st.query_map([v.profile.id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?)))?; rows.collect()
     })?;
     for (link, id, position, duration, at, season, episode) in rows {
+        // Серия по ссылке досмотрена (26.11: «нет раздела Продолжить просмотр») - в ряд встаёт следующая серия этого сериала.
+        let (mut link, mut position, mut duration, mut season, mut episode) =
+            (link, position, duration, season, episode);
+        if super::play::finished(position, duration, None) {
+            let (Some(s), Some(e)) = (season, episode) else { continue };
+            type Next = (i64, i64, Option<i64>);
+            let next: Option<Next> = app.db.with(|c| {
+                c.query_row(
+                    "SELECT season, episode, runtime FROM ext_episodes WHERE ext_id = ?1
+                       AND ((season = ?2 AND episode > ?3) OR season > ?2)
+                       AND (air_date IS NULL OR air_date <= date('now'))
+                       AND NOT EXISTS (SELECT 1 FROM ext_seen x WHERE x.profile_id = ?4 AND x.ext_id = ?1 AND x.season = ext_episodes.season AND x.episode = ext_episodes.episode)
+                     ORDER BY season, episode LIMIT 1",
+                    rusqlite::params![id, s, e, v.profile.id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()
+            })?;
+            let Some((ns, ne, runtime)) = next else { continue };
+            // Ссылка на следующую серию уже есть - сразу в плеер, иначе - на страницу сериала (там найдётся источник).
+            let found: Option<i64> = app.db.with(|c| {
+                c.query_row(
+                    "SELECT id FROM links WHERE ext_id = ? AND season = ? AND episode = ? ORDER BY added_at DESC LIMIT 1",
+                    rusqlite::params![id, ns, ne],
+                    |r| r.get(0),
+                )
+                .optional()
+            })?;
+            link = found.unwrap_or(0);
+            (position, season, episode) = (0.0, Some(ns), Some(ne));
+            duration = runtime.map(|m| (m * 60) as f64).unwrap_or(duration);
+        }
         if let Ok(ext) = super::discover::ext_card(&app, &v, &id) {
             // Если эта же работа уже продолжена из локального файла, показываем одну карточку.
             if ext.local.is_some_and(|local| out.iter().any(|i| i["key"] == format!("t:{local}"))) {
@@ -89,7 +123,12 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Valu
                 (Some(s), Some(e)) => format!("{s} сезон, {e} серия"),
                 _ => "Фильм".into(),
             };
-            out.push(json!({"key":format!("x:{id}"),"href":format!("/watch/link/{link}"),"position":position,"duration":duration,"label":label,"at":at,
+            let href = if link > 0 {
+                format!("/watch/link/{link}")
+            } else {
+                format!("/ext/{id}?s={}&e={}", season.unwrap_or(1), episode.unwrap_or(1))
+            };
+            out.push(json!({"key":format!("x:{id}"),"href":href,"position":position,"duration":duration,"label":label,"at":at,
                 "season":season,"episode":episode,"art":super::img(art).or_else(||ext.poster.clone()),"ext":ext}));
         }
     }

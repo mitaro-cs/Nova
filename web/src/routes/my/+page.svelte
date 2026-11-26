@@ -9,15 +9,24 @@
   // постере, «Смотрю», «Просмотрено»; ниже - вход в общие подборки. Загрузок на устройство нет.
   let marks = $state<Marks | null>(null);
   let failed = $state(false);
+  let retry = $state(0);
+  // Не дольше 20 с: на медленной связи (телефон через туннель) лучше «Повторить», чем вечная заглушка.
   $effect(() => {
     void extSheet.version;
     void extSheet.marks;
+    void retry;
     let live = true;
-    api<Marks>('/api/me/marks').then(
+    failed = false;
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 20000);
+    api<Marks>('/api/me/marks', { signal: ctl.signal }).then(
       (m) => live && ((marks = m), (failed = false)),
       () => live && (failed = true),
-    );
-    return () => (live = false);
+    ).finally(() => clearTimeout(t));
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
   });
   const empty = $derived(marks !== null && !marks.want.length && !marks.watching.length && !marks.watched.length);
 </script>
@@ -28,14 +37,21 @@
   <h1>Моё</h1>
   {#if failed && !marks}
     <p class="note">Не удалось загрузить. Проверьте связь.</p>
+    <button class="btn again" onclick={() => retry++}>Повторить</button>
   {:else if marks === null}
     <div class="skeleton" aria-busy="true"></div>
   {:else}
-    <div class="rows">
-      {#if marks.want.length}<PosterRow title="Буду смотреть" href="/lists" items={marks.want} />{/if}
-      {#if marks.watching.length}<PosterRow title="Смотрю" items={marks.watching} />{/if}
-      {#if marks.watched.length}<PosterRow title="Просмотрено" items={marks.watched} />{/if}
-    </div>
+    <!-- Ошибка в одном ряду не оставляет страницу пустой: ряд заменяется строкой с «Повторить». -->
+    <svelte:boundary>
+      <div class="rows">
+        {#if marks.want.length}<PosterRow title="Буду смотреть" href="/lists" items={marks.want} />{/if}
+        {#if marks.watching.length}<PosterRow title="Смотрю" items={marks.watching} />{/if}
+        {#if marks.watched.length}<PosterRow title="Просмотрено" items={marks.watched} />{/if}
+      </div>
+      {#snippet failed(_e, reset)}
+        <p class="note">Не удалось показать отметки. <button class="btn sm" onclick={reset}>Повторить</button></p>
+      {/snippet}
+    </svelte:boundary>
     {#if empty}
       <p class="note">Здесь будет то, что вы отметите: «Хочу», «Смотрю» и «Просмотрено». Начните с <a href="/discover">каталога</a>.</p>
     {/if}
@@ -71,6 +87,9 @@
   }
   .rows {
     padding: 0 var(--gutter);
+  }
+  .again {
+    margin: 0 var(--gutter);
   }
   .skeleton {
     height: 300px;

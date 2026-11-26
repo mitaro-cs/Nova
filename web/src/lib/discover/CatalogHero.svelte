@@ -251,7 +251,8 @@
   }
   @media (max-width: 640px) {
     .ch {
-      height: clamp(460px, 78svh, 640px);
+      height: clamp(380px, 60svh, 520px);
+      margin-top: 0;
     }
     .veil {
       background: linear-gradient(0deg, var(--bg, #000) 4%, #000000b8 46%, #00000033 100%);

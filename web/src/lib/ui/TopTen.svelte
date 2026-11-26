@@ -84,4 +84,8 @@
   .top10 a::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px #ffffffb0; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
   .top10 a:hover::after, .top10 a:focus-visible::after { opacity: 1; }
   .top10 img { width: 100%; height: 100%; object-fit: cover; }
+  @media (max-width: 640px) {
+    .top10 a { width: 118px; }
+    .top10 .n { font-size: 92px; }
+  }
 </style>

@@ -180,6 +180,7 @@
       upcomingYear: upcomingYear(e.airDate),
       pct: e.seen ? 100 : percent(progressFor(e)?.position ?? 0, progressFor(e)?.duration ?? 0),
       done: e.seen,
+      mine: e.mine ?? null,
       left: !e.seen && progressFor(e) ? left(progressFor(e)!.position, progressFor(e)!.duration) : null,
       current: !upcomingYear(e.airDate) && (chosen ? chosen === `${e.season}-${e.episode}` : lastSeen >= 0 ? i === Math.min(lastSeen + 1, episodes.length - 1) : i === 0),
     })),
@@ -269,6 +270,20 @@
   });
 
   /** Галочка: не отмечена - «досюда посмотрел» (и все раньше, с прошлыми сезонами); отмечена - снять. */
+  // Своя оценка серии (26.11 «не могу ставить оценку сериям»): сразу на месте, при ошибке - назад.
+  async function rateEpisode(e: Ep, stars: number | null) {
+    if (!d || e.episode === null) return;
+    const item = episodes.find((x) => x.season === e.season && x.episode === e.episode);
+    if (!item) return;
+    const before = item.mine ?? null;
+    item.mine = stars;
+    try {
+      await put(`/api/discover/title/${d.card.id}/episode-stars`, { season: e.season, episode: e.episode, stars });
+    } catch (x) {
+      item.mine = before;
+      toast(errorText(x));
+    }
+  }
   async function seen(e: Ep) {
     if (!d || e.episode === null) return;
     const value = !e.done;
@@ -556,12 +571,14 @@
     onseason={loadSeason}
     onpick={pick}
     onseen={seen}
+    onrate={rateEpisode}
   >
     {#snippet actions()}
       {@render watch('go')}
       <button class="btn want" class:on={c?.mark === 'want'} aria-pressed={c?.mark === 'want'} disabled={!d} onclick={() => mark('want')}>
         <Icon name={c?.mark === 'want' ? 'check' : 'plus'} size={16} /> Буду смотреть
       </button>
+      {#if session.me?.manage}<button class="ib art-btn" onclick={() => (imdbArt = true)}><Icon name="image" size={16} /> Постер и фон</button>{/if}
       <details class="series-more"><summary class="ib"><Icon name="menu" size={16} /> Ещё</summary><div class="iconbar">
         <button class="ib" class:on={c?.mark === 'watching'} aria-pressed={c?.mark === 'watching'} aria-label="Смотрю" title="Смотрю" disabled={!d} onclick={() => mark('watching')}><Icon name="tv" size={16} /><span>Смотрю</span></button>
         <button class="ib" class:on={c?.mark === 'dropped'} aria-pressed={c?.mark === 'dropped'} disabled={!d} onclick={() => mark('dropped')}><Icon name="close" size={16} /><span>Забросил</span></button>
@@ -574,7 +591,7 @@
         <button class="ib" aria-label="Смотреть вместе" title="Смотреть вместе" disabled={!d || roomBusy || (!first && !firstFound)} onclick={together}><Icon name="party" size={16} /><span>Вместе</span></button>
         {#if c?.id.startsWith('tt')}<a class="ib" href="https://www.imdb.com/title/{c.id}/" target="_blank" rel="noopener noreferrer" aria-label="Открыть на IMDb" title="IMDb"><b class="imdb-s">IMDb</b></a>{/if}
         {#if session.me?.manage}
-          <button class="ib" aria-label="Картинки с IMDb" title="Обложка и фон с IMDb" onclick={() => (imdbArt = true)}><Icon name="image" size={16} /><span>Картинки</span></button>
+          <button class="ib" aria-label="Убрать из Nova" title="Убрать из Nova" onclick={removeTitle}><Icon name="trash" size={16} /><span>Убрать</span></button>
         {/if}
       </div></details>
     {/snippet}

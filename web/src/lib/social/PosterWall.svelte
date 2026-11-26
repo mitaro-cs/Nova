@@ -81,6 +81,8 @@
     animation-delay: var(--delay);
   }
   .prominent .col { animation-duration: calc(var(--speed) * .85); }
+  /* Телефон: стена стоит (бесконечное движение десятков постеров - постоянная работа видеокарте). */
+  @media (hover: none) and (pointer: coarse) { .col { animation: none; } }
   .prominent .col:nth-child(even) { animation-direction: reverse; }
   @keyframes drift {
     to {

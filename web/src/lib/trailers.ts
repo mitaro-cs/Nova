@@ -1,8 +1,11 @@
-/** Трейлеры сами не играют: включена экономия трафика у браузера или зритель выключил их в профиле. */
+/** Трейлеры сами не играют: экономия трафика у браузера, зритель выключил их в профиле или это телефон/планшет и
+ *  зритель их явно не включал (26.11 «на телефоне всё лагает»: видео за каруселью грузило телефон и связь). */
 export function trailersOff(): boolean {
   try {
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
-    return saveData || localStorage.getItem('nova-trailers') === 'off';
+    const v = localStorage.getItem('nova-trailers');
+    const touch = matchMedia('(hover: none) and (pointer: coarse)').matches;
+    return saveData || v === 'off' || (touch && v !== 'on');
   } catch {
     return false;
   }

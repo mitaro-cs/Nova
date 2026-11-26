@@ -320,7 +320,8 @@
     .arrow { display: none; }
   }
   @media (max-width: 640px) {
-    .showcase { --cw: calc(100vw - 56px); --ch: clamp(420px, calc(var(--cw) * 1.32), 600px); --gap: 10px; --round: 26px; padding-top: 4px; }
+    /* Телефон (26.11 «баннеры не очень высокие»): карточка почти квадратная - не больше половины экрана. */
+    .showcase { --cw: calc(100vw - 48px); --ch: clamp(340px, min(calc(var(--cw) * 1.12), 52svh), 470px); --gap: 10px; --round: 26px; padding-top: 4px; }
     h1 { font-size: clamp(28px, 9.4vw, 40px); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; text-wrap: balance; margin: 10px 0 8px; }
     .meta { font-size: 12.5px; }
     .description, .more { display: none; }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { trailersOff } from '$lib/trailers';
   import { CHARACTERS } from '$lib/ui/characters';
   import EmailSettings from '$lib/account/EmailSettings.svelte';
   import Security from '$lib/account/Security.svelte';
@@ -26,7 +27,7 @@
   let uploading = $state(false);
   let tab = $state<'style' | 'account' | 'playback'>('style');
   let motion = $state(motionOn());
-  let trailers = $state((() => { try { return localStorage.getItem('nova-trailers') !== 'off'; } catch { return true; } })());
+  let trailers = $state((() => { try { return !trailersOff(); } catch { return true; } })());
   $effect(()=>{const requested=page.url.searchParams.get('tab');if(requested==='account'||requested==='style'||requested==='playback')tab=requested;});
 
   $effect(() => {

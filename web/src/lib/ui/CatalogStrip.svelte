@@ -32,6 +32,11 @@
     background: #000;
   }
   .cstrip::-webkit-scrollbar { display: none; }
+  /* Телефон: шапки на этих страницах нет - полоса прилипает к самому верху, а под строкой состояния - её чёрный фон
+     (26.11: «сверху просто прозрачно» - между строкой состояния и полосой просвечивал кадр). */
+  @media (max-width: 640px) {
+    .cstrip { top: 0; height: calc(46px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+  }
   .cstrip a { flex: none; padding: 8px 0 6px; border-bottom: 3px solid transparent; color: #8e8e93; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; text-decoration: none; transition: color 0.15s; }
   .cstrip a:hover { color: #fff; }
   .cstrip a.on { color: #fff; border-bottom-color: #fff; }

@@ -17,8 +17,15 @@
   }: { title: string; items: Tile[] | ExtCard[]; href?: string | null; ranked?: boolean; i?: number; note?: string | null } = $props();
 
   // Элемент - карточка ленты или {ext | card} из «Буду смотреть» и списков.
-  const tiles = $derived<Tile[]>(items.map((i) => ('id' in i ? { ext: i as ExtCard } : (i as Tile))));
   const key = (t: Tile, n: number) => `${t.person?.id ?? ''}:${t.ext ? t.ext.id : `t${t.card?.id}`}:${t.person ? n : ''}`;
+  // Повтор одного фильма в ряду (26.11: «Моё» на телефоне так и оставалось заглушкой - одинаковый ключ роняет отрисовку):
+  // второй раз не показываем.
+  const tiles = $derived.by<Tile[]>(() => {
+    const seen = new Set<string>();
+    return items
+      .map((i) => ('id' in i ? { ext: i as ExtCard } : (i as Tile)))
+      .filter((t, n) => (t.ext || t.card) && !seen.has(key(t, n)) && !!seen.add(key(t, n)));
+  });
 
   let strip = $state<HTMLDivElement>();
   let start = $state(true);

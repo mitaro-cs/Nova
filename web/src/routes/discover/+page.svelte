@@ -230,6 +230,11 @@
   .rw-page.with-hero {
     padding-top: var(--header);
   }
+  @media (max-width: 640px) {
+    .rw-page.with-hero {
+      padding-top: 0;
+    }
+  }
   /* Без кадра (поиск, подборка, загрузка): заголовок, поиск и тип - просто на чёрном, без «карточки в карточке». */
   .stage {
     margin-bottom: 26px;

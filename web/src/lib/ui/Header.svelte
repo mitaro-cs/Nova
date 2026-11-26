@@ -279,6 +279,11 @@
     cursor: default;
   }
 
+  /* Приложение с экрана «Домой» (iOS 26): окно бывает короче экрана на полосу жеста - панель опускается на разницу между
+     высотой окна (100%) и экрана (100lvh), но никогда не поднимается (26.11: чёрная полоса под панелью). */
+  @media (display-mode: standalone) and (hover: none) and (pointer: coarse) {
+    .tabs.tabs { bottom: min(0px, calc(100% - 100lvh)); }
+  }
   /* Панель разделов: одна на всех экранах. На широком окне вкладки собраны в середине (до 640 px), фон - во всю
      ширину. */
   .tabs {
@@ -291,7 +296,8 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     /* На iPhone значки ближе к краю: полоска жеста сама даёт отступ (раньше снизу оставалась пустая чёрная полоса). */
-    padding: 8px max(4px, calc((100% - 640px) / 2)) max(6px, calc(env(safe-area-inset-bottom) - 18px));
+    padding: 6px max(4px, calc((100% - 640px) / 2)) max(4px, calc(env(safe-area-inset-bottom) - 22px));
+
     /* Единая панель до нижнего края; безопасная область жеста входит в её фон. */
     background: #000;
     border: 0;

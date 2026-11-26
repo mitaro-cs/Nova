@@ -698,7 +698,9 @@ pub async fn episodes(
         let mut st = c.prepare(
             "SELECT e.episode, e.name, e.overview, COALESCE(NULLIF(e.still, ''),e.still_url), e.air_date, e.runtime, e.rating,
                     EXISTS (SELECT 1 FROM ext_seen s WHERE s.profile_id = ?3 AND s.ext_id = e.ext_id
-                              AND s.season = e.season AND s.episode = e.episode)
+                              AND s.season = e.season AND s.episode = e.episode),
+                    (SELECT x.stars FROM ext_episode_stars x WHERE x.profile_id = ?3 AND x.ext_id = e.ext_id
+                              AND x.season = e.season AND x.episode = e.episode)
              FROM ext_episodes e WHERE e.ext_id = ?1 AND e.season = ?2 AND e.episode > 0 ORDER BY e.episode",
         )?;
         let r = st.query_map(params![id, season, v.profile.id], |r| {
@@ -706,7 +708,7 @@ pub async fn episodes(
                 "season": season, "episode": r.get::<_, i32>(0)?, "name": r.get::<_, Option<String>>(1)?,
                 "overview": r.get::<_, Option<String>>(2)?, "still": r.get::<_,Option<String>>(3)?.map(|s|if s.starts_with("https://"){crate::media_meta::art(&s)}else{format!("/img/{s}")}),
                 "airDate": r.get::<_, Option<String>>(4)?, "runtime": r.get::<_, Option<i64>>(5)?,
-                "rating": r.get::<_, Option<f64>>(6)?, "seen": r.get::<_, bool>(7)?,
+                "rating": r.get::<_, Option<f64>>(6)?, "seen": r.get::<_, bool>(7)?, "mine": r.get::<_, Option<i64>>(8)?,
             }))
         })?;
         r.collect()
@@ -1359,4 +1361,48 @@ mod typo_tests {
         assert!(typo_variants("Ёлки").contains(&"елки".to_string()));
         assert!(typo_variants("ab").len() <= 1);
     }
+}
+
+#[derive(Deserialize)]
+pub struct EpisodeStars {
+    season: i64,
+    episode: i64,
+    stars: Option<i64>,
+}
+
+/// Своя оценка серии сериала из ленты: 1..10 (половинки звезды), `null` - убрать.
+pub async fn episode_stars(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path(id): Path<String>,
+    Json(b): Json<EpisodeStars>,
+) -> ApiResult<Json<Value>> {
+    if !discover::valid_id(&id) || b.season < 0 || b.episode < 1 {
+        return Err(ApiError::not_found());
+    }
+    if b.stars.is_some_and(|s| !(1..=10).contains(&s)) {
+        return Err(ApiError::bad("bad_stars", "Оценка - от половины до пяти звёзд"));
+    }
+    let known: bool = app.db.with(|c| {
+        c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM ext_episodes WHERE ext_id = ? AND season = ? AND episode = ?)",
+            params![id, b.season, b.episode],
+            |r| r.get(0),
+        )
+    })?;
+    if !known {
+        return Err(ApiError::not_found());
+    }
+    app.db.with(|c| match b.stars {
+        Some(s) => c.execute(
+            "INSERT INTO ext_episode_stars (profile_id, ext_id, season, episode, stars, at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT DO UPDATE SET stars = excluded.stars, at = excluded.at",
+            params![v.profile.id, id, b.season, b.episode, s, now_ms()],
+        ),
+        None => c.execute(
+            "DELETE FROM ext_episode_stars WHERE profile_id = ? AND ext_id = ? AND season = ? AND episode = ?",
+            params![v.profile.id, id, b.season, b.episode],
+        ),
+    })?;
+    Ok(Json(json!({"ok": true, "stars": b.stars})))
 }

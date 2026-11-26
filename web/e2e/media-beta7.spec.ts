@@ -75,7 +75,7 @@ test('F скрывает оболочку, внешние серии перек�
   await expect.poll(()=>native.at(-1)).toBe(true);
   expect(await page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
   await page.locator('video').evaluate(v=>(window as any).__sameVideo=v);
-  await expect(page.getByText('Следующая серия',{exact:true})).toBeVisible();
+  await expect(page.getByText('Дальше',{exact:true})).toBeVisible();
   await expect(page).toHaveURL(/\/watch\/link\/99002$/, {timeout:12000});
   // На телефоне к названию добавляется «1 сезон, 2 серия» - ищем по началу.
   await expect(player.getByText(/^Вторая серия/).first()).toBeVisible();

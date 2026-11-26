@@ -13,6 +13,8 @@
     /** 0..100 - сколько посмотрено. */
     pct: number;
     done: boolean;
+    /** Своя оценка серии 1..10 (только у сериала из ленты). */
+    mine?: number | null;
     /** «осталось 23 мин». */
     left: string | null;
     href?: string;
@@ -22,6 +24,7 @@
 </script>
 
 <script lang="ts">
+  import StarInput from '$lib/social/StarInput.svelte';
   import { fadeIn } from '$lib/ui/fade';
   import type { Snippet } from 'svelte';
   import { date as fmtDate } from '$lib/fmt';
@@ -47,6 +50,7 @@
     onseason,
     onpick,
     onseen,
+    onrate,
     onsource,
     slim = false,
     actions,
@@ -68,6 +72,7 @@
     onpick?: (e: Ep) => void;
     /** Галочка «посмотрел» у серии (сериал из ленты). */
     onseen?: (e: Ep) => void;
+    onrate?: (e: Ep, stars: number | null) => void;
     onsource?: (e: Ep) => void;
     /** Телефон: кадр, название, описание и «Смотреть» - в MobileHero над этим блоком. */
     slim?: boolean;
@@ -179,6 +184,10 @@
             {:else}
               <!-- Нажали - эта серия выбрана; галочка рядом - «посмотрел» (отдельная кнопка). -->
               <button class="card" aria-current={e.current ? 'true' : undefined} aria-label="{e.episode ?? ''} серия: {localized(e.name, 'Серия')}" onclick={() => onpick?.(e)}>{@render card(e)}</button>
+              {#if onrate && e.episode !== null}
+                <!-- Своя оценка серии - звёздами в углу карточки (отдельно от кнопки серии). -->
+                <div class="rate" class:set={!!e.mine}><StarInput value={e.mine ?? null} size={14} label="Ваша оценка {e.episode} серии" onchange={(v) => onrate?.(e, v)} /></div>
+              {/if}
               {#if onseen}
                 <button class="seen" class:on={e.done} aria-pressed={e.done} aria-label="Посмотрел {e.episode ?? ''} серию" title={e.done ? 'Снять «посмотрел»' : 'Посмотрел (и все раньше)'} onclick={() => onseen?.(e)}>
                   <Icon name="check" size={14} stroke={3} />
@@ -237,6 +246,13 @@
     object-fit: cover;
     object-position: 30% 20%;
     animation: drift 30s ease-in-out infinite alternate;
+  }
+  /* Телефон: без бесконечной анимации кадра во весь экран (26.11 «всё лагает»). */
+  @media (hover: none) and (pointer: coarse) {
+    .bg img,
+    .ph {
+      animation: none;
+    }
   }
   @keyframes drift {
     to {
@@ -390,6 +406,10 @@
     animation-delay: calc(min(var(--i, 0), 10) * 35ms);
   }
   /* Галочка «посмотрел» у серии из ленты - в углу кадра, своей кнопкой. */
+  /* Оценка серии - в правом нижнем углу карточки; пустые звёзды тусклые, пока не наведут или не поставят. */
+  .ep { position: relative; }
+  .rate { position: absolute; right: 52px; bottom: 6px; z-index: 2; padding: 2px 6px; border-radius: 999px; background: #000000a6; opacity: 0.55; transition: opacity 0.2s; }
+  .ep:hover .rate, .rate.set, .rate:focus-within { opacity: 1; }
   .seen {
     align-self: center;
     margin: 8px;

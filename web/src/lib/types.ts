@@ -133,6 +133,8 @@ export interface ExtEpisode {
   runtime: number | null;
   rating: number | null;
   seen: boolean;
+  /** Своя оценка серии, 1..10 (половинки). */
+  mine?: number | null;
 }
 
 export interface TitleDetail {

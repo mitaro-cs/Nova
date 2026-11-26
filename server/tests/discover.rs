@@ -1044,3 +1044,63 @@ async fn own_title_watched_by_link_is_saved() {
     assert!(resume.as_array().unwrap().iter().all(|i| i["key"] != "t:9100"));
     running.shutdown().await;
 }
+
+/// Досмотрел серию по ссылке - в «Продолжить просмотр» встаёт следующая серия (26.11: «нет раздела Продолжить»).
+#[tokio::test(flavor = "multi_thread")]
+async fn finished_link_episode_suggests_next_in_continue() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let app = &running.app;
+    fsfy::discover::upsert(app, &[ext("tt0141842", "Клан Сопрано", true)]).unwrap();
+    app.db
+        .with(|c| {
+            c.execute_batch(
+                "INSERT INTO ext_episodes(ext_id,season,episode,name,runtime) VALUES ('tt0141842',4,8,'Восьмая',56),('tt0141842',4,9,'Девятая',55);",
+            )
+        })
+        .unwrap();
+    let link: Value = host
+        .send(
+            "POST",
+            "/api/links",
+            json!({"url":"https://example.com/s4e8.mp4","extId":"tt0141842","season":4,"episode":8,"label":"Серия 8"}),
+        )
+        .await
+        .json()
+        .await
+        .unwrap();
+    let id = link["id"].as_i64().unwrap_or_else(|| panic!("ссылка не создана: {link}"));
+    host.send("PUT", &format!("/api/links/{id}/progress"), json!({"position":3300,"duration":3360})).await;
+    let resume = host.json("/api/continue").await;
+    assert_eq!(resume[0]["label"], "4 сезон, 9 серия", "{resume}");
+    assert_eq!(resume[0]["position"], 0.0);
+    assert_eq!(resume[0]["href"], "/ext/tt0141842?s=4&e=9");
+    running.shutdown().await;
+}
+
+/// Своя оценка серии сериала из ленты: ставится, приходит в списке серий, снимается; неизвестная серия - 404.
+#[tokio::test(flavor = "multi_thread")]
+async fn episode_stars_are_saved_and_listed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (running, mut host) = common::start(dir.path()).await;
+    let app = &running.app;
+    fsfy::discover::upsert(app, &[ext("tt7366338", "Чернобыль", true)]).unwrap();
+    app.db
+        .with(|c| {
+            c.execute_batch(
+                "INSERT INTO ext_episodes(ext_id,season,episode,name,runtime) VALUES ('tt7366338',1,1,'1:23:45',58),('tt7366338',1,2,'Вторая',65);",
+            )
+        })
+        .unwrap();
+    let path = "/api/discover/title/tt7366338/episode-stars";
+    assert!(host.send("PUT", path, json!({"season":1,"episode":1,"stars":9})).await.status().is_success());
+    assert_eq!(host.send("PUT", path, json!({"season":1,"episode":7,"stars":9})).await.status(), 404);
+    assert_eq!(host.send("PUT", path, json!({"season":1,"episode":1,"stars":11})).await.status(), 400);
+    let eps = host.json("/api/discover/title/tt7366338/episodes?season=1").await;
+    assert_eq!(eps["items"][0]["mine"], 9);
+    assert!(eps["items"][1]["mine"].is_null());
+    assert!(host.send("PUT", path, json!({"season":1,"episode":1,"stars":null})).await.status().is_success());
+    let eps = host.json("/api/discover/title/tt7366338/episodes?season=1").await;
+    assert!(eps["items"][0]["mine"].is_null());
+    running.shutdown().await;
+}

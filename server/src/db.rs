@@ -747,6 +747,18 @@ ALTER TABLE profiles ADD COLUMN cover_frame INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE ext_hidden (id TEXT PRIMARY KEY, at INTEGER NOT NULL);
 ALTER TABLE ext_people ADD COLUMN bio TEXT;
 "#,
+    // 42 (26.11): своя оценка каждой серии сериала из ленты (звёзды 1..10 - половинки), «не могу ставить оценку сериям».
+    r#"
+CREATE TABLE ext_episode_stars (
+  profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  ext_id TEXT NOT NULL REFERENCES ext_titles(id) ON DELETE CASCADE,
+  season INTEGER NOT NULL,
+  episode INTEGER NOT NULL,
+  stars INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 10),
+  at INTEGER NOT NULL,
+  PRIMARY KEY (profile_id, ext_id, season, episode)
+);
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

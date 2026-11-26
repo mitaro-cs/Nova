@@ -100,6 +100,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/people/imdb", get(discover::director))
         .route("/api/franchise", get(discover::franchise))
         .route("/api/discover/title/{id}/seen", put(discover::seen))
+        .route("/api/discover/title/{id}/episode-stars", put(discover::episode_stars))
         .route("/api/discover/title/{id}/reviews", get(social::ext_reviews).post(social::add_ext_review))
         .route("/api/discover/title/{id}/stars", delete(social::clear_ext_stars))
         .route("/api/me/marks", get(discover::my_marks))
