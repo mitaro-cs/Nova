@@ -759,6 +759,16 @@ CREATE TABLE ext_episode_stars (
   PRIMARY KEY (profile_id, ext_id, season, episode)
 );
 "#,
+    // 43 (26.11): голоса «хочу смотреть» в общей подборке (вид «Плейлист»): `item` - «t<id>» свой фильм, «e<id>» из ленты.
+    r#"
+CREATE TABLE list_votes (
+  list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+  item TEXT NOT NULL,
+  profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (list_id, item, profile_id)
+);
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции

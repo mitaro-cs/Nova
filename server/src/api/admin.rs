@@ -48,14 +48,18 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
     let watching: Vec<Value> = app.db.with(|c| {
         let mut st = c.prepare(
             "SELECT CASE WHEN pr.name = u.name THEN u.name ELSE u.name || ' · ' || pr.name END,
-                    t.title, f.season, f.episode, p.position, p.duration, p.profile_id FROM progress p
+                    t.title, f.season, f.episode, p.position, p.duration, p.profile_id,
+                    COALESCE(t.backdrop_md, t.backdrop), COALESCE(t.poster_sm, t.poster), pr.avatar, pr.photo, '/title/' || t.id
+             FROM progress p
              JOIN profiles pr ON pr.id = p.profile_id JOIN users u ON u.id = pr.user_id
              JOIN files f ON f.id = p.file_id JOIN titles t ON t.id = f.title_id
              WHERE p.updated_at > ?1
              UNION ALL
              -- Видео по ссылке (Rutube, VK, сайты): без этого «Сейчас смотрят» показывало ноль.
              SELECT CASE WHEN pr.name = u.name THEN u.name ELSE u.name || ' · ' || pr.name END,
-                    COALESCE(e.title, t.title, l.label), l.season, l.episode, lp.position, lp.duration, lp.profile_id
+                    COALESCE(e.title, t.title, l.label), l.season, l.episode, lp.position, lp.duration, lp.profile_id,
+                    COALESCE(e.backdrop, t.backdrop_md, t.backdrop), COALESCE(NULLIF(e.poster, ''), t.poster_sm, t.poster), pr.avatar, pr.photo,
+                    CASE WHEN e.id IS NOT NULL THEN '/ext/' || e.id WHEN t.id IS NOT NULL THEN '/title/' || t.id ELSE '/watch/link/' || l.id END
              FROM link_progress lp JOIN links l ON l.id = lp.link_id
              JOIN profiles pr ON pr.id = lp.profile_id JOIN users u ON u.id = pr.user_id
              LEFT JOIN ext_titles e ON e.id = l.ext_id LEFT JOIN titles t ON t.id = l.title_id
@@ -70,6 +74,8 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
                 "episode": super::catalog::episode_label(r.get(2)?, r.get(3)?, None),
                 "position": r.get::<_, f64>(4)?, "duration": r.get::<_, f64>(5)?,
                 "net": stat,
+                "backdrop": super::img(r.get(7)?), "poster": super::img(r.get(8)?),
+                "avatar": r.get::<_, i64>(9)?, "photo": super::img(r.get(10)?), "href": r.get::<_, String>(11)?,
             }))
         })?;
         r.collect()

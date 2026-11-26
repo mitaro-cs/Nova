@@ -1,5 +1,5 @@
 import { expect, test } from './util-test';
-import { act, choose, env, narrow, resetStatuses, url, wide } from './util';
+import { act, choose, env, expectClean, narrow, resetStatuses, url, wide } from './util';
 
 // Главная как у Apple TV: герой-карусель, ряды широких карточек, вкладки Фильмы и Сериалы
 // с фильтром по статусу. Демо-данные общие: перед каждым тестом статусы - как после setup.
@@ -110,6 +110,11 @@ test('совместный список: из фильма - в список с 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
   await page.getByRole('button', { name: 'Посмотрели вместе' }).click();
   await expect(page.getByRole('button', { name: 'Не смотрели' })).toBeVisible();
+  // «Плейлист»: голос «хочу смотреть», кнопка «Смотреть вместе».
+  await page.getByRole('button', { name: 'Хочу смотреть: 0' }).click();
+  await expect(page.getByRole('button', { name: 'Хочу смотреть: 1' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Смотреть вместе' })).toBeVisible();
+  await expectClean(page, 'подборка-плейлист');
 
   // Группы: создать и переложить фильм.
   await page.getByRole('button', { name: 'Новая группа' }).click();

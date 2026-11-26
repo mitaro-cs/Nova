@@ -83,7 +83,7 @@ pub async fn lists(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Val
         let art: Vec<String> = app.db.with(|c| {
             let mut st = c.prepare(
                 "SELECT a FROM (
-                   SELECT COALESCE(t.backdrop_sm, t.backdrop, t.poster_sm, t.poster) a, i.watched_at w, i.added_at at
+                   SELECT COALESCE(t.poster_sm, t.poster, t.backdrop_sm, t.backdrop) a, i.watched_at w, i.added_at at
                      FROM list_items i JOIN titles t ON t.id = i.title_id WHERE i.list_id = ?1
                    UNION ALL
                    SELECT NULLIF(e.poster, ''), x.watched_at, x.added_at FROM list_ext x
@@ -200,9 +200,27 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
         let r = st.query_map([id], |r| Ok(json!({"id": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)?})))?;
         r.collect()
     })?;
+    // Голоса «хочу смотреть»: сколько и голосовал ли я - у каждого фильма.
+    let votes: Vec<(String, i64, bool)> = app.db.with(|c| {
+        let mut st =
+            c.prepare("SELECT item, COUNT(*), MAX(profile_id = ?2) FROM list_votes WHERE list_id = ?1 GROUP BY item")?;
+        let r = st.query_map(params![id, v.profile.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        r.collect()
+    })?;
+    for it in items.iter_mut() {
+        let key = match (it["card"]["id"].as_i64(), it["ext"]["id"].as_str()) {
+            (Some(t), _) => format!("t{t}"),
+            (None, Some(e)) => format!("e{e}"),
+            _ => continue,
+        };
+        let (n, me) = votes.iter().find(|x| x.0 == key).map(|x| (x.1, x.2)).unwrap_or((0, false));
+        it["votes"] = json!(n);
+        it["voted"] = json!(me);
+    }
+    let owner_name = members(&app, id)?.into_iter().find(|p| p.id == owner).map(|p| p.name);
     Ok(Json(json!({
         "id": id, "name": name, "mine": owner == v.profile.id, "members": members(&app, id)?, "items": items,
-        "groups": groups,
+        "groups": groups, "owner": owner, "ownerName": owner_name,
     })))
 }
 
@@ -285,7 +303,10 @@ pub async fn item(
             )
         })?;
     } else {
-        app.db.with(|c| c.execute("DELETE FROM list_items WHERE list_id = ? AND title_id = ?", params![id, title]))?;
+        app.db.with(|c| {
+            c.execute("DELETE FROM list_items WHERE list_id = ? AND title_id = ?", params![id, title])?;
+            c.execute("DELETE FROM list_votes WHERE list_id = ? AND item = ?", params![id, format!("t{title}")])
+        })?;
     }
     Ok(Json(json!({"ok": true})))
 }
@@ -361,7 +382,10 @@ pub async fn ext_item(
             )
         })?;
     } else {
-        app.db.with(|c| c.execute("DELETE FROM list_ext WHERE list_id = ? AND ext_id = ?", params![id, ext]))?;
+        app.db.with(|c| {
+            c.execute("DELETE FROM list_ext WHERE list_id = ? AND ext_id = ?", params![id, ext])?;
+            c.execute("DELETE FROM list_votes WHERE list_id = ? AND item = ?", params![id, format!("e{ext}")])
+        })?;
     }
     Ok(Json(json!({"ok": true})))
 }
@@ -497,4 +521,56 @@ pub async fn move_item(
         return Err(ApiError::not_found());
     }
     Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+pub struct Vote {
+    /// «t<id>» - свой фильм, «e<id>» - из ленты.
+    item: String,
+    value: bool,
+}
+
+/// Голос «хочу смотреть» за фильм подборки (вид «Плейлист»): один на человека, снять - `value: false`.
+pub async fn vote(
+    State(app): State<Arc<App>>,
+    v: Viewer,
+    Path(id): Path<i64>,
+    Json(b): Json<Vote>,
+) -> ApiResult<Json<Value>> {
+    member_of(&app, &v, id)?;
+    let inside: bool = app.db.with(|c| {
+        if let Some(t) = b.item.strip_prefix('t').and_then(|t| t.parse::<i64>().ok()) {
+            c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM list_items WHERE list_id = ? AND title_id = ?)",
+                params![id, t],
+                |r| r.get(0),
+            )
+        } else if let Some(e) = b.item.strip_prefix('e') {
+            c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM list_ext WHERE list_id = ? AND ext_id = ?)",
+                params![id, e],
+                |r| r.get(0),
+            )
+        } else {
+            Ok(false)
+        }
+    })?;
+    if !inside {
+        return Err(ApiError::not_found());
+    }
+    let n: i64 = app.db.with(|c| {
+        if b.value {
+            c.execute(
+                "INSERT OR IGNORE INTO list_votes (list_id, item, profile_id, at) VALUES (?, ?, ?, ?)",
+                params![id, b.item, v.profile.id, now_ms()],
+            )?;
+        } else {
+            c.execute(
+                "DELETE FROM list_votes WHERE list_id = ? AND item = ? AND profile_id = ?",
+                params![id, b.item, v.profile.id],
+            )?;
+        }
+        c.query_row("SELECT COUNT(*) FROM list_votes WHERE list_id = ? AND item = ?", params![id, b.item], |r| r.get(0))
+    })?;
+    Ok(Json(json!({"votes": n, "voted": b.value})))
 }

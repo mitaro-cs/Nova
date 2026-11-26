@@ -84,6 +84,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/lists/{id}/groups", post(lists::add_group))
         .route("/api/lists/{id}/groups/{gid}", patch(lists::rename_group).delete(lists::delete_group))
         .route("/api/lists/{id}/move", put(lists::move_item))
+        .route("/api/lists/{id}/vote", put(lists::vote))
         .route("/api/discover", get(discover::feed))
         .route("/api/discover/search", get(discover::search))
         .route("/api/discover/poster/{id}", get(discover::poster))

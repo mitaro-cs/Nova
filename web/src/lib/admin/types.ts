@@ -33,7 +33,7 @@ export interface Status {
   meta: { running: boolean; error: string | null; done: number };
   ffmpeg: boolean;
   ffprobe: boolean;
-  watching: { user: string; title: string; episode: string; position: number; duration: number; net: PlayNet | null }[];
+  watching: { user: string; title: string; episode: string; position: number; duration: number; net: PlayNet | null; backdrop?: string | null; poster?: string | null; avatar?: number; photo?: string | null; href?: string }[];
   canPick: boolean;
   publicUrl: string | null;
   /** Своя папка для фильмов (null - ещё нет). */

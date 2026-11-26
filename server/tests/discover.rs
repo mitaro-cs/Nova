@@ -435,6 +435,28 @@ async fn feed_marks_wishes_groups_links() {
         host.send("PUT", &format!("/api/lists/{lid}/ext/tt0111161"), json!({"value": false})).await.status(),
         404
     );
+    // Голоса «хочу смотреть» (вид «Плейлист»): один на человека, снять - false; чужой фильм - 404, посторонний - 404.
+    let r = anna.send("PUT", &format!("/api/lists/{lid}/vote"), json!({"item": "etts0111161", "value": true})).await;
+    assert_eq!(r.status(), 404, "нет такого фильма в подборке");
+    let r: Value = anna
+        .send("PUT", &format!("/api/lists/{lid}/vote"), json!({"item": "ett0111161", "value": true}))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(r["votes"], 1);
+    anna.send("PUT", &format!("/api/lists/{lid}/vote"), json!({"item": "ett0111161", "value": true})).await;
+    let full = anna.json(&format!("/api/lists/{lid}")).await;
+    assert_eq!((full["items"][0]["votes"].as_i64(), full["items"][0]["voted"].as_bool()), (Some(1), Some(true)));
+    assert_eq!(full["ownerName"], full["members"][0]["name"]);
+    assert_eq!(
+        host.send("PUT", &format!("/api/lists/{lid}/vote"), json!({"item": "ett0111161", "value": true}))
+            .await
+            .status(),
+        404
+    );
+    anna.send("PUT", &format!("/api/lists/{lid}/vote"), json!({"item": "ett0111161", "value": false})).await;
+    assert_eq!(anna.json(&format!("/api/lists/{lid}")).await["items"][0]["votes"], 0);
 
     // Ссылки: к фильму из ленты и сами по себе; чужую удалить нельзя.
     let r = anna

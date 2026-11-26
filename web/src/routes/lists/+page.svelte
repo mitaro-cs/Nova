@@ -106,9 +106,9 @@
   .art {
     position: relative;
     display: grid;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 1;
     margin-bottom: 8px;
-    border-radius: 12px;
+    border-radius: 20px;
     overflow: hidden;
     background: var(--bg-3);
     transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -119,16 +119,18 @@
   }
   .art img {
     width: 100%;
+    max-width: none;
     height: 100%;
     object-fit: cover;
     min-height: 0;
   }
-  .art.many img:first-child:nth-last-child(2),
-  .art.many img:first-child:nth-last-child(2) ~ img {
-    grid-row: span 2;
+  /* Обложка как у плейлиста: четыре постера квадратом; меньше четырёх - один постер целиком. */
+  .art.many img:first-child:nth-last-child(-n + 3) {
+    grid-column: 1 / -1;
+    grid-row: 1 / -1;
   }
-  .art.many img:first-child:nth-last-child(3) {
-    grid-row: span 2;
+  .art.many img:first-child:nth-last-child(-n + 3) ~ img {
+    display: none;
   }
   .none {
     display: grid;

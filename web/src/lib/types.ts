@@ -337,6 +337,9 @@ export interface SharedItem {
   addedAt: number;
   watchedAt: number | null;
   addedBy: Friend | null;
+  /** Голоса «хочу смотреть» (вид «Плейлист») и мой ли среди них. */
+  votes?: number;
+  voted?: boolean;
 }
 
 export interface SharedListFull {
@@ -346,6 +349,8 @@ export interface SharedListFull {
   members: Friend[];
   items: SharedItem[];
   groups: { id: number; name: string }[];
+  owner?: number;
+  ownerName?: string | null;
 }
 
 /** Фильм или сериал из ленты IMDb (может не быть на сервисе). */
