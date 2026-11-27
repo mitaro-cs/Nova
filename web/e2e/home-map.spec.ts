@@ -4,7 +4,7 @@ import { expectClean, url } from './util';
 // «Карта дома» (23.11): первый экран управления - вся система схемой, карточка открывает свои настройки справа.
 test('карта дома: части системы, состояние и настройки по нажатию', async ({ page }) => {
   await page.goto(url('/admin?tab=map'));
-  await expect(page.getByRole('heading', { name: 'Карта дома' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: /Вкладки раздела/ }).getByRole('link', { name: 'Карта дома' })).toHaveAttribute('aria-current', 'page');
   for (const name of ['Папки с фильмами', 'Описания и видео', 'Nova на этом компьютере', 'Интернет', 'Зрители']) {
     await expect(page.getByRole('button', { name: new RegExp(name) }).first()).toBeVisible();
   }

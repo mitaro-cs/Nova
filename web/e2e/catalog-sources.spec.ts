@@ -6,7 +6,7 @@ test('источники добавляются и удаляются вручн
   const previous=await(await page.request.get(url('/api/admin/catalogs'))).json();
   try{
     expect((await page.request.put(url('/api/admin/catalogs'),{headers,data:{items:[]}})).ok()).toBe(true);
-    await page.goto(url('/admin?tab=catalog'));
+    await page.goto(url('/admin?tab=sources'));
     const panel=page.getByRole('region',{name:'Источники видео'});
     await expect(panel.getByText('Источники пока не добавлены.')).toBeVisible();
     await expect(page.getByText('Источники из вашего списка')).toHaveCount(0);

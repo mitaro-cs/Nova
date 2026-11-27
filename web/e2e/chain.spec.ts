@@ -27,7 +27,7 @@ test('схема цепочки: поиск, шаги и ручная ссылк
     return r.fulfill({ json: chain });
   });
 
-  await page.goto(url('/admin?tab=catalog'));
+  await page.goto(url('/admin?tab=sources'));
   const block = page.getByRole('region', { name: 'Как работает видео' });
   await expect(block).toBeVisible();
 

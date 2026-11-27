@@ -49,7 +49,7 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
         let mut st = c.prepare(
             "SELECT CASE WHEN pr.name = u.name THEN u.name ELSE u.name || ' · ' || pr.name END,
                     t.title, f.season, f.episode, p.position, p.duration, p.profile_id,
-                    COALESCE(t.backdrop_md, t.backdrop), COALESCE(t.poster_sm, t.poster), pr.avatar, pr.photo, '/title/' || t.id
+                    COALESCE(t.backdrop_md, t.backdrop), COALESCE(t.poster_sm, t.poster), pr.avatar, pr.photo, '/title/' || t.id, u.id
              FROM progress p
              JOIN profiles pr ON pr.id = p.profile_id JOIN users u ON u.id = pr.user_id
              JOIN files f ON f.id = p.file_id JOIN titles t ON t.id = f.title_id
@@ -59,7 +59,7 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
              SELECT CASE WHEN pr.name = u.name THEN u.name ELSE u.name || ' · ' || pr.name END,
                     COALESCE(e.title, t.title, l.label), l.season, l.episode, lp.position, lp.duration, lp.profile_id,
                     COALESCE(e.backdrop, t.backdrop_md, t.backdrop), COALESCE(NULLIF(e.poster, ''), t.poster_sm, t.poster), pr.avatar, pr.photo,
-                    CASE WHEN e.id IS NOT NULL THEN '/ext/' || e.id WHEN t.id IS NOT NULL THEN '/title/' || t.id ELSE '/watch/link/' || l.id END
+                    CASE WHEN e.id IS NOT NULL THEN '/ext/' || e.id WHEN t.id IS NOT NULL THEN '/title/' || t.id ELSE '/watch/link/' || l.id END, u.id
              FROM link_progress lp JOIN links l ON l.id = lp.link_id
              JOIN profiles pr ON pr.id = lp.profile_id JOIN users u ON u.id = pr.user_id
              LEFT JOIN ext_titles e ON e.id = l.ext_id LEFT JOIN titles t ON t.id = l.title_id
@@ -76,6 +76,7 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
                 "net": stat,
                 "backdrop": super::img(r.get(7)?), "poster": super::img(r.get(8)?),
                 "avatar": r.get::<_, i64>(9)?, "photo": super::img(r.get(10)?), "href": r.get::<_, String>(11)?,
+                "userId": r.get::<_, i64>(12)?,
             }))
         })?;
         r.collect()
@@ -96,7 +97,21 @@ pub async fn status(State(app): State<Arc<App>>, _m: Manager) -> Out {
         "publicUrl": app.access.public_url(&app),
         "inbox": app.db.setting("media.inbox").map(|p| pretty(&p)),
         "import": *app.inbox.state.lock(),
+        "seats": crate::api::account::seats_json(&app),
+        "lastBackup": last_backup(&app),
     })))
+}
+
+/// Когда сделана последняя копия базы (ручная или перед обновлением), мс Unix; нет копий - null.
+fn last_backup(app: &App) -> Option<i64> {
+    std::fs::read_dir(app.data.join("backups"))
+        .ok()?
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "db"))
+        .filter_map(|e| e.metadata().ok()?.modified().ok())
+        .max()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
 }
 
 /// Диагностика для «Обзора»: версия, время работы, размер базы и недавние предупреждения и ошибки
@@ -198,6 +213,7 @@ pub async fn settings(State(app): State<Arc<App>>, _m: Manager) -> Out {
         "siteName": app.site_name(),
         "metadataLanguage": db.setting_or("meta.language", "ru"),
         "registration": db.setting_or("site.registration", crate::api::account::REGISTRATION_DEFAULT),
+        "betaSeats": crate::api::account::seats_total(&app),
         "downloads": db.setting_or("site.downloads", "1") == "1",
         "manageRemote": db.setting_or("security.manage_remote", "0") == "1",
         "provider": db.setting_or("meta.provider", "imdb"),
@@ -219,6 +235,8 @@ pub struct SettingsBody {
     metadata_language: Option<String>,
     site_name: Option<String>,
     registration: Option<String>,
+    /// Мест в бете (0 - без лимита).
+    beta_seats: Option<i64>,
     downloads: Option<bool>,
     /// Управление не только из окна приложения (только хост, только с входом в два шага).
     manage_remote: Option<bool>,
@@ -356,6 +374,12 @@ pub async fn save_settings(State(app): State<Arc<App>>, m: Manager, Json(b): Jso
             return Err(ApiError::bad("bad_value", "Неизвестный режим регистрации"));
         }
         db.set_setting("site.registration", &r)?;
+    }
+    if let Some(n) = b.beta_seats {
+        if !(0..=100_000).contains(&n) {
+            return Err(ApiError::bad("bad_value", "Мест - от 0 (без лимита) до 100 000"));
+        }
+        db.set_setting("beta.seats", &n.to_string())?;
     }
     if let Some(r) = b.manage_remote {
         if m.0.role != "host" || !m.0.local {

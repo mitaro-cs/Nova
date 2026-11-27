@@ -11,6 +11,8 @@
   import HostTitleSource from './HostTitleSource.svelte';
   import { session } from '$lib/session.svelte';
 
+  let { sources = true }: { sources?: boolean } = $props();
+
   interface Row {
     id: number;
     kind: 'movie' | 'series';
@@ -194,11 +196,13 @@
   }
 </script>
 
-<!-- Проверка «Как работает видео» (25.11 - из Каталога сюда: это инструмент хоста, а не витрина). -->
+<!-- «Как работает видео» и источники фильмов с 27.11 - в «Источниках» (`sources={false}` из Библиотеки). -->
+{#if sources}
 <ChainCheck />
 
 <div id="sources"><ManualSources /></div>
 {#if session.me?.user.role === 'host'}<HostTitleSource />{/if}
+{/if}
 <h3 class="local-heading">Файлы вашей библиотеки</h3>
 
 <div class="bar">

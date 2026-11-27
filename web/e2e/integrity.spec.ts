@@ -29,6 +29,12 @@ const PAGES = [
   ['/admin?tab=access', 'доступ'],
   ['/admin?tab=settings', 'настройки'],
   ['/admin?tab=version', 'версия'],
+  ['/admin?tab=viewers&sub=signup', 'зрители: регистрация'],
+  ['/admin?tab=viewers&sub=logins', 'зрители: входы'],
+  ['/admin?tab=library&sub=showcase', 'библиотека: витрина'],
+  ['/admin?tab=sources', 'источники: видео'],
+  ['/admin?tab=sources&sub=meta', 'источники: описания'],
+  ['/admin?tab=system&sub=security', 'система: безопасность'],
   ['/people', 'люди'],
   ['/chats', 'чаты'],
 ] as const;

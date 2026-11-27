@@ -16,8 +16,8 @@ test('показатели обзора: цифры, активность, ди�
   await expect(page.getByLabel('Место на диске')).toBeVisible();
   await expect(page.getByLabel('Качество файлов')).toBeVisible();
   await expect(page.getByLabel('Зрители и общение')).toBeVisible();
-  // Лампочки состояния в шапке: сервер работает.
-  await expect(page.getByLabel('Состояние Nova').getByText('Сервер')).toBeVisible();
+  // Панель разделов: Сводка выбрана, вкладка «Показатели».
+  await expect(page.getByRole('navigation', { name: /Вкладки раздела/ }).getByRole('link', { name: 'Показатели' })).toHaveAttribute('aria-current', 'page');
   await expectClean(page, 'обзор с показателями');
 });
 
@@ -53,13 +53,11 @@ test('кнопка очистки кэша согласована с его ра
   }).toPass({ timeout: 25_000 });
 });
 
-test('вкладки управления: у каждой своя шапка с подсказками без флажков', async ({ page }) => {
+test('разделы управления: у каждого шапка с подсказкой и вкладки', async ({ page }) => {
   await page.goto(url('/admin?tab=folders'));
-  const head = page.locator('.tab-head');
-  await expect(head.getByRole('heading', { name: 'Папки' })).toBeVisible();
-  // На компьютере список подсказок скрыт (дизайн «База»), описание раздела видно везде.
+  const head = page.locator('.sec-h');
+  await expect(head.getByRole('heading', { name: 'Библиотека' })).toBeVisible();
   await expect(head.locator('p').first()).toBeVisible();
-  // В подсказках больше нет значка-галочки.
-  await expect(head.locator('svg[aria-hidden] path[d^="M20 6 9 17"]')).toHaveCount(0);
+  await expect(head.getByRole('link', { name: 'Папки' })).toHaveAttribute('aria-current', 'page');
   await expectClean(page, 'папки');
 });

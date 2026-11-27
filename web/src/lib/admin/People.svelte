@@ -41,6 +41,19 @@
   let nu = $state({ name: '', login: '', password: '', role: 'viewer' });
 
   const ROLES = { host: 'Хост', admin: 'Администратор', viewer: 'Зритель' };
+  // Поиск и фильтры (27.11): при сотне зрителей список без них не читается. `find` - из поиска по управлению (Ctrl K).
+  let { find = '' }: { find?: string } = $props();
+  let q = $state('');
+  let filter = $state<'all' | 'online' | 'admins' | 'idle' | 'off'>('all');
+  $effect(() => { q = find; });
+  const DAY = 86_400_000;
+  const FILTERS = [['all', 'Все'], ['online', 'Заходили за сутки'], ['admins', 'Администраторы'], ['idle', 'Давно не заходили'], ['off', 'Доступ закрыт']] as const;
+  const match = (u: U, f: typeof filter) =>
+    f === 'all' ? true : f === 'online' ? !!u.seenAt && Date.now() - u.seenAt < DAY : f === 'admins' ? u.role !== 'viewer' : f === 'idle' ? u.role !== 'host' && (!u.seenAt || Date.now() - u.seenAt > 30 * DAY) : u.disabled;
+  const shown = $derived.by(() => {
+    const t = q.trim().toLowerCase();
+    return users.filter((u) => match(u, filter) && (!t || u.name.toLowerCase().includes(t) || u.login.toLowerCase().includes(t)));
+  });
   const isHost = $derived(session.me?.user.role === 'host');
 
   function load() {
@@ -151,8 +164,17 @@
     <h3><Icon name="users" size={18} /> Люди</h3>
     <button class="btn sm" onclick={() => (userOpen = true)}><Icon name="plus" size={15} /> Добавить вручную</button>
   </div>
+  <div class="find">
+    <div class="chips" role="group" aria-label="Кого показать">
+      {#each FILTERS as [id, label] (id)}
+        <button type="button" class="chip" aria-pressed={filter === id} onclick={() => (filter = id)}>{label} <span>{users.filter((u) => match(u, id)).length}</span></button>
+      {/each}
+    </div>
+    <input class="input" type="search" bind:value={q} placeholder="Имя или логин" aria-label="Найти зрителя" />
+  </div>
+  {#if !shown.length}<p class="muted small">Никого не нашлось</p>{/if}
   <ul class="users">
-    {#each users as u, n (u.id)}
+    {#each shown as u, n (u.id)}
       <!-- Карточка человека: кто, когда был; ниже - подписанные переключатели и действия. -->
       <li class="person" class:off={u.disabled} style:--i={n}>
         <div class="who">
@@ -234,6 +256,12 @@
 </Modal>
 
 <style>
+  .find { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin: 4px 0 12px; }
+  .find .input { flex: 0 1 240px; min-width: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 0; border-radius: 99px; background: #ffffff12; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chip span { opacity: 0.7; font-variant-numeric: tabular-nums; }
+  .chip[aria-pressed='true'] { background: #fff; color: #000; }
   .pane {
     padding: 18px 20px;
     margin-bottom: 16px;

@@ -21,7 +21,7 @@ const PAGES = [
   ['/discover?kind=series', 'обзор: сериалы'],
   ['/ext/tt1196946', 'фильм из IMDb'],
   ['/admin?tab=wishes', 'просьбы'],
-  ['/admin', 'управление: пульт'],
+  ['/admin', 'управление: зал'],
   ['/admin?tab=map', 'карта дома'],
   ['/admin?tab=overview', 'управление: обзор'],
   ['/admin?tab=setup', 'мастер настройки'],
@@ -32,6 +32,12 @@ const PAGES = [
   ['/admin?tab=access', 'доступ'],
   ['/admin?tab=settings', 'настройки'],
   ['/admin?tab=version', 'версия'],
+  ['/admin?tab=viewers&sub=signup', 'зрители: регистрация'],
+  ['/admin?tab=viewers&sub=logins', 'зрители: входы'],
+  ['/admin?tab=library&sub=showcase', 'библиотека: витрина'],
+  ['/admin?tab=sources', 'источники: видео'],
+  ['/admin?tab=sources&sub=meta', 'источники: описания'],
+  ['/admin?tab=system&sub=security', 'система: безопасность'],
 ] as const;
 
 for (const [path, what] of PAGES) {

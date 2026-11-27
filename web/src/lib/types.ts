@@ -165,6 +165,8 @@ export interface Site {
   name: string;
   registration: 'invite' | 'open' | 'closed';
   downloads: boolean;
+  /** Места беты (null - без лимита): когда `left` = 0, регистрация закрыта. */
+  seats?: { used: number; total: number; left: number } | null;
   version: string;
   /** Редакция политики и правил на сервере. */
   legalVersion?: number;

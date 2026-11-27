@@ -33,13 +33,17 @@ export interface Status {
   meta: { running: boolean; error: string | null; done: number };
   ffmpeg: boolean;
   ffprobe: boolean;
-  watching: { user: string; title: string; episode: string; position: number; duration: number; net: PlayNet | null; backdrop?: string | null; poster?: string | null; avatar?: number; photo?: string | null; href?: string }[];
+  watching: { user: string; title: string; episode: string; position: number; duration: number; net: PlayNet | null; backdrop?: string | null; poster?: string | null; avatar?: number; photo?: string | null; href?: string; userId?: number }[];
   canPick: boolean;
   publicUrl: string | null;
   /** Своя папка для фильмов (null - ещё нет). */
   inbox: string | null;
   /** Копирование перетащенных в окно файлов. */
   import: { running: boolean; filesTotal: number; filesDone: number; bytesTotal: number; bytesDone: number; current: string | null; error: string | null };
+  /** Места беты (null - без лимита). */
+  seats?: { used: number; total: number; left: number } | null;
+  /** Последняя копия базы, мс Unix (null - копий нет). */
+  lastBackup?: number | null;
 }
 
 /** Как идёт просмотр у зрителя - последний отчёт его плеера. */

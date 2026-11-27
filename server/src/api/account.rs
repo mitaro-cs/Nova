@@ -58,6 +58,7 @@ fn site_json(app: &App) -> Value {
         "emailRecovery": super::mail::ready(app),
         "registration": app.db.setting_or("site.registration", crate::api::account::REGISTRATION_DEFAULT),
         "downloads": app.db.setting_or("site.downloads", "1") == "1",
+        "seats": crate::api::account::seats_json(app),
         "version": crate::VERSION,
         "legalVersion": LEGAL_VERSION,
     })
@@ -227,6 +228,29 @@ pub struct RegisterBody {
 /// (просьба владельца, 0.4). Хост может включить «по приглашениям» или закрыть.
 pub const REGISTRATION_DEFAULT: &str = "open";
 
+/// Места беты (27.11.2026): бета - для первых 100 зрителей. `beta.seats` - сколько мест (0 - без лимита); место занимает
+/// любой аккаунт, кроме хоста (заблокированный тоже - место держится, освобождает только удаление). Когда все места
+/// заняты, регистрация не проходит ни открытой, ни по приглашению; хост может завести аккаунт вручную.
+pub const SEATS_DEFAULT: i64 = 100;
+
+pub fn seats_total(app: &App) -> i64 {
+    app.db.setting("beta.seats").and_then(|v| v.trim().parse().ok()).filter(|n: &i64| *n >= 0).unwrap_or(SEATS_DEFAULT)
+}
+
+/// (занято, всего); всего 0 - лимита нет.
+pub fn seats(app: &App) -> ApiResult<(i64, i64)> {
+    let used: i64 =
+        app.db.with(|c| c.query_row("SELECT COUNT(*) FROM users WHERE role != 'host'", [], |r| r.get(0)))?;
+    Ok((used, seats_total(app)))
+}
+
+pub fn seats_json(app: &App) -> Value {
+    match seats(app) {
+        Ok((used, total)) if total > 0 => json!({"used": used, "total": total, "left": (total - used).max(0)}),
+        _ => Value::Null,
+    }
+}
+
 pub async fn register(
     State(app): State<Arc<App>>,
     Ip(ip): Ip,
@@ -258,6 +282,7 @@ pub async fn register(
         ));
     }
     let code = b.invite.as_deref().map(|c| c.trim().to_uppercase()).filter(|c| !c.is_empty());
+    let seats_total = seats_total(&app);
     let need_invite = mode != "open";
     if mode == "closed" && code.is_none() {
         return Err(ApiError::new(
@@ -282,6 +307,12 @@ pub async fn register(
             return Ok(Err("login_taken"));
         }
         if name_taken(tx,&name,None)? {return Ok(Err("name_taken"));}
+        if seats_total > 0 {
+            let used: i64 = tx.query_row("SELECT COUNT(*) FROM users WHERE role != 'host'", [], |r| r.get(0))?;
+            if used >= seats_total {
+                return Ok(Err("seats_full"));
+            }
+        }
         if let Some(c) = code.as_deref().filter(|_| need_invite) {
             tx.execute("UPDATE invites SET used = used + 1, uses_left = CASE WHEN uses_left IS NULL THEN NULL ELSE uses_left - 1 END WHERE code = ?", [c])?;
         }
@@ -292,6 +323,13 @@ pub async fn register(
         Ok(Ok(tx.last_insert_rowid()))
     })?;
     let id = result.map_err(|code| {
+        if code == "seats_full" {
+            return ApiError::new(
+                StatusCode::FORBIDDEN,
+                "seats_full",
+                format!("Все {seats_total} мест беты заняты - новых зрителей Nova пока не принимает"),
+            );
+        }
         ApiError::new(
             StatusCode::CONFLICT,
             if code == "name_taken" { "name_taken" } else { "login_taken" },

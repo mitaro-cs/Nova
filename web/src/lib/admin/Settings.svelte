@@ -3,18 +3,22 @@
   import NightMode from './NightMode.svelte';
   import { api, errorText, post, put } from '$lib/api';
   import { loadMe, session } from '$lib/session.svelte';
-  import LoginJournal from './LoginJournal.svelte';
-  import ThemeSettings from './ThemeSettings.svelte';
   import Icon from '$lib/ui/Icon.svelte';
   import Select from '$lib/ui/Select.svelte';
   import type { ExtCard } from '$lib/types';
   import { artW, placeholder } from '$lib/ui/art';
-  let {sourcesOnly=false}:{sourcesOnly?:boolean}=$props();
+  // Части настроек разложены по разделам «Управления» (27.11): регистрация - у Зрителей, описания и видео - в Источниках,
+  // ffmpeg, ночной режим, безопасность и почта - в Системе. `sourcesOnly` - прежнее «только видео по ссылке».
+  type Part = 'site' | 'meta' | 'links' | 'ffmpeg' | 'security' | 'mail' | 'night';
+  let { sourcesOnly = false, parts }: { sourcesOnly?: boolean; parts?: Part[] } = $props();
+  const has = (p: Part) => (parts ? parts.includes(p) : sourcesOnly ? p === 'links' : true);
+  let seatsInput = $state('');
 
   interface S {
     metadataLanguage: 'ru' | 'source';
     siteName: string;
     registration: 'invite' | 'open' | 'closed';
+    betaSeats: number;
     downloads: boolean;
     manageRemote: boolean;
     provider: 'imdb' | 'tmdb' | 'kinopoisk' | 'off';
@@ -62,7 +66,7 @@
   let error = $state('');
 
   function load() {
-    api<S>('/api/admin/settings').then((x) => (s = x), (e) => (error = errorText(e)));
+    api<S>('/api/admin/settings').then((x) => { s = x; seatsInput = String(x.betaSeats ?? 100); }, (e) => (error = errorText(e)));
   }
   $effect(load);
 
@@ -98,12 +102,12 @@
 </script>
 
 {#if s}
-  {#if !sourcesOnly}<NightMode />{/if}
+  {#if has('night')}<NightMode />{/if}
   {#if msg}<p class="ok">{msg}</p>{/if}
   {#if error}<p class="error">{error}</p>{/if}
 
-  {#if !sourcesOnly}<section class="card pane">
-    <h3>Сайт</h3>
+  {#if has('site')}<section class="card pane">
+    <h3>Сайт и регистрация</h3>
     <p class="muted small">Язык интерфейса и описаний — русский. Оригинальные имена сохраняются в метаданных.</p>
     <form class="line" onsubmit={(e) => (e.preventDefault(), save({ siteName: s!.siteName }))}>
       <label class="field grow"><span>Название</span><input class="input" bind:value={s.siteName} maxlength="60" /></label>
@@ -127,7 +131,14 @@
       Кнопка «Скачать» у фильмов
     </label>
     <p class="muted hint">Выключено - кнопки нет. Совсем запретить сохранить фильм нельзя: браузер получает видео целиком, пока его смотрят.</p>
+    <form class="line" onsubmit={(e) => { e.preventDefault(); const n = Number(seatsInput); if (Number.isInteger(n) && n >= 0) save({ betaSeats: n }, n ? `Мест в бете: ${n}` : 'Лимит мест снят'); else error = 'Мест - целое число от 0'; }}>
+      <label class="field grow"><span>Мест в бете</span><input class="input" bind:value={seatsInput} inputmode="numeric" pattern="[0-9]*" aria-describedby="seats-hint" /></label>
+      <button class="btn">Сохранить</button>
+    </form>
+    <p class="muted hint" id="seats-hint">Когда все места заняты, регистрация закрывается сама - и открытая, и по приглашению. Место держит любой аккаунт, кроме хоста; освобождает только удаление. 0 - без лимита. Вручную добавить человека можно всегда.</p>
   </section>
+  {/if}
+  {#if has('meta')}
 
   <section class="card pane">
     <h3>Описания, постеры и актёры</h3>
@@ -171,7 +182,7 @@
   </section>
 
   {/if}
-  {#if sourcesOnly}<section class="card pane">
+  {#if has('links')}<section class="card pane">
     <h3>Видео по ссылке</h3>
     <p class="muted">
       Поиск на Rutube работает без ключа. Для поиска в VK Видео нужен сервисный ключ приложения VK
@@ -223,9 +234,7 @@
   </section>
 
   {/if}
-  {#if !sourcesOnly}<a class="btn" href="/admin?tab=catalog#sources">Источники фильмов, сериалов и аниме →</a>
-
-  <section class="card pane">
+  {#if has('ffmpeg')}<section class="card pane">
     <h3>ffmpeg</h3>
     <p class="muted">
       {#if s.ffmpeg}Найден: <code>{s.ffmpeg}</code>{:else}Не найден. Без него браузер играет только MP4 и WebM.{/if}
@@ -234,11 +243,9 @@
       <input class="input grow" bind:value={s.ffmpegPath} placeholder="Путь к ffmpeg (если не нашёлся сам)" />
       <button class="btn">Сохранить</button>
     </form>
-  </section>
+  </section>{/if}
 
-  <ThemeSettings />
-
-  <section class="card pane">
+  {#if has('security')}<section class="card pane">
     <h3>Безопасность</h3>
     <label class="check">
       <input type="checkbox" checked={s.manageRemote} disabled={!session.me?.window} onchange={(e) => save({ manageRemote: (e.target as HTMLInputElement).checked })} />
@@ -248,12 +255,11 @@
       Выключено - управлять можно только здесь, на этом компьютере. Включено - и с телефона, но только тем, у кого в профиле включён вход в два шага.
       {#if !session.me?.window}Менять можно только в окне приложения.{/if}
     </p>
-    <LoginJournal />
   </section>
   {/if}
 {/if}
 
-<MailSettings />
+{#if has('mail')}<MailSettings />{/if}
 
 <style>
   .source-results{display:grid;gap:4px;max-height:350px;overflow:auto;border:1px solid var(--line);border-radius:14px;padding:6px}.source-result{display:flex;align-items:center;gap:12px;width:100%;padding:7px;border:0;border-radius:9px;background:transparent;color:var(--text);text-align:left;font:inherit;cursor:pointer}.source-result:hover,.source-result[aria-selected=true]{background:var(--surface-3)}.source-poster{width:40px;height:58px;flex:none;border-radius:5px;overflow:hidden}.source-poster img{width:100%;height:100%;object-fit:cover}.source-result small{display:block;color:var(--muted);margin-top:4px}

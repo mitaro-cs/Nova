@@ -6,6 +6,7 @@
   import { loadMe } from '$lib/session.svelte';
   import Availability from '$lib/account/Availability.svelte';
   import { LEGAL_VERSION } from '$lib/legal';
+  import type { Site } from '$lib/types';
 
   let { invite = '', askInvite = true }: { invite?: string; askInvite?: boolean } = $props();
 
@@ -19,7 +20,9 @@
   // Согласие с политикой и правилами: без галочки аккаунт не создаётся ни кнопкой, ни запросом (сервер проверяет сам).
   let agreed=$state(false);
   let legalVersion=$state(LEGAL_VERSION);
-  $effect(()=>{api<{emailRecovery?:boolean;legalVersion?:number}>('/api/site').then(s=>{emailEnabled=!!s.emailRecovery;if(s.legalVersion)legalVersion=s.legalVersion;},()=>{});});
+  // Места беты: «Осталось N из 100», а когда мест нет - форма не нужна.
+  let seats=$state<Site['seats']>(null);
+  $effect(()=>{api<Pick<Site,'seats'>&{emailRecovery?:boolean;legalVersion?:number}>('/api/site').then(s=>{emailEnabled=!!s.emailRecovery;if(s.legalVersion)legalVersion=s.legalVersion;seats=s.seats??null;},()=>{});});
 
   $effect(() => {
     code = invite;
@@ -47,6 +50,11 @@
   }
 </script>
 
+{#if seats && seats.left <= 0}
+  <div class="seats full" role="status"><b>Все {seats.total} мест беты заняты</b><span>Nova пока не принимает новых зрителей. Если у вас уже есть аккаунт - войдите.</span></div>
+  <a class="btn primary block" href="/login">Войти</a>
+{:else}
+{#if seats}<p class="seats" role="status"><b>Бета Nova - бесплатно для первых {seats.total}.</b> Осталось мест: {seats.left}</p>{/if}
 <form onsubmit={submit}>
   {#if askInvite}
     <label class="field">
@@ -67,8 +75,12 @@
   <button class="btn primary block" disabled={busy || !agreed}>{busy ? 'Создаём…' : 'Создать аккаунт'}</button>
   <a class="btn ghost block" href="/login">У меня уже есть аккаунт</a>
 </form>
+{/if}
 
 <style>
+  .seats { margin: 0 0 14px; padding: 12px 14px; border-radius: 14px; background: #ffffff0f; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+  .seats b { color: var(--text); }
+  .seats.full { display: grid; gap: 4px; margin-bottom: 14px; }
   .agree { display: flex; align-items: flex-start; gap: 10px; margin: 6px 0 4px; font-size: 13px; line-height: 1.45; color: var(--muted); cursor: pointer; }
   .agree input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: #fff; }
   .agree a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }

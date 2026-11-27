@@ -41,7 +41,7 @@ test('пароль можно показать, восстановление и 
 });
 
 test('Gmail и подтверждение почты: раскрытые настройки и аккаунт без наложений',async({page},info)=>{
- await page.goto(url('/admin?tab=settings'));
+ await page.goto(url('/admin?tab=system&sub=security'));
  const mail=page.getByRole('region',{name:'Почта и восстановление доступа'});
  await expect(mail).toBeVisible();
  await expect(page.getByLabel('SMTP-сервер',{exact:true})).toBeHidden();
