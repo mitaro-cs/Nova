@@ -124,7 +124,7 @@
       {#if g.list.length || (p.me && g.id === 'ks-m')}
         <section class="box" aria-labelledby={g.id}>
           <div class="h2"><h2 id={g.id}>{g.label}</h2>{#if p.me}<a href="/profile">{g.list.length ? 'Изменить' : 'Выбрать'}</a>{/if}</div>
-          <ul class="boxes" class:empty={!g.list.length}>
+          <ul class="boxes" class:blank={!g.list.length}>
             {#each g.list as f, i (f.key)}
               <li class="rise" style:--i={i}>
                 <a class="lb" href={f.href} title="{f.title}{f.year ? `, ${f.year}` : ''}">
@@ -260,8 +260,8 @@
   .slot { display: grid; place-items: center; aspect-ratio: 2 / 3; border: 1.5px dashed #ffffff2e; border-radius: 14px; color: #8c8c96; transition: border-color 0.2s, color 0.2s; }
   .slot:hover { border-color: #ffffff80; color: #fff; }
   /* Пока любимых нет - пять маленьких мест, а не пять больших пустых коробов. */
-  .boxes.empty { grid-template-columns: repeat(5, minmax(0, 72px)); gap: 8px; }
-  .boxes.empty .slot { border-radius: 10px; }
+  .boxes.blank { grid-template-columns: repeat(5, minmax(0, 72px)); gap: 8px; }
+  .boxes.blank .slot { border-radius: 10px; }
 
   /* Отзывы - карточки в ряд (на узком - лента вбок): постер, звёзды, текст или «Только оценка», дата. */
   .revs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }

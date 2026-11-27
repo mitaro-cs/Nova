@@ -210,7 +210,9 @@ pub fn display_title(app: &App, id: i64) -> Option<String> {
     app.db
         .with(|c| {
             c.query_row(
-                "SELECT l.label, COALESCE(t.title, e.title), l.season, l.episode FROM links l
+                // Русское название фильма ленты - как у карточек: сначала перевод из `title_localizations`.
+                "SELECT l.label, COALESCE(t.title, (SELECT lo.title FROM title_localizations lo WHERE lo.id = e.id), e.title),
+                        l.season, l.episode FROM links l
                  LEFT JOIN titles t ON t.id = l.title_id LEFT JOIN ext_titles e ON e.id = l.ext_id WHERE l.id = ?",
                 [id],
                 |r| {
@@ -226,6 +228,7 @@ pub fn display_title(app: &App, id: i64) -> Option<String> {
         })
         .ok()
         .flatten()
+        .map(|(label, film, season, episode)| (label, film.map(|f| crate::names::ru_title(&f)), season, episode))
         .map(|(label, film, season, episode)| match (film.filter(|f| !f.trim().is_empty()), season, episode) {
             (Some(f), Some(s), Some(e)) => format!("{f} - {s} сезон, {e} серия"),
             (Some(f), _, _) => f,

@@ -130,13 +130,13 @@ impl Profile {
 pub const PROFILE_COLS: &str = "id, name, avatar, kids, autoplay, photo";
 
 /// Профиль аккаунта; нет (новый аккаунт) - создаётся с именем аккаунта.
-/// Персонаж нового человека - случайный из 12 (не по порядку регистрации).
+/// Портрет нового человека - случайный из 36 «Чернил» (не по порядку регистрации).
 fn random_avatar(user: i64) -> i64 {
     let t = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos() as i64)
         .unwrap_or(0);
-    (t ^ user.wrapping_mul(2_654_435_761)).rem_euclid(12)
+    (t ^ user.wrapping_mul(2_654_435_761)).rem_euclid(crate::api::profiles::AVATARS)
 }
 
 fn profile_for(app: &App, user: i64, name: &str) -> rusqlite::Result<Profile> {

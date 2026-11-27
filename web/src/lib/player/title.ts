@@ -32,3 +32,19 @@ export function playbackHeading(title:string, episode:string, season?:number|nul
   if (e != null) return `${name} · ${e} серия`;
   return name;
 }
+
+/**
+ * Экран паузы (27.11): название сериала крупно, «4 сезон · 8 серия» - отдельной строкой ниже. Номер серии вырезается из
+ * названия («Сопрано - 4 сезон, 8 серия» → «Сопрано»), чтобы крупный заголовок не расползался на две строки.
+ */
+export function pauseHeading(title: string, episode: string, season?: number | null, episodeNo?: number | null): { name: string; sub: string } {
+  const raw = playbackTitle(title);
+  const inTitle = numbers(raw);
+  const inEpisode = numbers(episode ?? '');
+  const s = season ?? inTitle.season ?? inEpisode.season;
+  const e = episodeNo ?? inTitle.episode ?? inEpisode.episode;
+  const name = raw.replace(/\s*[-–—,·:]?\s*(\d+\s*сезон(?:а|ов)?\s*[,·]?\s*)?\d+\s*серия.*$/u, '').trim() || raw;
+  const rest = (episode ?? '').replace(/^\s*\d+\s*сезон(?:а|ов)?\s*[,·]?\s*\d+\s*серия\s*[·:,-]?\s*/u, '').trim();
+  const num = s != null && e != null ? `${s} сезон · ${e} серия` : e != null ? `${e} серия` : '';
+  return { name, sub: [num, rest && rest !== episode?.trim() ? rest : num ? '' : (episode ?? '').trim()].filter(Boolean).join(' · ') };
+}

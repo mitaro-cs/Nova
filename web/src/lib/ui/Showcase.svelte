@@ -217,7 +217,7 @@
                 {#if card.year}<span>{card.year}</span>{/if}
                 {#if card.rating}<b class="rating"><Icon name="star" size={13} /> {card.rating.toFixed(1)}</b>{/if}
               </p>
-              <p class="description" class:empty={!overview}>{overview}</p>
+              <p class="description" class:blank={!overview}>{overview}</p>
               <div class="actions">
                 {#if selected.card?.resume}<a class="btn primary" href="/watch/{selected.card.resume.fileId}"><Icon name="play" size={18} /> Продолжить</a>{:else}<a class="btn primary" {href}><Icon name="play" size={18} /> Смотреть</a>{/if}
                 <a class="btn glass more" {href}>Подробнее</a>
@@ -273,7 +273,7 @@
   .meta span + span::before { content: '•'; margin-right: 10px; opacity: .45; }
   .rating { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 7px; background: #ffffff26; font-weight: 700; font-size: 13px; }
   .description { max-width: 64ch; margin: 12px auto 0; font-size: 15px; line-height: 1.5; color: #ffffffb8; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .description.empty { display: none; }
+  .description.blank { display: none; }
   /* Играет трейлер: название и кнопки - в левом нижнем углу, остального текста нет, кадр открыт. */
   .copy.mini { text-align: left; max-width: min(52%, 560px); }
   .copy.mini .eyebrow, .copy.mini .description { display: none; }

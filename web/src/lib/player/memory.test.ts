@@ -28,3 +28,13 @@ it('ночной звук - общий переключатель', () => {
   saveNight(false);
   expect(nightSaved()).toBe(false);
 });
+
+it('видео по ссылке: качество и озвучка помнятся по сериалу из ленты', () => {
+  savePrefs('l:tt0141842', { height: 720, audio: { label: 'Дмитрий Goblin Пучков', lang: 'ru' } });
+  savePrefs(7, { quality: 1080 });
+  expect(loadPrefs('l:tt0141842')).toMatchObject({ height: 720, audio: { label: 'Дмитрий Goblin Пучков' } });
+  expect(loadPrefs(7).quality).toBe(1080);
+  expect(loadPrefs(null)).toEqual({});
+  savePrefs(null, { height: 360 });
+  expect(loadPrefs('l:tt0141842').height).toBe(720);
+});

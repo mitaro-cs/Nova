@@ -154,6 +154,19 @@
   // показываем «Пропустить заставку» на том же месте. Хранится у зрителя (`nova-intro:<сериал>`).
   let learnedIntro = $state<[number, number] | null>(null);
   const introKey = $derived(src?.series ? `nova-intro:${src.series}` : null);
+  // Память сериала: своё видео - по номеру сериала, видео по ссылке - по сериалу из ленты.
+  const prefsId = $derived(info?.kind !== 'series' ? null : src ? (src.series ? `l:${src.series}` : null) : info.titleId || null);
+  // Уровень качества ссылки из памяти: ставим один раз, когда список уровней пришёл.
+  let levelRestored = false;
+  function restoreLevel(levels: Level[]) {
+    if (levelRestored || !levels.length) return;
+    levelRestored = true;
+    const h = loadPrefs(prefsId).height;
+    if (h == null) return;
+    const lv = h === -1 ? null : levels.find((l) => l.height === h);
+    if (h !== -1 && !lv) return;
+    pickLevel(lv ? lv.i : -1, true);
+  }
   $effect(() => {
     const k = introKey;
     learnedIntro = null;
@@ -238,7 +251,7 @@
       sourceTracks=e;
       if ('onLevels' in e && e.onLevels && e.onLevel) {
         hlsEngine = e as HlsEngine;
-        e.onLevels((l) => (srcLevels = l));
+        e.onLevels((l) => { srcLevels = l; restoreLevel(l); });
         e.onLevel((h) => (hlsHeight = h));
       }
         e.onAudioTracks?.((tracks) => {
@@ -246,10 +259,17 @@
           const previous = info.play.audio[audio];
           info.play.audio = tracks;
           const kept = previous ? tracks.findIndex(t => t.label === previous.label && t.lang === previous.lang) : -1;
-          audio = kept >= 0 ? kept : Math.max(0, defaultAudioTrack(tracks));
+          const saved = kept < 0 ? matchTrack(tracks, loadPrefs(prefsId).audio) : undefined;
+          audio = kept >= 0 ? kept : saved ? saved.index : Math.max(0, defaultAudioTrack(tracks));
           sourceTracks?.setAudioTrack?.(audio);
         });
-        e.onSubtitleTracks?.((tracks) => { if (info && src) info.play.subs = tracks; });
+        e.onSubtitleTracks?.((tracks) => {
+          if (!info || !src) return;
+          const first = !info.play.subs.length;
+          info.play.subs = tracks;
+          const want = first ? matchTrack(tracks, loadPrefs(prefsId).subs) : undefined;
+          if (want) void pickSubs(want.id);
+        });
       return e;
     }
     if (step.mode === 'hls') {
@@ -290,7 +310,7 @@
       srcLevel = -1;
       fetch(`/api/links/${src.linkId}/stream/index.m3u8`)
         .then(async (r) => (r.ok ? nativeLevels(await r.text()) : []))
-        .then((l) => (srcLevels = l.map((x) => ({ i: x.i, height: x.height, label: x.label }))))
+        .then((l) => { srcLevels = l.map((x) => ({ i: x.i, height: x.height, label: x.label })); restoreLevel(srcLevels); })
         .catch(() => {});
     }
     const s = new PlaySession({ chain, makeEngine, report: onEvent });
@@ -327,6 +347,7 @@
     void sourceIdentity;
     return untrack(() => {
       const resource = ++resourceGeneration;
+      levelRestored = false;
       const id = fileId;
       const s = src;
       untrack(() => {
@@ -374,12 +395,13 @@
           info = i;
           audio = Math.max(0, defaultAudioTrack(i.play.audio));
           // Сериал: как выбирали в прошлой серии - та же озвучка, те же субтитры, пропуск заставки.
-          const prefs = i.kind === 'series' ? loadPrefs(i.titleId) : {};
+          const prefs = i.kind === 'series' ? loadPrefs(i.titleId) : ({} as ReturnType<typeof loadPrefs>);
           const sameAudio = matchTrack(i.play.audio, prefs.audio);
           if (sameAudio) audio = sameAudio.index;
           skipAlways = !!prefs.skipIntro;
           autoSkipped = false;
-          quality = slow || (mbit===null&&i.hls) ? 'auto' : startQuality(mbit, i.bitrate ?? null);
+          // Качество, которое зритель выбрал в прошлой серии, главнее замера сети.
+          quality = prefs.quality ?? (slow || (mbit===null&&i.hls) ? 'auto' : startQuality(mbit, i.bitrate ?? null));
           if (quality === 'auto' && i.hls) say('Включили автоматическое качество');
           const sameSubs = matchTrack(i.play.subs, prefs.subs);
           const forced = i.play.subs.find((x) => x.forced && x.lang?.startsWith('ru'));
@@ -589,18 +611,18 @@
   }
   function toggleSkipAlways() {
     skipAlways = !skipAlways;
-    if (info?.kind === 'series') savePrefs(info.titleId, { skipIntro: skipAlways });
+    savePrefs(prefsId, { skipIntro: skipAlways });
     say(skipAlways ? 'Заставку в этом сериале будем пропускать сами' : 'Заставку больше не пропускаем');
   }
   // Свой выбор дорожек в сериале запоминаем (а не то, что включилось само).
   function chooseAudio(i: number) {
     const t = info?.play.audio.find((a) => a.index === i);
-    if (t && info?.kind === 'series') savePrefs(info.titleId, { audio: { label: t.label, lang: t.lang } });
+    if (t) savePrefs(prefsId, { audio: { label: t.label, lang: t.lang } });
     setAudio(i);
   }
   function chooseSubs(id: string) {
     const t = info?.play.subs.find((x) => x.id === id);
-    if (info?.kind === 'series' && !src) savePrefs(info.titleId, { subs: t ? { label: t.label, lang: t.lang } : null });
+    savePrefs(prefsId, { subs: t ? { label: t.label, lang: t.lang } : null });
     void pickSubs(id);
   }
 
@@ -679,14 +701,16 @@
 
   function setQuality(q: Quality) {
     panel = '';
+    savePrefs(prefsId, { quality: q });
     if (q === quality) return;
     quality = q;
     begin(time);
   }
 
-  function pickLevel(i: number) {
+  function pickLevel(i: number, quiet = false) {
     panel = '';
     srcLevel = i;
+    if (!quiet) savePrefs(prefsId, { height: i === -1 ? -1 : (srcLevels.find((l) => l.i === i)?.height ?? -1) });
     if (hlsEngine) hlsEngine.setLevel(i);
     else if (video && src?.hls && src.linkId) {
       // Safari играет HLS сам: другой уровень - тот же поток с высотой в запросе, с того же места.
@@ -697,6 +721,7 @@
       video.addEventListener('loadedmetadata', () => (video!.currentTime = at), { once: true });
     }
     const chosen = srcLevels.find((l) => l.i === i);
+    if (quiet) return;
     say(i === -1 ? 'Качество - автоматически' : `Качество ${chosen ? levelLabel(chosen, srcLevels) : qualityName(720)}`);
   }
 
@@ -1265,6 +1290,10 @@
     .player.with-sidebar :global(.top),
     .player.with-sidebar :global(.bottom) {
       right: 360px;
+    }
+    /* Меню настроек и подсказки - левее чата, иначе уходят под него. */
+    .player.with-sidebar :global(.panel) {
+      right: calc(360px + clamp(14px, 3vw, 36px));
     }
   }
   .player.idle {

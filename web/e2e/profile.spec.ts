@@ -45,11 +45,11 @@ test('аватар-персонаж выбирается и сохраняетс
   try {
     await page.goto(url('/profile'));
     const picker=page.getByRole('radiogroup',{name:'Аватар',exact:true});
-    await expect(picker.getByRole('radio')).toHaveCount(12);
-    await picker.getByRole('radio',{name:'Робот',exact:true}).click();
-    await expect(picker.getByRole('radio',{name:'Робот',exact:true})).toHaveAttribute('aria-checked','true');
+    await expect(picker.getByRole('radio')).toHaveCount(36);
+    await picker.getByRole('radio',{name:'Кирилл',exact:true}).click();
+    await expect(picker.getByRole('radio',{name:'Кирилл',exact:true})).toHaveAttribute('aria-checked','true');
     await page.reload();
-    await expect(page.getByRole('radio',{name:'Робот',exact:true})).toHaveAttribute('aria-checked','true');
+    await expect(page.getByRole('radio',{name:'Кирилл',exact:true})).toHaveAttribute('aria-checked','true');
     await expectClean(page,'выбор аватара');
   } finally {
     expect((await page.request.patch(url('/api/me'),{headers:{'X-Fsfy':'1'},data:{avatar}})).ok()).toBe(true);

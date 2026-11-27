@@ -53,9 +53,9 @@
 <Modal bind:open title="Мои реакции" sheet>
   <div class="ep">
     <div class="slots" aria-label="Выбрано">
-      {#each Array.from({ length: 6 }, (_, i) => picked[i]) as e, i (i)}
-        {#if e}<button type="button" class="slot" onclick={() => toggle(e)} aria-label="Убрать {e}">{e}</button>{:else}<span class="slot empty" aria-hidden="true">+</span>{/if}
-      {/each}
+      <!-- Шесть мест: занятые - выбранные смайлики (нажатие убирает), свободные - пунктиром. -->
+      {#each picked as e (e)}<button type="button" class="slot" onclick={() => toggle(e)} aria-label="Убрать {e}">{e}</button>{/each}
+      {#each { length: Math.max(0, 6 - picked.length) } as _, i (i)}<span class="slot free" aria-hidden="true">+</span>{/each}
     </div>
     <div class="cats" role="tablist" aria-label="Разделы">
       {#each CATS as c, i (c[0])}<button type="button" role="tab" aria-selected={cat === i} class:on={cat === i} onclick={() => (cat = i)}>{c[0]}</button>{/each}
@@ -84,7 +84,7 @@
   .ep { display: grid; gap: 14px; padding: 4px 18px 18px; }
   .slots { display: flex; gap: 8px; }
   .slot { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; background: #ffffff14; border: 0; cursor: pointer; }
-  .slot.empty { background: none; border: 1px dashed #ffffff40; color: #6c6c75; font-size: 18px; cursor: default; }
+  .slot.free { background: none; border: 1px dashed #ffffff40; color: #6c6c75; font-size: 18px; cursor: default; }
   .cats { display: flex; gap: 6px; flex-wrap: wrap; }
   .cats button { padding: 6px 12px; border: 0; border-radius: 999px; background: #ffffff12; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
   .cats button.on { background: #fff; color: #000; }

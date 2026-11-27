@@ -6,7 +6,7 @@ use crate::auth::Viewer;
 use crate::error::{ApiError, ApiResult};
 use rusqlite::params;
 
-pub const AVATARS: i64 = 12;
+pub const AVATARS: i64 = 36;
 
 /// Профиль `id` - свой (фото меняют только у себя).
 pub fn own(app: &App, v: &Viewer, id: i64) -> ApiResult<()> {

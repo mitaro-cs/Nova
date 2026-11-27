@@ -3,7 +3,8 @@
   import type { Trickplay } from '$lib/types';
   import Icon from '$lib/ui/Icon.svelte';
   import Seekbar from './Seekbar.svelte';
-  import { playbackHeading } from './title';
+  import { fade } from 'svelte/transition';
+  import { pauseHeading, playbackHeading } from './title';
 
   // Органы управления - вариант A «Кинотеатр» (выбор владельца, 23.11): сверху всегда название, снизу тонкая полоса
   // перемотки; под ней слева пауза, ±10 с и время, справа одна строка значков с подписями при наведении (звук, озвучка,
@@ -152,11 +153,12 @@
 
 {#if paused && !busy && !panel}
   <!-- Пока перематывают, крупное название уходит: виден кадр, на который встаёт видео. -->
-  <div class="paused" class:away={scrub || moved} aria-label="Пауза">
+  {@const ph = pauseHeading(title, episode, season, episodeNo)}
+  <div class="paused" class:away={scrub || moved} aria-label="Пауза" out:fade={{ duration: 220 }}>
     <small>Пауза</small>
-    <h2>{title}</h2>
-    {#if episode}<p>{episode}</p>{/if}
-    <div><button class="go" type="button" onclick={ontoggle}><Icon name="play" size={18} /> Продолжить</button>{#if duration > time}<span class="left">Осталось {Math.max(1, Math.round((duration - time) / 60))} мин</span>{/if}</div>
+    <h2>{ph.name}</h2>
+    {#if ph.sub}<p>{ph.sub}</p>{/if}
+    <div class="row"><button class="go" type="button" onclick={ontoggle}><Icon name="play" size={18} /> Продолжить</button>{#if duration > time}<span class="left">Осталось {Math.max(1, Math.round((duration - time) / 60))} мин</span>{/if}</div>
   </div>
 {/if}
 
@@ -424,18 +426,28 @@
       text-shadow: 0 2px 24px #00000080, 0 1px 3px #00000066;
       /* Пауза (просьба владельца 25.11 «совсем нет затемнения»): мягкая тень снизу-слева под названием и кнопкой,
          середина кадра остаётся светлой - лицо и картинка видны. */
-      background:
-        linear-gradient(90deg, #000000b8 0%, #00000066 34%, transparent 62%),
-        linear-gradient(0deg, #000000b0 0%, #00000040 40%, transparent 65%);
-      animation: swap 0.25s ease-out;
     }
+    /* Затемнение (27.11): нарастает плавно - лёгкая дымка на весь кадр и густая тень снизу-слева под текстом; текст
+       и кнопка поднимаются следом друг за другом. Двигаются только opacity и transform. */
+    .paused::before {
+      content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        linear-gradient(90deg, #000000c4 0%, #00000070 32%, transparent 64%),
+        linear-gradient(0deg, #000000c0 0%, #00000050 38%, transparent 66%),
+        #00000026;
+      animation: dim 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .paused > * { animation: lift 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .paused > :nth-child(2) { animation-delay: 0.06s; }
+    .paused > :nth-child(3) { animation-delay: 0.12s; }
+    .paused > :nth-child(4) { animation-delay: 0.18s; }
     .paused * { pointer-events: auto; }
-    .paused { transition: opacity 0.25s; }
+    .paused { isolation: isolate; transition: opacity 0.25s; }
     .paused.away { opacity: 0; }
     .paused.away * { pointer-events: none; }
     .paused small { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }
-    .paused h2 { margin: 10px 0 0; max-width: 18ch; font-size: clamp(34px, 4.4vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 1; overflow-wrap: anywhere; }
-    .paused p { margin: 12px 0 0; font-size: 18px; opacity: 0.75; }
+    .paused h2 { margin: 10px 0 0; max-width: 22ch; font-size: clamp(30px, 3.4vw, 52px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; overflow-wrap: anywhere; text-wrap: balance; }
+    .paused p { margin: 10px 0 0; font-size: 17px; font-weight: 600; opacity: 0.8; }
     .paused .go { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px; padding: 14px 30px; border: 0; border-radius: 999px; background: #fff; color: #0a0a0b; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
     .paused .left { margin-left: 18px; font-size: 14px; opacity: 0.7; }
     /* Большие кнопки по центру на паузе не нужны: есть «Продолжить». */
@@ -489,4 +501,7 @@
     .paused .go { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 10px 18px; border: 0; border-radius: 999px; background: #fff; color: #0a0a0b; font: inherit; font-size: 14px; font-weight: 700; }
     .paused .left { margin-left: 10px; font-size: 12px; opacity: 0.7; }
   }
+  @keyframes dim { from { opacity: 0; } }
+  @keyframes lift { from { opacity: 0; transform: translateY(14px); } }
+  :global(.no-motion) .paused::before, :global(.no-motion) .paused > * { animation: none; }
 </style>

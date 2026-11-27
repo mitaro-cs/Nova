@@ -59,7 +59,7 @@ async fn new_profile_gets_a_character_and_keeps_its_choice() {
     let (mut person, id) = signup(&public, "character-viewer").await;
     let me = person.json("/api/me").await;
     let avatar = me["user"]["profile"]["avatar"].as_i64().unwrap();
-    assert!((0..12).contains(&avatar));
+    assert!((0..36).contains(&avatar));
     assert!(me["user"]["profile"]["photo"].is_null());
     assert!(person.send("PATCH", "/api/me", json!({"avatar":8})).await.status().is_success());
     assert_eq!(person.json("/api/me").await["user"]["profile"]["avatar"], 8);

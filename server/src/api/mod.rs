@@ -14,7 +14,7 @@ mod next_episode;
 pub mod play;
 mod previews;
 mod profile;
-mod profiles;
+pub(crate) mod profiles;
 mod resume;
 pub(crate) mod rooms;
 mod site_import;
