@@ -1024,7 +1024,10 @@ pub fn card_sql(kids: bool) -> String {
            e.release, e.soon,
            COALESCE(e.genres LIKE '%Аниме%' OR e.genres LIKE '%Anime%'
              OR ((e.genres LIKE '%Мульт%' OR e.genres LIKE '%Анимац%' OR e.genres LIKE '%Animation%')
-                 AND (COALESCE(e.extra, '') LIKE '%Япония%' OR COALESCE(e.extra, '') LIKE '%Japan%'))
+                 -- Только страна производства: в `extra` есть и названия проката по странам («Зверополис» в Японии),
+                 -- из-за них в «Аниме» попадали все мультфильмы (28.11).
+                 AND (COALESCE(json_extract(e.extra, '$.countries'), '') LIKE '%Япония%'
+                      OR COALESCE(json_extract(e.extra, '$.countries'), '') LIKE '%Japan%'))
              OR EXISTS (SELECT 1 FROM ext_charts c WHERE c.ext_id = e.id AND c.chart LIKE 'anime%'), 0)
          FROM (SELECT * FROM ext_titles WHERE id NOT IN (SELECT id FROM ext_hidden)) e",
         crate::api::visible(kids)
@@ -1104,6 +1107,14 @@ mod tests {
             )
         })
         .unwrap();
+        // Американский мультфильм с японским названием проката - не аниме.
+        db.with(|c| {
+            c.execute(
+                "INSERT INTO ext_titles (id, kind, title, genres, extra, updated_at) VALUES ('tt9100004', 'movie', 'Зверополис', '[\"Мультфильм\"]', '{\"countries\":[\"США\"],\"aka\":[{\"country\":\"Япония\",\"title\":\"ズートピア\"}]}', 0)",
+                [],
+            )
+        })
+        .unwrap();
         let cards: Vec<ExtCard> = db
             .with(|c| {
                 let mut st = c.prepare(&format!("{} ORDER BY e.id", card_sql(false)))?;
@@ -1111,7 +1122,8 @@ mod tests {
                 r.collect()
             })
             .unwrap();
-        assert_eq!(cards.len(), 3);
+        assert_eq!(cards.len(), 4);
+        assert!(!cards[3].anime);
         assert!(!cards[0].anime);
         assert!(cards[1].anime);
         // Мультфильм без описания: страна неизвестна - не аниме (именно тут раньше выходил NULL).
