@@ -93,7 +93,22 @@ pub async fn lists(State(app): State<Arc<App>>, v: Viewer) -> ApiResult<Json<Val
             let r = st.query_map([id], |r| r.get::<_, String>(0))?;
             r.collect()
         })?;
+        // Последнее добавленное: «Златка добавила «Дюну»» под обложкой и метка «Новое», если не вы и за три дня.
+        let last: Option<(String, String, i64, i64)> = app.db.with(|c| {
+            c.query_row(
+                "SELECT p.name, x.title, x.at, p.id FROM (
+                   SELECT t.title AS title, i.added_at AS at, i.added_by AS by FROM list_items i JOIN titles t ON t.id = i.title_id
+                     WHERE i.list_id = ?1
+                   UNION ALL
+                   SELECT e.title, x.added_at, x.added_by FROM list_ext x JOIN ext_titles e ON e.id = x.ext_id WHERE x.list_id = ?1
+                 ) x JOIN profiles p ON p.id = x.by ORDER BY x.at DESC LIMIT 1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()
+        })?;
         out.push(json!({
+            "last": last.map(|(by, title, at, pid)| json!({"by": by, "title": title, "at": at, "mine": pid == v.profile.id})),
             "id": id, "name": name, "mine": owner == v.profile.id, "count": count, "watched": watched,
             "members": members(&app, id)?,
             "art": art.into_iter().filter_map(|a| super::img(Some(a))).collect::<Vec<_>>(),
@@ -201,10 +216,12 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
         r.collect()
     })?;
     // Голоса «хочу смотреть»: сколько и голосовал ли я - у каждого фильма.
-    let votes: Vec<(String, i64, bool)> = app.db.with(|c| {
-        let mut st =
-            c.prepare("SELECT item, COUNT(*), MAX(profile_id = ?2) FROM list_votes WHERE list_id = ?1 GROUP BY item")?;
-        let r = st.query_map(params![id, v.profile.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    // `voters` - кто проголосовал (номера профилей участников): лица у сердца в списке.
+    let votes: Vec<(String, i64, bool, String)> = app.db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT item, COUNT(*), MAX(profile_id = ?2), GROUP_CONCAT(profile_id) FROM list_votes WHERE list_id = ?1 GROUP BY item",
+        )?;
+        let r = st.query_map(params![id, v.profile.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
         r.collect()
     })?;
     for it in items.iter_mut() {
@@ -213,9 +230,11 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
             (None, Some(e)) => format!("e{e}"),
             _ => continue,
         };
-        let (n, me) = votes.iter().find(|x| x.0 == key).map(|x| (x.1, x.2)).unwrap_or((0, false));
+        let (n, me, who) =
+            votes.iter().find(|x| x.0 == key).map(|x| (x.1, x.2, x.3.as_str())).unwrap_or((0, false, ""));
         it["votes"] = json!(n);
         it["voted"] = json!(me);
+        it["voters"] = json!(who.split(',').filter_map(|p| p.parse::<i64>().ok()).collect::<Vec<_>>());
     }
     let owner_name = members(&app, id)?.into_iter().find(|p| p.id == owner).map(|p| p.name);
     Ok(Json(json!({

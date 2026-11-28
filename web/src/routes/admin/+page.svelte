@@ -7,7 +7,7 @@
   import { attention } from '$lib/admin/attention';
   import Catalog from '$lib/admin/Catalog.svelte';
   import Folders from '$lib/admin/Folders.svelte';
-  import Hall from '$lib/admin/Hall.svelte';
+  import Live from '$lib/admin/Live.svelte';
   import HomeMap from '$lib/admin/HomeMap.svelte';
   import HostTitleSource from '$lib/admin/HostTitleSource.svelte';
   import LoginJournal from '$lib/admin/LoginJournal.svelte';
@@ -25,11 +25,9 @@
   import Wishes from '$lib/admin/Wishes.svelte';
   import Wizard from '$lib/admin/Wizard.svelte';
   import ChainCheck from '$lib/discover/ChainCheck.svelte';
-  import { plural, size } from '$lib/fmt';
   import { session } from '$lib/session.svelte';
   import { badges } from '$lib/social/badges.svelte';
-  import { artW } from '$lib/ui/art';
-  import { catalog, loadCatalog } from '$lib/catalog.svelte';
+  import { loadCatalog } from '$lib/catalog.svelte';
   import Icon from '$lib/ui/Icon.svelte';
 
   // «Управление» A1 «Зал» (выбор владельца 27.11): слева пять разделов, у каждого живая цифра (кто смотрит, места беты,
@@ -84,9 +82,6 @@
     }
     return out;
   });
-  const fresh = $derived((catalog.items ?? []).filter((c) => c.poster).slice().sort((a, b) => b.addedAt - a.addedAt).slice(0, 3));
-  const sources = $derived(health?.sources ?? []);
-  const sourcesOk = $derived(sources.filter((s) => s.state !== 'down').length);
 </script>
 
 <div class="rw-page admin">
@@ -100,37 +95,18 @@
     </button>
   </header>
 
-  <nav class="rail" aria-label="Разделы управления">
+  <!-- Разделы текстом с белой чертой, как в шапке сайта (выбор владельца 28.11, макет «как сайт Nova»). -->
+  <nav class="secs" aria-label="Разделы управления">
     {#each SECTIONS as s (s.id)}
       {@const f = flags[s.id]}
-      <a href={href(s.id)} class="nav" aria-current={at.section === s.id ? 'page' : undefined} data-sveltekit-replacestate data-sveltekit-noscroll>
-        <span class="ic"><Icon name={s.icon} size={18} /></span>
-        <b>{s.label}{#if f}<em class:bad={f.bad} aria-label="требует внимания: {f.n}">{f.n}</em>{/if}</b>
-        <span class="live">
-          {#if !status}<span class="wait">…</span>
-          {:else if s.id === 'summary'}
-            {#if status.watching.length}<i class="rec" aria-hidden="true"></i>{status.watching.length} {plural(status.watching.length, 'смотрит', 'смотрят', 'смотрят')} сейчас{:else}Сейчас тихо{/if}
-          {:else if s.id === 'viewers'}
-            {#if status.seats}<span class="num">{status.seats.used}/{status.seats.total}</span><span class="bar" aria-hidden="true"><i style:transform="scaleX({Math.min(1, status.seats.used / Math.max(1, status.seats.total))})"></i></span>{:else}Без лимита мест{/if}
-          {:else if s.id === 'library'}
-            {#if fresh.length}<span class="ps" aria-hidden="true">{#each fresh as c (c.id)}<img src={artW(c.poster, 92)} alt="" loading="lazy" />{/each}</span>{/if}{status.titles}{badges.wishes ? ` · ${badges.wishes} ${plural(badges.wishes, 'просьба', 'просьбы', 'просьб')}` : ''}
-          {:else if s.id === 'sources'}
-            {#if sources.length}<span class="ds" aria-hidden="true">{#each sources.slice(0, 6) as x (x.site)}<i class={x.state}></i>{/each}</span>{sourcesOk} из {sources.length} работают{:else}Проверяем…{/if}
-          {:else if s.id === 'system'}
-            {#if status.update?.state === 'available'}Есть обновление{:else}{[status.system?.cpu != null ? `ЦП ${Math.round(status.system.cpu)}%` : '', status.system?.diskFree != null ? size(status.system.diskFree) : ''].filter(Boolean).join(' · ') || 'Сервер работает'}{/if}
-          {/if}
-        </span>
-      </a>
+      <a href={href(s.id)} aria-current={at.section === s.id ? 'page' : undefined} data-sveltekit-replacestate data-sveltekit-noscroll>{s.label}{#if f}<em class:bad={f.bad} aria-label="требует внимания: {f.n}">{f.n}</em>{/if}</a>
     {/each}
-    <a class="setup" href="?tab=setup" aria-current={at.section === 'setup' ? 'page' : undefined} data-sveltekit-replacestate data-sveltekit-noscroll><Icon name="sparkle" size={15} /> Мастер первой настройки</a>
+    <a class="setup" href="?tab=setup" aria-current={at.section === 'setup' ? 'page' : undefined} data-sveltekit-replacestate data-sveltekit-noscroll><Icon name="sparkle" size={15} /> Мастер</a>
   </nav>
 
-  <section class="panel rw-plate" aria-label={section?.label ?? 'Мастер настройки'}>
+  <section class="panel" aria-label={section?.label ?? 'Мастер настройки'}>
     <header class="sec-h">
-      <div>
-        <h2 class="rw-h2">{section?.label ?? 'Мастер настройки'}</h2>
-        <p>{section?.hint ?? 'Пять шагов до готовности: папка, описания, доступ, люди'}</p>
-      </div>
+      <h2 class="vh">{section?.label ?? 'Мастер настройки'}</h2>
       {#if section && section.subs.length > 1}
         <nav class="tabs" aria-label="Вкладки раздела «{section.label}»">
           {#each section.subs as x (x.id)}
@@ -143,10 +119,10 @@
     {#if status}
       {@const k = `${at.section}/${at.sub}`}
       {#if at.section === 'setup'}<Wizard {status} {reload} window={!!session.me?.window} />
-      {:else if k === 'summary/now'}<Hall {status} {health} {reload} />
+      {:else if k === 'summary/now'}<Live {status} {health} {reload} />
       {:else if k === 'summary/stats'}<Overview {status} {reload} />
       {:else if k === 'summary/map'}<HomeMap {status} {reload} window={!!session.me?.window} />
-      {:else if k === 'viewers/people'}<People find={page.url.searchParams.get('find') ?? ''} />
+      {:else if k === 'viewers/people'}<People find={page.url.searchParams.get('find') ?? ''} seats={status.seats ?? null} />
       {:else if k === 'viewers/signup'}<Settings parts={['site']} />
       {:else if k === 'viewers/logins'}<section class="card pane"><LoginJournal /></section>
       {:else if k === 'library/catalog'}<Catalog sources={false} />
@@ -172,21 +148,14 @@
 <Palette bind:open={palette} {reload} />
 
 <style>
-  /* Плиты #101012 с тонкой линией - как раньше; токены переопределены для всех вкладок сразу. */
-  .admin {
-    --sheet: #101012;
-    --sheet-2: #17171a;
-    --sheet-3: #1f1f23;
-    --sheet-line: #ffffff1a;
-    --surface: #101012;
-    --surface-2: #17171a;
-    --surface-3: #1f1f23;
-    --line: #ffffff1a;
-  }
-  .admin :global(.rw-head h1) { font-size: clamp(34px, 4.2vw, 56px); letter-spacing: -0.04em; line-height: 1.02; }
-  .admin :global(.panel .pane) { border: 1px solid var(--line); border-radius: 24px; padding: 22px; margin-block: 16px; background: #141416; }
-  .admin :global(.panel .pane h3) { font-size: 17px; letter-spacing: -0.02em; }
-  .admin :global(.panel .input) { min-height: 42px; border-radius: 12px; }
+  /* «Управление» как сайт Nova (28.11): без серых плит и боковой панели - разделы текстом с чертой, вкладки капсулами,
+     содержимое прямо на чёрном. Карточки старых вкладок (`.pane`) становятся разделами с тонкой линией. */
+  .admin { --line: #ffffff1a; max-width: 1680px; margin: auto; }
+  .admin :global(.rw-head h1) { font-size: clamp(40px, 5.4vw, 72px); font-weight: 900; letter-spacing: -0.045em; line-height: 0.95; }
+  .admin :global(.panel .pane) { margin: 0; padding: 26px 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; }
+  .admin :global(.panel .pane:first-child) { border-top: 0; padding-top: 4px; }
+  .admin :global(.panel .pane h3) { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  .admin :global(.panel .input) { min-height: 44px; border-radius: 14px; }
   .rw-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 
   .find {
@@ -195,82 +164,42 @@
     gap: 10px;
     min-width: 0;
     max-width: 100%;
-    padding: 10px 12px 10px 16px;
-    border: 1px solid var(--line);
+    padding: 11px 14px 11px 18px;
+    border: 0;
     border-radius: 999px;
-    background: #ffffff0a;
+    background: #ffffff12;
     color: var(--muted);
     font: inherit;
     font-size: 14px;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
   }
-  .find:hover { background: #ffffff14; color: var(--text); }
+  .find:hover { background: #ffffff1f; color: var(--text); }
   .find span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .find kbd { margin-left: 6px; padding: 2px 7px; border-radius: 6px; background: #ffffff1a; color: var(--text); font: 700 11px var(--font, inherit); }
+  .find kbd { margin-left: 6px; padding: 3px 7px; border-radius: 6px; background: #ffffff1f; color: var(--text); font: 700 11px var(--font, inherit); }
 
-  /* Панель разделов: у каждого живая цифра; выбранный - белый. */
-  .rail { display: flex; flex-direction: column; gap: 4px; }
-  .nav {
-    display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 3px 12px;
-    align-items: center;
-    padding: 11px 12px;
-    border-radius: 18px;
-    color: var(--text);
-    transition: background 0.25s var(--ease), transform 0.2s var(--ease);
-  }
-  .nav:hover { background: #ffffff0d; }
-  .nav:active { transform: scale(0.98); }
-  .ic { grid-row: span 2; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: #ffffff14; transition: background 0.25s, color 0.25s; }
-  .nav b { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
-  .nav em { min-width: 20px; padding: 1px 7px; border-radius: 99px; background: #ffd60a; color: #000; font-style: normal; font-size: 11px; font-weight: 800; text-align: center; }
-  .nav em.bad { background: var(--danger); color: #fff; }
-  .live { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; }
-  .live .num { font-variant-numeric: tabular-nums; }
-  .live .bar { flex: 1; max-width: 80px; height: 4px; border-radius: 99px; background: #ffffff1f; overflow: hidden; }
-  .live .bar i { display: block; height: 100%; background: #fff; transform-origin: 0 50%; }
-  .rec { width: 7px; height: 7px; border-radius: 50%; background: #ff3b30; flex: none; }
-  .ps { display: flex; padding-right: 8px; flex: none; }
-  .ps img { width: 16px; height: 24px; margin-right: -8px; border: 1px solid #000; border-radius: 3px; object-fit: cover; }
-  .ds { display: flex; gap: 3px; flex: none; }
-  .ds i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
-  .ds i.down { background: var(--danger); }
-  .ds i.unknown { background: #636366; }
-  .nav[aria-current='page'] { background: #fff; color: #000; }
-  .nav[aria-current='page'] .ic { background: #000; color: #fff; }
-  .nav[aria-current='page'] .live { color: #555; }
-  .nav[aria-current='page'] .live .bar { background: #0000001f; }
-  .nav[aria-current='page'] .live .bar i { background: #000; }
-  .setup { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 12px; border-radius: 12px; color: var(--muted); font-size: 13px; }
-  .setup:hover, .setup[aria-current='page'] { color: var(--text); background: #ffffff0d; }
+  .secs { display: flex; gap: 30px; margin: 22px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+  .secs a { position: relative; flex: none; padding: 0 0 14px; color: #6e6e73; font-size: 18px; font-weight: 700; white-space: nowrap; transition: color 0.2s; }
+  .secs a:hover { color: #d1d1d6; }
+  .secs a[aria-current='page'] { color: var(--text); }
+  .secs a[aria-current='page']::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; border-radius: 3px; background: #fff; }
+  .secs em { margin-left: 8px; padding: 1px 7px; border-radius: 99px; background: #ffd60a; color: #000; font-style: normal; font-size: 11px; font-weight: 800; vertical-align: 3px; }
+  .secs em.bad { background: var(--danger); color: #fff; }
+  .secs .setup { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 15px; }
 
-  .panel.rw-plate { min-width: 0; margin-inline: 0; padding: clamp(18px, 2.4vw, 30px); border: 1px solid #ffffff1a; border-radius: 30px; background: #101012; }
-  .sec-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
-  .sec-h :global(.rw-h2) { margin: 0; font-size: 30px; letter-spacing: -0.03em; }
-  .sec-h p { margin: 4px 0 0; color: var(--muted); }
-  .tabs { display: inline-flex; gap: 2px; max-width: 100%; padding: 4px; overflow-x: auto; border: 1px solid var(--line); border-radius: 999px; background: #000; }
-  .tabs a { padding: 8px 16px; border-radius: 999px; color: var(--muted); font-weight: 600; font-size: 14px; white-space: nowrap; transition: background 0.2s, color 0.2s; }
-  .tabs a:hover { color: var(--text); }
+  .panel { min-width: 0; padding: 22px 0 0; }
+  .sec-h { margin-bottom: 24px; }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs a { height: 40px; display: inline-flex; align-items: center; padding: 0 18px; border-radius: 999px; background: #ffffff12; color: #d1d1d6; font-weight: 700; font-size: 14px; white-space: nowrap; transition: background 0.2s, color 0.2s; }
+  .tabs a:hover { background: #ffffff1f; }
   .tabs a[aria-current='page'] { background: #fff; color: #000; }
 
-  @media (min-width: 1100px) {
-    .admin { display: grid; grid-template-columns: 272px minmax(0, 1fr); gap: 0 28px; max-width: 1680px; margin: auto; }
-    .admin > .rw-head { grid-column: 1 / -1; padding-block: 12px 20px; }
-    .rail { grid-column: 1; position: sticky; top: calc(var(--header) + 18px); align-self: start; }
-    .panel { grid-column: 2; }
-  }
-  @media (max-width: 1099px) {
-    .rail { flex-direction: row; margin: 0 calc(var(--gutter) * -1) 16px; padding: 0 var(--gutter) 4px; overflow-x: auto; }
-    .nav { flex: none; grid-template-columns: 30px auto; padding: 6px 14px 6px 6px; border-radius: 99px; background: #ffffff0d; }
-    .ic { grid-row: auto; width: 30px; height: 30px; border-radius: 50%; }
-    .live { display: none; }
-    .setup { flex: none; margin: 0; white-space: nowrap; }
-  }
   @media (max-width: 640px) {
     .find { width: 100%; }
     .find kbd { display: none; }
-    .panel.rw-plate { margin-inline: calc(var(--gutter) * -1); border-radius: 26px 26px 0 0; }
+    .secs { gap: 22px; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
+    .secs a { font-size: 16px; }
+    .tabs { flex-wrap: nowrap; overflow-x: auto; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); scrollbar-width: none; }
   }
 </style>

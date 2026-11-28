@@ -11,7 +11,7 @@
   import Logo from './Logo.svelte';
 
   // Шапка: слева знак, справа колокольчик (просьбы дружбы, сообщения, просьбы зрителей) и у хоста «добавить».
-  // Разделы на телефоне и планшете - панель из пяти вкладок внизу: Главная, Подбор, Каталог, Моё, Профиль (поиск -
+  // Разделы на телефоне и планшете - панель из пяти вкладок внизу: Главная, Подбор, Каталог, Подборки, Профиль (поиск -
   // в Каталоге и значком в шапке главной). Люди, чаты и остальное - на странице «Профиль».
   let scrolled = $state(false);
   let menu = $state(false);
@@ -63,7 +63,7 @@
     { id: 'home', to: '/', label: 'Главная' },
     { id: 'feed', to: '/feed', label: 'Подбор' },
     { id: 'catalog', to: '/discover', label: 'Каталог' },
-    { id: 'my', to: '/my', label: 'Моё' },
+    { id: 'my', to: '/my', label: 'Подборки' },
   ];
   const inCatalogPath = (p: string, q: Pick<URLSearchParams, 'get'>) =>
     (p === '/' && tabOf(q) !== 'home') || ['/discover', '/franchise', '/search', '/movies', '/series'].some((x) => p.startsWith(x));
@@ -156,7 +156,7 @@
   <a href="/" class:on={inHome} aria-current={inHome ? 'page' : undefined}><Icon name="home" size={24} /><span>Главная</span></a>
   <a href="/feed" class:on={inFeed} aria-current={inFeed ? 'page' : undefined}><Icon name="squareplay" size={24} /><span>Подбор</span></a>
   <a href="/discover" class:on={inCatalog} aria-current={inCatalog ? 'page' : undefined}><Icon name="grid" size={24} /><span>Каталог</span></a>
-  <a href="/my" class:on={inCollection} aria-current={inCollection ? 'page' : undefined}><Icon name="bookmark" size={24} /><span>Моё</span></a>
+  <a href="/my" class:on={inCollection} aria-current={inCollection ? 'page' : undefined}><Icon name="bookmark" size={24} /><span>Подборки</span></a>
   <a href={profile ? `/people/${profile.id}` : '/profile'} class:on={inProfile} aria-current={inProfile ? 'page' : undefined}>
     <span class="ic"><Avatar avatar={profile?.avatar ?? 0} photo={profile?.photo} size={24} />{#if alert}<i class="num">{alert}</i>{/if}</span>
     <span>Профиль</span>

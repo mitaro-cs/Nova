@@ -1103,18 +1103,50 @@ pub async fn edit_file(State(app): State<Arc<App>>, _m: Manager, Path(id): Path<
 
 pub async fn users(State(app): State<Arc<App>>, _m: Manager) -> Out {
     let rows: Vec<Value> = app.db.with(|c| {
+        // Портрет, часы и досмотренное, три последних постера - для карточек зрителей в «Управлении» (27.11).
         let mut st = c.prepare(
-            "SELECT id, login, name, role, can_download, disabled, created_at, seen_at, pass IS NOT NULL FROM users
-             ORDER BY role = 'host' DESC, role = 'admin' DESC, name COLLATE NOCASE",
+            "SELECT u.id, u.login, u.name, u.role, u.can_download, u.disabled, u.created_at, u.seen_at, u.pass IS NOT NULL,
+                    pr.id, COALESCE(pr.avatar, 0), pr.photo,
+                    (SELECT COALESCE(SUM(MIN(p.position, p.duration)), 0) FROM progress p WHERE p.profile_id = pr.id)
+                      + (SELECT COALESCE(SUM(MIN(lp.position, lp.duration)), 0) FROM link_progress lp WHERE lp.profile_id = pr.id),
+                    (SELECT COUNT(*) FROM watched w WHERE w.profile_id = pr.id)
+                      + (SELECT COUNT(*) FROM ext_marks m WHERE m.profile_id = pr.id AND m.status = 'watched')
+             FROM users u LEFT JOIN profiles pr ON pr.id = (SELECT MIN(id) FROM profiles WHERE user_id = u.id)
+             ORDER BY u.role = 'host' DESC, u.role = 'admin' DESC, u.name COLLATE NOCASE",
         )?;
-        let r = st.query_map([], |r| {
-            Ok(json!({
-                "id": r.get::<_, i64>(0)?, "login": r.get::<_, String>(1)?, "name": r.get::<_, String>(2)?,
-                "role": r.get::<_, String>(3)?, "canDownload": r.get::<_, bool>(4)?, "disabled": r.get::<_, bool>(5)?,
-                "createdAt": r.get::<_, i64>(6)?, "seenAt": r.get::<_, Option<i64>>(7)?, "hasPassword": r.get::<_, bool>(8)?,
-            }))
-        })?;
-        r.collect()
+        let mut recent = c.prepare(
+            "SELECT poster FROM (
+               SELECT COALESCE(t.poster_sm, t.poster) AS poster, MAX(p.updated_at) AS at FROM progress p
+                 JOIN files f ON f.id = p.file_id JOIN titles t ON t.id = f.title_id WHERE p.profile_id = ?1 GROUP BY t.id
+               UNION ALL
+               SELECT NULLIF(e.poster, ''), MAX(lp.updated_at) FROM link_progress lp JOIN links l ON l.id = lp.link_id
+                 JOIN ext_titles e ON e.id = l.ext_id WHERE lp.profile_id = ?1 GROUP BY e.id
+             ) WHERE poster IS NOT NULL ORDER BY at DESC LIMIT 3",
+        )?;
+        let base: Vec<(Value, Option<i64>)> = st
+            .query_map([], |r| {
+                Ok((
+                    json!({
+                        "id": r.get::<_, i64>(0)?, "login": r.get::<_, String>(1)?, "name": r.get::<_, String>(2)?,
+                        "role": r.get::<_, String>(3)?, "canDownload": r.get::<_, bool>(4)?, "disabled": r.get::<_, bool>(5)?,
+                        "createdAt": r.get::<_, i64>(6)?, "seenAt": r.get::<_, Option<i64>>(7)?, "hasPassword": r.get::<_, bool>(8)?,
+                        "avatar": r.get::<_, i64>(10)?, "photo": super::img(r.get(11)?),
+                        "hours": (r.get::<_, f64>(12)? / 3600.0).round() as i64, "watched": r.get::<_, i64>(13)?,
+                    }),
+                    r.get::<_, Option<i64>>(9)?,
+                ))
+            })?
+            .collect::<Result<_, _>>()?;
+        let mut out = Vec::with_capacity(base.len());
+        for (mut v, profile) in base {
+            let posters: Vec<Value> = match profile {
+                Some(p) => recent.query_map([p], |r| Ok(json!(super::img(r.get(0)?))))?.collect::<Result<_, _>>()?,
+                None => vec![],
+            };
+            v["recent"] = json!(posters);
+            out.push(v);
+        }
+        Ok(out)
     })?;
     Ok(Json(json!(rows)))
 }

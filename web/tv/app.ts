@@ -65,7 +65,7 @@ const TABS: [string, string, string, IconName][] = [
   ['home', '/', 'Главная', 'home'],
   ['feed', '/feed', 'Подбор', 'squareplay'],
   ['profile', '/profile', 'Профиль', 'user'],
-  ['my', '/my', 'Моё', 'bookmark'],
+  ['my', '/my', 'Подборки', 'bookmark'],
   ['search', '/search', 'Поиск', 'search'],
 ];
 

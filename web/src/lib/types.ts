@@ -329,6 +329,8 @@ export interface SharedList {
   watched: number;
   members: Friend[];
   art: string[];
+  /** Последнее добавленное: кто и что (`mine` - вы сами). */
+  last?: { by: string; title: string; at: number; mine: boolean } | null;
 }
 
 export interface SharedItem {
@@ -342,6 +344,8 @@ export interface SharedItem {
   /** Голоса «хочу смотреть» (вид «Плейлист») и мой ли среди них. */
   votes?: number;
   voted?: boolean;
+  /** Кто проголосовал - номера профилей участников. */
+  voters?: number[];
 }
 
 export interface SharedListFull {

@@ -27,7 +27,7 @@
 
 <Sheet title="Люди" subtitle="Друзья, заявки и все, кто есть на сайте">
   {#snippet actions()}
-    <a class="btn sm" href="/lists"><Icon name="users" size={15} /> Смотрим вместе</a>
+    <a class="btn sm" href="/my"><Icon name="users" size={15} /> Смотрим вместе</a>
   {/snippet}
   <div class="rw-block">
     <label class="find">

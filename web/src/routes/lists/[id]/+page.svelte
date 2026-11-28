@@ -36,18 +36,6 @@
 
   const key = (i: SharedItem) => (i.ext ? i.ext.id : `t${i.card!.id}`);
   const path = (i: SharedItem) => (i.ext ? `/api/lists/${id}/ext/${i.ext.id}` : `/api/lists/${id}/items/${i.card!.id}`);
-  // Группы по порядку, «Без группы» - последней (или единственной, если групп нет).
-  // Внутри - сначала то, что ещё не смотрели.
-  const sections = $derived.by(() => {
-    if (!l) return [];
-    const order = (a: SharedItem, b: SharedItem) =>
-      Number(!!a.watchedAt) - Number(!!b.watchedAt) || (b.votes ?? 0) - (a.votes ?? 0) || b.addedAt - a.addedAt;
-    const out = l.groups.map((g) => ({ id: g.id as number | null, name: g.name, items: l!.items.filter((i) => i.groupId === g.id).sort(order) }));
-    const rest = l.items.filter((i) => !l!.groups.some((g) => g.id === i.groupId)).sort(order);
-    if (rest.length || !out.length) out.push({ id: null, name: l.groups.length ? 'Без группы' : '', items: rest });
-    return out;
-  });
-
   async function watched(i: SharedItem) {
     const before = i.watchedAt;
     i.watchedAt = before ? null : Date.now();
@@ -118,7 +106,7 @@
     const q = l.mine ? `Удалить подборку «${l.name}» у всех участников?` : `Выйти из подборки «${l.name}»?`;
     if (!(await ask(q, l.mine ? 'Удалить' : 'Выйти', true))) return;
     await del(`/api/lists/${id}`).catch(() => {});
-    goto('/lists', { replace: true });
+    goto('/my', { replace: true });
   }
 
   async function openInvite() {
@@ -147,16 +135,61 @@
     return [c.year, c.kind === 'series' ? 'Сериал' : null, (c.genres ?? [])[0]].filter(Boolean).join(' · ');
   };
   const mins = (i: SharedItem) => (i.card?.runtime ?? null);
-  const cover = $derived((l?.items ?? []).filter((i) => poster(i)).slice(0, 4).map(poster));
   const total = $derived((l?.items ?? []).reduce((n, i) => n + (mins(i) ?? 0), 0));
   const meta = $derived(
     l
-      ? [`${l.items.length} ${plural(l.items.length, 'фильм', 'фильма', 'фильмов')}`, total ? runtime(total) : null, l.ownerName ? `создал(а) ${l.ownerName}` : null]
+      ? [`${l.items.length} ${plural(l.items.length, 'фильм', 'фильма', 'фильмов')}`, total ? runtime(total) : null]
           .filter(Boolean)
           .join(' · ')
       : '',
   );
-  const leader = $derived(sections.flatMap((g) => g.items).find((i) => !i.watchedAt) ?? null);
+  const me = $derived(session.me?.user.profile.id ?? 0);
+  type Order = 'votes' | 'new' | 'short';
+  const ORDERS: [Order, string][] = [['votes', 'По голосам'], ['new', 'Новые'], ['short', 'Короткие']];
+  let view = $state<'want' | 'done'>('want');
+  let order = $state<Order>('votes');
+  let group = $state<number | null>(null);
+  let q = $state('');
+  let more = $state(false);
+  const want = $derived((l?.items ?? []).filter((i) => !i.watchedAt));
+  const done = $derived((l?.items ?? []).filter((i) => !!i.watchedAt));
+  const low = (s: string) => s.toLowerCase().replaceAll('ё', 'е');
+  const rows = $derived.by(() => {
+    const t = low(q.trim());
+    const list = (view === 'want' ? want : done).filter((i) => (group === null || i.groupId === group) && (!t || low(title(i)).includes(t)));
+    const by: Record<Order, (a: SharedItem, b: SharedItem) => number> = {
+      votes: (a, b) => (b.votes ?? 0) - (a.votes ?? 0) || b.addedAt - a.addedAt,
+      new: (a, b) => b.addedAt - a.addedAt,
+      short: (a, b) => (mins(a) ?? 999) - (mins(b) ?? 999),
+    };
+    return list.slice().sort(view === 'done' ? (a, b) => (b.watchedAt ?? 0) - (a.watchedAt ?? 0) : by[order]);
+  });
+  function random() {
+    const i = want[Math.floor(Math.random() * want.length)];
+    if (i?.ext) remember(i.ext);
+    if (i) goto(href(i));
+  }
+  const leader = $derived(want.slice().sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0) || b.addedAt - a.addedAt)[0] ?? null);
+  const voters = (i: SharedItem) => (i.voters ?? []).map((v) => l?.members.find((m) => m.id === v)).filter((m): m is NonNullable<typeof m> => !!m);
+  // Кадры для шапки: широкие кадры своих фильмов, иначе постеры.
+  const shots = $derived(
+    (l?.items ?? [])
+      .slice()
+      .sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0))
+      .map((i) => i.card?.backdrop ?? i.card?.backdropSmall ?? poster(i))
+      .filter((x): x is string => !!x)
+      .slice(0, 4),
+  );
+  // «Что нового» - из самих фильмов: кто что добавил и что посмотрели вместе.
+  const feed = $derived.by(() => {
+    const ev = (l?.items ?? []).flatMap((i) => {
+      const out: { key: string; at: number; text: string; who: SharedItem['addedBy']; poster: string | null }[] = [];
+      if (i.addedBy) out.push({ key: `a${key(i)}`, at: i.addedAt, who: i.addedBy, poster: poster(i), text: `${i.addedBy.id === me ? 'Вы добавили' : `${i.addedBy.name} добавил(а)`} «${title(i)}»` });
+      if (i.watchedAt) out.push({ key: `w${key(i)}`, at: i.watchedAt, who: null, poster: poster(i), text: `Посмотрели вместе «${title(i)}»` });
+      return out;
+    });
+    return ev.sort((a, b) => b.at - a.at).slice(0, 5);
+  });
 
   async function vote(i: SharedItem) {
     const before = { votes: i.votes ?? 0, voted: !!i.voted };
@@ -179,7 +212,6 @@
     starting = true;
     try {
       const room = await post<{ id: string }>('/api/rooms', {});
-      const me = session.me?.user.profile.id;
       await Promise.all(l.members.filter((m) => m.id !== me).map((m) => post(`/api/rooms/${room.id}/invite`, { profileId: m.id }).catch(() => {})));
       if (leader?.card) {
         const t = await api<{ files?: { id: number }[] }>(`/api/titles/${leader.card.id}`).catch(() => null);
@@ -195,90 +227,116 @@
   }
 </script>
 
-<div class="rw-page pl">
-  <a class="back muted" href="/lists"><Icon name="back" size={16} /> Все подборки</a>
+<div class="pl">
   {#if error}
     <div class="empty"><Icon name="info" size={36} /> {error}</div>
   {:else if !l}
     <div class="ph-head skeleton"></div>
   {:else}
-    <div class="layout">
-      <aside class="head">
-        <div class="cover" class:one={cover.length < 4} aria-hidden="true">
-          {#each cover.length >= 4 ? cover : cover.slice(0, 1) as a, i (i)}<img src={artW(a, 342)} alt="" decoding="async" />{/each}
-          {#if !cover.length}<span class="none"><Icon name="film" size={40} /></span>{/if}
+    <!-- Совместная подборка (выбор владельца 28.11): сверху кадры фильмов подборки, огромное название, участники и
+         действия, справа лидер голосования; ниже вкладки «Хотим посмотреть / Посмотрели вместе», список по голосам с
+         лицами проголосовавших, сбоку «Что нового» и участники. -->
+    <section class="hero" aria-label="Подборка">
+      <div class="bgs" class:few={shots.length < 2} aria-hidden="true">
+        {#each shots as a, k (k)}<img src={artW(a, 960)} alt="" decoding="async" />{/each}
+      </div>
+      <div class="in">
+        <div class="main">
+          <a class="back" href="/my"><Icon name="back" size={16} /> Подборки</a>
+          <span class="kicker">Общая подборка · {meta}</span>
+          <h1>{l.name}</h1>
+          <div class="who">
+            <span class="avs">{#each l.members.slice(0, 5) as m (m.id)}<a href="/people/{m.id}" title={m.name}><Avatar avatar={m.avatar} photo={m.photo} size={34} /></a>{/each}</span>
+            <span class="names">{l.members.map((m) => (m.id === me ? 'вы' : m.name)).join(', ')}{l.ownerName ? ` · создал(а) ${l.ownerName}` : ''}</span>
+          </div>
+          <div class="acts">
+            <button class="btn primary" onclick={together} disabled={starting}><Icon name="play" size={16} /> Смотреть вместе</button>
+            <a class="btn" href="/discover"><Icon name="plus" size={16} /> Добавить фильм</a>
+            {#if want.length > 1}<button class="btn" onclick={random}>Случайный</button>{/if}
+            <button class="btn round" aria-label="Ещё" aria-expanded={more} onclick={() => (more = !more)}><Icon name="dots" size={18} /></button>
+          </div>
+          {#if more}
+            <div class="more">
+              <button class="btn sm" onclick={() => ((newName = l?.name ?? ''), (renaming = true), (more = false))}><Icon name="edit" size={14} /> Переименовать</button>
+              <button class="btn sm" onclick={() => (editGroup({ id: null, name: '' }), (more = false))}><Icon name="plus" size={14} /> Новая группа</button>
+              <button class="btn sm danger" onclick={leave}><Icon name={l.mine ? 'trash' : 'logout'} size={14} /> {l.mine ? 'Удалить подборку' : 'Выйти'}</button>
+            </div>
+          {/if}
         </div>
-        <span class="lab">Общая подборка</span>
-        <h1>{l.name}</h1>
-        <p class="muted meta">{meta}</p>
-        <div class="faces">
-          <span class="avs">{#each l.members.slice(0, 5) as m (m.id)}<a href="/people/{m.id}" title={m.name}><Avatar avatar={m.avatar} photo={m.photo} size={36} /></a>{/each}</span>
-          <span class="muted names">{l.members.map((m) => m.name).join(', ')}</span>
-        </div>
-        <div class="acts">
-          <button class="btn primary" onclick={together} disabled={starting}><Icon name="play" size={16} /> Смотреть вместе</button>
-          <a class="btn" href="/discover"><Icon name="plus" size={16} /> Добавить</a>
-          <button class="btn" onclick={openInvite}><Icon name="users" size={16} /> Позвать</button>
-        </div>
-        <div class="acts small">
-          <button class="btn sm ghost" onclick={() => ((newName = l?.name ?? ''), (renaming = true))}><Icon name="edit" size={14} /> Переименовать</button>
-          <button class="btn sm ghost" onclick={() => editGroup({ id: null, name: '' })}><Icon name="plus" size={14} /> Новая группа</button>
-          <button class="btn sm ghost" onclick={leave}><Icon name={l.mine ? 'trash' : 'logout'} size={14} /> {l.mine ? 'Удалить' : 'Выйти'}</button>
-        </div>
-      </aside>
+        {#if leader && (leader.votes ?? 0) > 0}
+          <a class="leader" href={href(leader)} onclick={() => leader?.ext && remember(leader.ext)}>
+            {#if poster(leader)}<img src={artW(poster(leader), 185)} alt="" decoding="async" />{/if}
+            <span><span class="kicker">Лидер голосования</span><b>{title(leader)}</b><small>{info(leader)}</small>
+              <span class="votes"><span class="avs sm">{#each voters(leader).slice(0, 4) as m (m.id)}<Avatar avatar={m.avatar} photo={m.photo} size={24} />{/each}</span><small>{leader.votes} из {l.members.length} {plural(l.members.length, 'хочет', 'хотят', 'хотят')}</small></span>
+            </span>
+          </a>
+        {/if}
+      </div>
+    </section>
 
-      <div class="tracks" class:grp={l.groups.length > 0} style:--tools={l.groups.length ? '230px' : '72px'}>
+    <div class="cols">
+      <div class="body">
+        <nav class="tabs" aria-label="Фильмы подборки">
+          <button aria-current={view === 'want' ? 'page' : undefined} onclick={() => (view = 'want')}>Хотим посмотреть <em>{want.length}</em></button>
+          <button aria-current={view === 'done' ? 'page' : undefined} onclick={() => (view = 'done')}>Посмотрели вместе <em>{done.length}</em></button>
+        </nav>
+        <div class="tools">
+          <div class="chips" role="group" aria-label="Порядок">
+            {#each ORDERS as [k, label] (k)}<button type="button" class="chip" aria-pressed={order === k} onclick={() => (order = k)}>{label}</button>{/each}
+            {#each l.groups as g (g.id)}<button type="button" class="chip" aria-pressed={group === g.id} onclick={() => (group = group === g.id ? null : g.id)}>{g.name}</button>{/each}
+          </div>
+          <input class="input find" type="search" bind:value={q} placeholder="Найти в подборке" aria-label="Найти в подборке" />
+        </div>
         {#if !l.items.length}
           <div class="empty">
             <Icon name="film" size={40} />
-            <p>Подборка пуста. Откройте фильм здесь или в «Каталоге» и добавьте его в подборку.</p>
+            <p>Подборка пуста. Откройте фильм в «Каталоге» и добавьте его в подборку.</p>
             <a class="btn sm" href="/discover">Открыть каталог</a>
           </div>
+        {:else if !rows.length}
+          <p class="faint none">{view === 'done' ? 'Вместе ещё ничего не посмотрели - отметьте фильм галочкой.' : 'Ничего не нашлось.'}</p>
         {:else}
-          <div class="tr th" aria-hidden="true"><span>#</span><span></span><span>Фильм</span><span class="by">Добавил(а)</span><span>Голоса</span><span class="len">Время</span><span></span></div>
-        {/if}
-        {#each sections as g (g.id ?? 'rest')}
-          {#if g.items.length || g.id}
-            <section aria-label={g.name || 'Фильмы'}>
-              {#if g.name}
-                <div class="ghead">
-                  <h2>{g.name} <span class="faint">{g.items.length}</span></h2>
-                  {#if g.id}
-                    <button class="mini" aria-label="Переименовать группу" title="Переименовать" onclick={() => editGroup({ id: g.id, name: g.name })}><Icon name="edit" size={14} /></button>
-                    <button class="mini" aria-label="Удалить группу" title="Удалить группу" onclick={() => dropGroup(g)}><Icon name="trash" size={14} /></button>
+          <ol class="list">
+            {#each rows as i, n (key(i))}
+              <li class="item" class:done={!!i.watchedAt}>
+                <span class="pos">{n + 1}</span>
+                <a class="po" href={href(i)} onclick={() => i.ext && remember(i.ext)} tabindex="-1" aria-hidden="true">{#if poster(i)}<img src={artW(poster(i), 185)} alt="" loading="lazy" decoding="async" />{/if}</a>
+                <span class="ttl">
+                  <a href={href(i)} onclick={() => i.ext && remember(i.ext)}><b>{title(i)}</b></a>
+                  <small>{info(i)}{mins(i) ? ` · ${runtime(mins(i))}` : ''}{#if i.addedBy} · <Avatar avatar={i.addedBy.avatar} photo={i.addedBy.photo} size={18} /> {i.addedBy.id === me ? 'добавили вы' : `добавил(а) ${i.addedBy.name}`}{/if}{i.watchedAt ? ` · посмотрели ${day(i.watchedAt)}` : ''}</small>
+                </span>
+                <button class="vote" aria-pressed={!!i.voted} aria-label="Хочу смотреть: {i.votes ?? 0}" title="Хочу смотреть" onclick={() => vote(i)}>
+                  <Icon name="heart" size={16} /> {i.votes ?? 0}
+                  {#if voters(i).length}<span class="avs sm">{#each voters(i).slice(0, 3) as m (m.id)}<Avatar avatar={m.avatar} photo={m.photo} size={22} />{/each}</span>{/if}
+                </button>
+                <span class="tools2">
+                  <button class="mini" class:on={!!i.watchedAt} aria-label={i.watchedAt ? 'Не смотрели' : 'Посмотрели вместе'} title={i.watchedAt ? 'Снять отметку' : 'Посмотрели вместе'} onclick={() => watched(i)}><Icon name="check" size={15} stroke={2.6} /></button>
+                  {#if l.groups.length}
+                    <Select class="move" variant="inline" label="Группа" value={String(i.groupId ?? '')} onchange={(v) => move(i, v)} options={[{ value: '', label: 'Без группы' }, ...l.groups.map((x) => ({ value: String(x.id), label: x.name }))]} />
                   {/if}
-                </div>
-              {/if}
-              {#if g.items.length}
-                <ol class="list">
-                  {#each g.items as i, n (key(i))}
-                    <li class="tr" class:done={!!i.watchedAt}>
-                      <span class="num faint">{n + 1}</span>
-                      <a class="po" href={href(i)} onclick={() => i.ext && remember(i.ext)} tabindex="-1" aria-hidden="true">{#if poster(i)}<img src={artW(poster(i), 185)} alt="" loading="lazy" decoding="async" />{/if}</a>
-                      <span class="ttl">
-                        <a href={href(i)} onclick={() => i.ext && remember(i.ext)}><b>{title(i)}</b></a>
-                        <small>{info(i)}{i.watchedAt ? ` · посмотрели ${day(i.watchedAt)}` : ''}</small>
-                      </span>
-                      <span class="by">{#if i.addedBy}<Avatar avatar={i.addedBy.avatar} photo={i.addedBy.photo} size={24} /><span>{i.addedBy.name}</span>{/if}</span>
-                      <span><button class="vote" class:on={i.voted} aria-pressed={!!i.voted} aria-label="Хочу смотреть: {i.votes ?? 0}" title="Хочу смотреть" onclick={() => vote(i)}><Icon name="thumbup" size={14} /> {i.votes ?? 0}</button></span>
-                      <span class="len faint">{mins(i) ? runtime(mins(i)) : ''}</span>
-                      <span class="tools">
-                        <button class="mini" class:on={!!i.watchedAt} aria-label={i.watchedAt ? 'Не смотрели' : 'Посмотрели вместе'} title={i.watchedAt ? 'Снять отметку' : 'Посмотрели вместе'} onclick={() => watched(i)}><Icon name="check" size={15} stroke={2.6} /></button>
-                        {#if l.groups.length}
-                          <Select class="move" variant="inline" label="Группа" value={String(i.groupId ?? '')} onchange={(v) => move(i, v)} options={[{ value: '', label: 'Без группы' }, ...l.groups.map((x) => ({ value: String(x.id), label: x.name }))]} />
-                        {/if}
-                        <button class="mini" aria-label="Убрать из подборки" title="Убрать из подборки" onclick={() => remove(i)}><Icon name="close" size={15} /></button>
-                      </span>
-                    </li>
-                  {/each}
-                </ol>
-              {:else}
-                <p class="faint none">Пусто - переложите сюда фильмы выбором группы в строке фильма.</p>
-              {/if}
-            </section>
-          {/if}
-        {/each}
+                  <button class="mini" aria-label="Убрать из подборки" title="Убрать из подборки" onclick={() => remove(i)}><Icon name="close" size={15} /></button>
+                </span>
+              </li>
+            {/each}
+          </ol>
+        {/if}
       </div>
+
+      <aside class="side">
+        {#if feed.length}
+          <h2>Что нового</h2>
+          <ul class="feed">
+            {#each feed as e (e.key)}
+              <li>{#if e.who}<Avatar avatar={e.who.avatar} photo={e.who.photo} size={34} />{:else}<span class="dot"><Icon name="check" size={14} /></span>{/if}<span>{e.text}<small>{day(e.at)}</small></span>{#if e.poster}<img src={artW(e.poster, 92)} alt="" loading="lazy" />{/if}</li>
+            {/each}
+          </ul>
+        {/if}
+        <h2>Участники</h2>
+        <ul class="memb">
+          {#each l.members as m (m.id)}<li><a href="/people/{m.id}"><Avatar avatar={m.avatar} photo={m.photo} size={52} /><span>{m.id === me ? 'Вы' : m.name}</span></a></li>{/each}
+          <li><button class="inv" onclick={openInvite}><span class="plus"><Icon name="plus" size={20} /></span><span>Позвать</span></button></li>
+        </ul>
+      </aside>
     </div>
   {/if}
 </div>
@@ -312,118 +370,99 @@
 </Modal>
 
 <style>
-  .back { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; margin-bottom: 18px; }
-  .layout { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: clamp(24px, 3vw, 44px); align-items: start; }
-  .head { display: grid; gap: 10px; align-content: start; }
-  @media (min-width: 861px) and (min-height: 900px) { .head { position: sticky; top: calc(var(--header, 64px) + 16px); } }
-  .cover { display: grid; grid-template-columns: 1fr 1fr; aspect-ratio: 1; border-radius: 24px; overflow: hidden; background: var(--bg-3, #18181b); margin-bottom: 8px; }
-  .cover.one { grid-template-columns: 1fr; }
-  .cover img { width: 100%; max-width: none; height: 100%; min-height: 0; object-fit: cover; }
-  .cover .none { display: grid; place-items: center; color: var(--faint); }
-  .lab { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
-  h1 { margin: 0; font-size: clamp(30px, 3.2vw, 44px); font-weight: 900; letter-spacing: -0.04em; line-height: 1.04; overflow-wrap: anywhere; }
-  .meta { margin: 0; font-size: 14px; }
-  .faces { display: flex; align-items: center; gap: 12px; min-width: 0; margin-top: 6px; }
+  .pl { padding: calc(var(--header) + 10px) var(--gutter) calc(56px + var(--tabbar)); max-width: 1680px; margin: 0 auto; }
+  .ph-head { height: 460px; border-radius: 30px; }
+  .empty { display: grid; justify-items: center; gap: 12px; padding: 48px 16px; color: var(--muted); text-align: center; }
+  .faint { color: var(--faint); }
+  .none { margin: 18px 0; }
+
+  /* Шапка - кадры фильмов подборки, как герой страницы фильма. */
+  .hero { position: relative; isolation: isolate; display: flex; align-items: flex-end; min-height: 460px; border-radius: 30px; overflow: hidden; background: #0b0b0c; }
+  .bgs { position: absolute; inset: 0; z-index: -2; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+  .bgs img { width: 100%; max-width: none; height: 100%; object-fit: cover; }
+  .hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #000f 0%, #000c 38%, #0005 75%, #0008 100%), linear-gradient(0deg, #000 0%, #0000 50%); }
+  .in { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 30px; align-items: end; width: 100%; padding: 32px 40px 40px; }
+  .main { min-width: 0; }
+  .back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 28px; color: #d1d1d6; font-size: 14px; font-weight: 600; }
+  .kicker { display: block; color: #d1d1d6; font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+  h1 { margin: 10px 0 12px; font-size: clamp(40px, 6vw, 88px); font-weight: 900; letter-spacing: -0.045em; line-height: 0.92; overflow-wrap: anywhere; }
+  .who { display: flex; align-items: center; gap: 12px; min-width: 0; color: #e5e5ea; font-weight: 600; }
   .avs { display: flex; flex: none; }
-  .avs a { display: block; border-radius: 50%; box-shadow: 0 0 0 3px var(--bg, #000); }
-  .avs a:not(:first-child) { margin-left: -10px; }
-  .names { min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .acts.small { margin-top: 0; gap: 4px; }
+  .avs > :global(*) { border-radius: 50%; box-shadow: 0 0 0 2px #000; }
+  .avs > :global(*:not(:first-child)) { margin-left: -9px; }
+  .avs.sm > :global(*:not(:first-child)) { margin-left: -7px; }
+  .names { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+  .btn.round { width: 48px; padding: 0; justify-content: center; }
+  .more { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .danger { color: #ff6961; }
+  .leader { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 14px; align-items: center; width: 330px; padding: 16px; border-radius: 24px; background: #0009; color: inherit; transition: transform 0.3s var(--ease); }
+  .leader:hover { transform: translateY(-3px); }
+  .leader img { width: 92px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 12px; }
+  .leader b { display: block; margin: 4px 0; font-size: 18px; font-weight: 800; }
+  .leader small { color: var(--muted); }
+  .votes { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 
-  .tracks { min-width: 0; display: grid; gap: 8px; }
-  .list { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
-  .tr {
-    display: grid;
-    grid-template-columns: 28px 46px minmax(0, 1fr) 150px 74px 72px var(--tools, 72px);
-    gap: 14px;
-    align-items: center;
-    min-width: 0;
-    padding: 8px 12px;
-    border-radius: 14px;
-    transition: background 0.15s;
-  }
-  .list .tr:hover { background: #ffffff0a; }
-  .th { color: var(--faint); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding-block: 4px; }
-  .num { text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; }
-  .po { display: block; width: 46px; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; background: var(--bg-3, #18181b); }
-  .po img { width: 100%; max-width: none; height: 100%; object-fit: cover; }
-  .ttl { min-width: 0; display: grid; gap: 2px; }
-  .ttl b, .ttl small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ttl a { display: block; min-width: 0; }
-  .ttl a:hover b { text-decoration: underline; }
-  .ttl small { color: var(--muted); font-size: 13px; }
-  .tr.done .po, .tr.done .ttl b { opacity: 0.55; }
-  .by { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
-  .by span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .len { font-size: 14px; white-space: nowrap; }
-  .vote {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 999px;
-    background: #ffffff14;
-    color: var(--text);
-    font: inherit;
-    font-weight: 700;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, transform 0.2s var(--ease, ease);
-  }
-  .vote:hover { background: #ffffff24; }
-  .vote:active { transform: scale(0.94); }
-  .vote.on { background: #fff; color: #000; }
-  .tools { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-  .tools :global(.move) { max-width: 140px; font-size: 12px; }
-  .ghead { display: flex; align-items: center; gap: 6px; margin: 18px 12px 6px; }
-  .ghead h2 { margin: 0 6px 0 0; font-size: 18px; letter-spacing: -0.02em; }
-  .none { font-size: 14px; margin: 0 12px; }
-  .mini {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    flex: none;
-    border-radius: 50%;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--text);
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .mini:hover { background: var(--surface-2); }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; align-items: start; margin-top: 34px; }
+  .body { min-width: 0; }
+  .tabs { display: flex; gap: 28px; margin-bottom: 14px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+  .tabs button { position: relative; flex: none; padding: 0 0 12px; border: 0; background: none; color: #6e6e73; font: inherit; font-size: 17px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+  .tabs button[aria-current='page'] { color: #fff; }
+  .tabs button[aria-current='page']::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; border-radius: 3px; background: #fff; }
+  .tabs em { margin-left: 6px; color: #6e6e73; font-style: normal; }
+  .tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { height: 40px; padding: 0 18px; border: 0; border-radius: 99px; background: #ffffff12; color: #d1d1d6; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .chip[aria-pressed='true'] { background: #fff; color: #000; }
+  .find { width: 240px; min-height: 40px; height: 40px; border-radius: 99px; }
+  .list { margin: 0; padding: 0; list-style: none; }
+  .item { display: grid; grid-template-columns: 26px 64px minmax(0, 1fr) auto auto; gap: 18px; align-items: center; padding: 12px 10px; border-radius: 20px; transition: background 0.2s; }
+  .item:hover { background: #ffffff0a; }
+  .item.done { opacity: 0.6; }
+  .pos { color: #6e6e73; font-size: 18px; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
+  .po img { width: 64px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 10px; }
+  .ttl { min-width: 0; }
+  .ttl b { display: block; font-size: 16.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ttl small { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .vote { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 12px; border: 0; border-radius: 99px; background: #ffffff12; color: inherit; font: inherit; font-weight: 800; font-variant-numeric: tabular-nums; cursor: pointer; transition: background 0.2s, color 0.2s; }
+  .vote[aria-pressed='true'] { background: #fff; color: #000; }
+  .vote .avs > :global(*) { box-shadow: 0 0 0 2px #1c1c1e; }
+  .vote[aria-pressed='true'] .avs > :global(*) { box-shadow: 0 0 0 2px #fff; }
+  .tools2 { display: flex; align-items: center; gap: 4px; }
+  .mini { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s; }
+  .mini:hover { background: #ffffff14; color: #fff; }
   .mini.on { background: #fff; color: #000; }
-  .ph-head { height: 360px; border-radius: 24px; }
-  .empty .btn { margin-top: 6px; }
 
-  @media (max-width: 1180px) {
-    .tr { grid-template-columns: 24px 46px minmax(0, 1fr) 74px var(--tools, 72px); }
-    .tr .by, .tr .len { display: none; }
-  }
-  @media (max-width: 860px) {
-    .layout { grid-template-columns: minmax(0, 1fr); }
-    .head { position: static; grid-template-columns: 132px minmax(0, 1fr); column-gap: 18px; }
-    .cover { grid-row: span 4; margin: 0; border-radius: 18px; }
-    .head > :not(.cover) { grid-column: 2; }
-    .head .acts { grid-column: 1 / -1; }
-  }
-  @media (max-width: 560px) {
-    .head { grid-template-columns: 104px minmax(0, 1fr); }
-    .tr { grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; padding-inline: 4px; }
-    .tr .num { display: none; }
-    .th { display: none; }
-    .po { width: 40px; }
-    .grp .tr > .tools { grid-column: 2 / -1; justify-content: flex-start; }
-    .tools :global(.move) { max-width: none; flex: 1; }
-  }
+  .side h2 { margin: 0 0 14px; font-size: 18px; font-weight: 800; }
+  .feed { display: grid; gap: 16px; margin: 0 0 34px; padding: 0; list-style: none; }
+  .feed li { display: grid; grid-template-columns: 34px minmax(0, 1fr) 40px; gap: 12px; align-items: center; font-size: 14px; }
+  .feed small { display: block; color: #6e6e73; font-size: 12px; }
+  .feed img { width: 40px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; }
+  .dot { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #ffffff14; }
+  .memb { display: flex; flex-wrap: wrap; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  .memb a, .inv { display: grid; justify-items: center; gap: 6px; width: 60px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 12px; font-weight: 700; text-align: center; cursor: pointer; }
+  .memb span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .plus { display: grid; place-items: center; width: 52px; height: 52px; border: 2px dashed #ffffff33; border-radius: 50%; color: var(--muted); }
 
-  .rename { display: grid; gap: 14px; }
-  .rename .btn { justify-self: end; }
-  .pick { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-  .pick button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; text-align: left; }
-  .pick button:hover { background: var(--surface-2); }
+  .rename { display: flex; gap: 10px; }
+  .rename .input { flex: 1; min-width: 0; }
+  .pick { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .pick button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .pick button:hover { background: #ffffff12; }
+
+  @media (max-width: 1000px) {
+    .cols { grid-template-columns: minmax(0, 1fr); }
+    .in { grid-template-columns: minmax(0, 1fr); padding: 22px 22px 26px; }
+    .leader { width: 100%; }
+  }
+  @media (max-width: 700px) {
+    .pl { padding-top: calc(env(safe-area-inset-top) + 12px); }
+    .hero { min-height: 520px; margin-inline: calc(var(--gutter) * -1); border-radius: 0 0 28px 28px; }
+    .bgs { grid-template-columns: 1fr 1fr; }
+    .item { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 12px; padding: 10px 4px; }
+    .pos, .vote .avs { display: none; }
+    .po img { width: 52px; }
+    .tools2 { grid-column: 2 / -1; justify-content: flex-end; }
+    .find { flex: 1; width: auto; min-width: 0; }
+  }
 </style>

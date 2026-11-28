@@ -13,10 +13,10 @@ const PAGES = [
   ['/?tab=movies&status=watched', 'просмотрено'],
   ['/search?q=на', 'поиск'],
   ['/profile', 'аккаунт'],
-  ['/lists', 'списки'],
+  ['/my', 'подборки'],
   ['/discover', 'обзор'],
   ['/feed', 'что смотреть'],
-  ['/my', 'моё'],
+  ['/my?m=watched', 'подборки: просмотрено'],
   ['/discover?chart=top_movies', 'топ-250'],
   ['/discover?kind=series', 'обзор: сериалы'],
   ['/ext/tt1196946', 'фильм из IMDb'],
@@ -92,7 +92,7 @@ test('вёрстка: любые размеры экрана', async ({ page }, 
   ];
   // Узкие телефоны (320, 360) и большие (430): нижняя панель из шести разделов, капсулы профиля, серии.
   const { people } = env();
-  const paths = ['/', '/?tab=series', '/discover', '/search?q=на', '/lists', '/profile', '/profile?tab=account', `/people/${people.me}`, `/chats/${people.anna}`, '/ext/tt1196946', `/title/${env().ids['Тьма']}`, `/title/${env().ids['Ла-Ла Ленд']}`];
+  const paths = ['/', '/?tab=series', '/discover', '/search?q=на', '/my', '/profile', '/profile?tab=account', `/people/${people.me}`, `/chats/${people.anna}`, '/ext/tt1196946', `/title/${env().ids['Тьма']}`, `/title/${env().ids['Ла-Ла Ленд']}`];
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
     for (const path of paths) {

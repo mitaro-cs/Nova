@@ -63,7 +63,7 @@
       </ul>
     {/if}
     <div class="row">
-      <a class="btn ghost" href="/lists" onclick={() => (open = false)}>Все подборки</a>
+      <a class="btn ghost" href="/my" onclick={() => (open = false)}>Все подборки</a>
       <button class="btn primary" onclick={() => ((open = false), (creating = true))}><Icon name="plus" size={16} /> Новая подборка</button>
     </div>
   </div>

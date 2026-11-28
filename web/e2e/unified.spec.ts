@@ -16,7 +16,7 @@ const bar = (page: Page) => page.getByRole('navigation', { name: 'Разделы
 const desk = (page: Page) => page.viewportSize()!.width > 1000;
 const top = (page: Page) => page.getByRole('navigation', { name: 'Разделы кинотеатра' });
 /** Перейти в раздел: на телефоне и планшете - нижней панелью, на компьютере - шапкой («Витрина»). */
-async function goTo(page: Page, name: 'Моё' | 'Подбор' | 'Каталог' | 'Профиль') {
+async function goTo(page: Page, name: 'Подборки' | 'Подбор' | 'Каталог' | 'Профиль') {
   if (!desk(page)) return bar(page).getByRole('link', { name }).click();
   if (name === 'Профиль') return page.getByRole('link', { name: 'Мой профиль' }).click();
   return top(page).getByRole('link', { name }).click();
@@ -30,7 +30,7 @@ test('разделы: внизу на телефоне и планшете, св
     // Компьютер («Витрина»): знак, разделы текстом, поиск, колокольчик и профиль - всё в шапке; нижней панели нет.
     await expect(bar(page)).toBeHidden();
     // Четыре раздела (S1, 23.11): Фильмы, Сериалы и Аниме - полосой внутри Каталога.
-    const labels = [/Главная/, /Подбор/, /Каталог/, /Моё/];
+    const labels = [/Главная/, /Подбор/, /Каталог/, /Подборки/];
     await expect(top(page).getByRole('link')).toHaveText(labels);
     await expect(page.getByRole('searchbox', { name: 'Быстрый поиск' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Мой профиль' })).toBeVisible();
@@ -42,12 +42,12 @@ test('разделы: внизу на телефоне и планшете, св
   } else {
     const links = bar(page).getByRole('link');
     // У вкладки «Профиль» бывает число (просьбы и сообщения) - название всё равно в тексте.
-    await expect(links).toHaveText([/Главная/, /Подбор/, /Каталог/, /Моё/, /Профиль/]);
+    await expect(links).toHaveText([/Главная/, /Подбор/, /Каталог/, /Подборки/, /Профиль/]);
     // Фон панели - сплошной (цвет дизайна менялся), главное - что она не прозрачная.
     await expect(bar(page)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const box = await bar(page).boundingBox();
     expect(box!.y + box!.height).toBeGreaterThan(height - 2);
-    for (const name of ['Главная', 'Подбор', 'Каталог', 'Моё', 'Профиль']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
+    for (const name of ['Главная', 'Подбор', 'Каталог', 'Подборки', 'Профиль']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
   }
   // Аватарного меню в шапке больше нет: профиль - ссылка.
   await expect(page.getByRole('button', { name: /^Меню/ })).toHaveCount(0);
@@ -56,10 +56,10 @@ test('разделы: внизу на телефоне и планшете, св
 test('разделы ведут на свои страницы', async ({ page }) => {
   await offline(page);
   await page.goto(url('/'));
-  await goTo(page, 'Моё');
+  await goTo(page, 'Подборки');
   await expect(page).toHaveURL(/\/my$/);
-  await expect(page.getByRole('heading', { name: 'Моё', level: 1 })).toBeVisible();
-  await expect(page.locator('main').getByRole('link', { name: /Подборки/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Подборки', level: 1 })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Мои отметки' })).toBeVisible();
   await goTo(page, 'Подбор');
   await expect(page).toHaveURL(/\/feed$/);
   await expect(page.getByRole('heading', { name: /Что посмотрим сегодня|Подбор/, level: 1 })).toBeVisible();

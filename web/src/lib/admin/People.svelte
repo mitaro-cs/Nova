@@ -1,6 +1,8 @@
 <script lang="ts">
   import { api, del, errorText, patch, post } from '$lib/api';
-  import { ago } from '$lib/fmt';
+  import { ago, plural } from '$lib/fmt';
+  import { artW } from '$lib/ui/art';
+  import Avatar from '$lib/ui/Avatar.svelte';
   import { session } from '$lib/session.svelte';
   import { ask } from '$lib/ui/dialogs.svelte';
   import Icon from '$lib/ui/Icon.svelte';
@@ -16,6 +18,11 @@
     disabled: boolean;
     seenAt: number | null;
     hasPassword: boolean;
+    avatar?: number;
+    photo?: string | null;
+    hours?: number;
+    watched?: number;
+    recent?: (string | null)[];
   }
   interface Inv {
     code: string;
@@ -42,7 +49,9 @@
 
   const ROLES = { host: 'Хост', admin: 'Администратор', viewer: 'Зритель' };
   // Поиск и фильтры (27.11): при сотне зрителей список без них не читается. `find` - из поиска по управлению (Ctrl K).
-  let { find = '' }: { find?: string } = $props();
+  let { find = '', seats = null }: { find?: string; seats?: { used: number; total: number } | null } = $props();
+  let open = $state<U | null>(null);
+  let pOpen = $state(false);
   let q = $state('');
   let filter = $state<'all' | 'online' | 'admins' | 'idle' | 'off'>('all');
   $effect(() => { q = find; });
@@ -57,7 +66,7 @@
   const isHost = $derived(session.me?.user.role === 'host');
 
   function load() {
-    api<U[]>('/api/admin/users').then((u) => (users = u), (e) => (error = errorText(e)));
+    api<U[]>('/api/admin/users').then((u) => { users = u; if (open) open = u.find((x) => x.id === open!.id) ?? null; }, (e) => (error = errorText(e)));
     api<Inv[]>('/api/admin/invites').then((i) => (invites = i), () => {});
   }
   $effect(load);
@@ -126,6 +135,66 @@
 {#if error}<p class="error">{error}</p>{/if}
 {#if resetResult}<section class="card pane" role="status"><h3>Новый пароль · {resetResult.name}</h3><p>Передайте пароль человеку лично. После входа его можно изменить в профиле.</p><code style="overflow-wrap:anywhere">{resetResult.password}</code><button class="btn" onclick={() => copy(resetResult!.password)}>{copied === resetResult.password ? 'Скопировано' : 'Скопировать пароль'}</button><button class="btn ghost" onclick={() => resetResult = null}>Скрыть</button></section>{/if}
 
+<!-- Зрители карточками, как актёры на странице фильма (28.11): портрет, когда был, часы, последние постеры, роль.
+     Нажатие - окно человека с правами и действиями. -->
+<div class="vhead">
+  <div>
+    {#if seats}<div class="bignum">{seats.used}<small> из {seats.total} мест</small></div><div class="meter" aria-hidden="true"><i style:transform="scaleX({Math.min(1, seats.used / Math.max(1, seats.total))})"></i></div>
+    {:else}<div class="bignum">{users.filter((u) => u.role !== 'host').length}<small> {plural(users.filter((u) => u.role !== 'host').length, 'зритель', 'зрителя', 'зрителей')}</small></div>{/if}
+  </div>
+  <div class="hacts">
+    <button class="btn primary" onclick={() => { created = null; invOpen = true; }}><Icon name="plus" size={16} /> Пригласить</button>
+    <button class="btn" onclick={() => (userOpen = true)}>Добавить вручную</button>
+  </div>
+</div>
+<div class="find">
+  <div class="chips" role="group" aria-label="Кого показать">
+    {#each FILTERS as [id, label] (id)}
+      <button type="button" class="chip" aria-pressed={filter === id} onclick={() => (filter = id)}>{label} <span>{users.filter((u) => match(u, id)).length}</span></button>
+    {/each}
+  </div>
+  <input class="input" type="search" bind:value={q} placeholder="Имя или логин" aria-label="Найти зрителя" />
+</div>
+{#if !shown.length}<p class="muted small">Никого не нашлось</p>{/if}
+<ul class="cards" aria-label="Зрители">
+  {#each shown as u, n (u.id)}
+    <li style:--i={n}>
+      <button type="button" class="person" class:off={u.disabled} onclick={() => { open = u; pOpen = true; }} aria-label="{u.name}, {ROLES[u.role]}">
+        <Avatar avatar={u.avatar ?? 0} photo={u.photo ?? null} size={96} />
+        <b>{u.name}</b>
+        <small>{u.disabled ? 'доступ закрыт' : u.seenAt ? `был ${ago(u.seenAt)}` : 'ещё не заходил'}</small>
+        <small>{u.hours ?? 0} ч · {u.watched ?? 0} {plural(u.watched ?? 0, 'фильм', 'фильма', 'фильмов')}</small>
+        {#if u.recent?.length}<span class="mini" aria-hidden="true">{#each u.recent as r, k (k)}<img src={artW(r, 92)} alt="" loading="lazy" />{/each}</span>{/if}
+        <span class="role" class:v={u.role === 'viewer'}>{ROLES[u.role]}</span>
+      </button>
+    </li>
+  {/each}
+</ul>
+
+<Modal bind:open={pOpen} title={open?.name ?? 'Зритель'}>
+  {#if open}
+    {@const u = open}
+    <div class="sheet">
+      <div class="who"><Avatar avatar={u.avatar ?? 0} photo={u.photo ?? null} size={88} /><div><b>{u.name}</b><small>@{u.login} · {ROLES[u.role]} · {u.disabled ? 'доступ закрыт' : u.seenAt ? `был ${ago(u.seenAt)}` : 'ещё не заходил'}</small></div></div>
+      <div class="facts"><div><strong>{u.hours ?? 0}</strong><span>часов</span></div><div><strong>{u.watched ?? 0}</strong><span>{plural(u.watched ?? 0, 'фильм', 'фильма', 'фильмов')}</span></div></div>
+      {#if u.role !== 'host'}
+        <label class="srow"><span><b>Может скачивать</b><small>Архив сезона или фильма</small></span><input type="checkbox" role="switch" class="tg" checked={u.canDownload} onchange={(e) => update(u, { canDownload: (e.target as HTMLInputElement).checked })} /></label>
+        <label class="srow"><span><b>Доступ к сайту</b><small>Выключено - не войдёт, место беты сохраняется</small></span><input type="checkbox" role="switch" class="tg" checked={!u.disabled} aria-label="Доступ" onchange={(e) => update(u, { disabled: !(e.target as HTMLInputElement).checked })} /></label>
+        {#if isHost}
+          <div class="srow"><span><b>Роль</b><small>Администратор видит «Управление»</small></span><Select variant="sm" fit label="Роль" value={u.role} onchange={(v) => update(u, { role: v })} options={[{ value: 'viewer', label: 'Зритель' }, { value: 'admin', label: 'Администратор' }]} /></div>
+        {/if}
+        <div class="acts">
+          <button class="btn sm" aria-label="Сбросить пароль" onclick={() => resetPassword(u)}><Icon name="refresh" size={15} /> Сбросить пароль</button>
+          <button class="btn sm ghost danger" aria-label="Удалить" onclick={() => remove(u)}><Icon name="trash" size={15} /> Удалить</button>
+        </div>
+      {:else}
+        <p class="muted small">Хост - владелец сервера. Его права не меняются.</p>
+      {/if}
+    </div>
+  {/if}
+</Modal>
+
+
 <section class="card pane">
   <div class="head">
     <h3><Icon name="mail" size={18} /> Приглашения</h3>
@@ -157,58 +226,6 @@
       {/each}
     </ul>
   {/if}
-</section>
-
-<section class="card pane">
-  <div class="head">
-    <h3><Icon name="users" size={18} /> Люди</h3>
-    <button class="btn sm" onclick={() => (userOpen = true)}><Icon name="plus" size={15} /> Добавить вручную</button>
-  </div>
-  <div class="find">
-    <div class="chips" role="group" aria-label="Кого показать">
-      {#each FILTERS as [id, label] (id)}
-        <button type="button" class="chip" aria-pressed={filter === id} onclick={() => (filter = id)}>{label} <span>{users.filter((u) => match(u, id)).length}</span></button>
-      {/each}
-    </div>
-    <input class="input" type="search" bind:value={q} placeholder="Имя или логин" aria-label="Найти зрителя" />
-  </div>
-  {#if !shown.length}<p class="muted small">Никого не нашлось</p>{/if}
-  <ul class="users">
-    {#each shown as u, n (u.id)}
-      <!-- Карточка человека: кто, когда был; ниже - подписанные переключатели и действия. -->
-      <li class="person" class:off={u.disabled} style:--i={n}>
-        <div class="who">
-          <span class="ava">{u.name[0]?.toUpperCase()}</span>
-          <div class="info">
-            <b>{u.name} <span class="role {u.role}">{ROLES[u.role]}</span></b>
-            <span class="muted">@{u.login} · {u.disabled ? 'доступ закрыт' : `был ${ago(u.seenAt)}`}</span>
-          </div>
-        </div>
-        {#if u.role !== 'host'}
-          <div class="toggles">
-            <label class="switch">
-              <input type="checkbox" role="switch" checked={u.canDownload} onchange={(e) => update(u, { canDownload: (e.target as HTMLInputElement).checked })} />
-              <span class="track"></span><Icon name="download" size={15} /> Может скачивать
-            </label>
-            <label class="switch">
-              <input type="checkbox" role="switch" checked={!u.disabled} aria-label="Доступ" onchange={(e) => update(u, { disabled: !(e.target as HTMLInputElement).checked })} />
-              <span class="track"></span><Icon name={u.disabled ? 'eyeoff' : 'eye'} size={15} /> Доступ к сайту
-            </label>
-            {#if isHost}
-              <label class="pick">
-                Роль
-                <Select variant="sm" fit label="Роль" value={u.role} onchange={(v) => update(u, { role: v })} options={[{ value: 'viewer', label: 'Зритель' }, { value: 'admin', label: 'Администратор' }]} />
-              </label>
-            {/if}
-          </div>
-          <div class="acts">
-            <button class="btn sm" aria-label="Сбросить пароль" onclick={() => resetPassword(u)}><Icon name="refresh" size={15} /> Сбросить пароль</button>
-            <button class="btn sm ghost danger" aria-label="Удалить" onclick={() => remove(u)}><Icon name="trash" size={15} /> Удалить</button>
-          </div>
-        {/if}
-      </li>
-    {/each}
-  </ul>
 </section>
 
 <Modal bind:open={invOpen} title="Новое приглашение">
@@ -256,6 +273,47 @@
 </Modal>
 
 <style>
+  /* Карточки зрителей (28.11). */
+  .vhead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; margin-bottom: 8px; }
+  .bignum { font-size: clamp(64px, 8vw, 120px); font-weight: 900; letter-spacing: -0.06em; line-height: 0.85; font-variant-numeric: tabular-nums; }
+  .bignum small { font-size: 0.3em; color: var(--muted); letter-spacing: -0.02em; }
+  .meter { max-width: 520px; height: 6px; margin-top: 16px; border-radius: 6px; background: #ffffff1f; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: #fff; transform-origin: 0 50%; }
+  .hacts { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; margin: 0 0 30px; padding: 0; list-style: none; }
+  .person { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-width: 0; height: 100%; padding: 22px 16px 18px; border: 0; border-radius: 24px; background: radial-gradient(120% 80% at 50% 0%, #1d1d21, #111113 70%); color: inherit; font: inherit; text-align: center; cursor: pointer; transition: transform 0.3s var(--ease); }
+  .person:hover { transform: translateY(-4px); }
+  .person.off { opacity: 0.55; }
+  .person :global(.ava) { margin-bottom: 10px; }
+  .person b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; font-weight: 800; }
+  .person small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
+  .mini { display: flex; gap: 6px; margin-top: 12px; }
+  .mini img { width: 44px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 7px; }
+  .role { margin-top: auto; padding: 4px 10px; border-radius: 99px; background: #fff; color: #000; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+  .person .role { margin-top: 12px; }
+  .role.v { background: #ffffff14; color: var(--muted); }
+  .sheet { display: grid; gap: 4px; }
+  .sheet .who { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .sheet .who b { display: block; font-size: 26px; font-weight: 900; letter-spacing: -0.03em; }
+  .sheet .who small { color: var(--muted); }
+  .sheet .facts { display: flex; margin: 6px 0 8px; }
+  .sheet .facts div { padding: 0 22px; border-left: 1px solid var(--line); }
+  .sheet .facts div:first-child { padding-left: 0; border-left: 0; }
+  .sheet .facts strong { display: block; font-size: 30px; font-weight: 900; letter-spacing: -0.04em; line-height: 1.1; }
+  .sheet .facts span { color: var(--muted); font-size: 13px; }
+  .srow { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .srow > span { display: grid; min-width: 0; }
+  .srow small { color: var(--muted); font-size: 13px; }
+  .tg { appearance: none; flex: none; position: relative; width: 50px; height: 30px; margin: 0; border-radius: 99px; background: #3a3a3c; cursor: pointer; transition: background 0.2s; }
+  .tg::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform 0.25s var(--ease); }
+  .tg:checked { background: var(--ok); }
+  .tg:checked::after { transform: translateX(20px); }
+  .sheet .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  @media (max-width: 640px) {
+    .vhead { grid-template-columns: minmax(0, 1fr); }
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .person :global(.ava) { width: 72px; height: 72px; }
+  }
   .find { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin: 4px 0 12px; }
   .find .input { flex: 0 1 240px; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -282,14 +340,14 @@
     font-size: 13px;
     margin: 6px 0 12px;
   }
-  ul {
+  .inv {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
     gap: 6px;
   }
-  li {
+  .inv li {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -299,7 +357,7 @@
     background: rgba(0, 0, 0, 0.2);
     font-size: 13px;
   }
-  li.off {
+  .inv li.off {
     opacity: 0.5;
   }
   .grow {
@@ -311,48 +369,6 @@
     background: rgba(0, 0, 0, 0.35);
     font-size: 13px;
     letter-spacing: 0.05em;
-  }
-  .users {
-    margin-top: 14px;
-  }
-  .ava {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    background: var(--surface-3);
-    font-weight: 700;
-  }
-  .info {
-    flex: 1;
-    min-width: 160px;
-    display: grid;
-  }
-  .info b {
-    font-size: 14px;
-  }
-  .role {
-    margin-left: 6px;
-    padding: 1px 7px;
-    border-radius: 99px;
-    font-size: 11px;
-    font-weight: 600;
-    background: var(--surface-2);
-  }
-  .role.host {
-    background: #fff;
-    color: #0a0a0a;
-  }
-  .role.admin {
-    background: rgba(255, 255, 255, 0.35);
-  }
-  .sw {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--muted);
-    cursor: pointer;
   }
   .form {
     display: grid;
@@ -381,106 +397,5 @@
     font-size: 14px;
     word-break: break-all;
     letter-spacing: 0;
-  }
-  /* Люди - карточками (раньше - строка из шести безымянных значков). */
-  .users {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-    gap: 12px;
-  }
-  .person {
-    display: grid;
-    align-content: start;
-    gap: 14px;
-    padding: 16px;
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: var(--surface-2);
-    align-self: start;
-    animation: card-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--i, 0) * 30ms) both;
-    transition: border-color 0.2s ease, transform 0.2s ease;
-  }
-  .person:hover {
-    border-color: var(--line-strong);
-  }
-  .who {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
-  }
-  .who .info {
-    min-width: 0;
-  }
-  .who .info b,
-  .who .info span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .toggles {
-    display: grid;
-    gap: 10px;
-  }
-  .switch {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .switch input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .track {
-    position: relative;
-    flex: none;
-    width: 38px;
-    height: 22px;
-    border-radius: 11px;
-    background: rgba(255, 255, 255, 0.16);
-    transition: background-color 0.2s ease;
-  }
-  .track::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .switch input:checked + .track {
-    background: #30d158;
-  }
-  .switch input:checked + .track::after {
-    transform: translateX(16px);
-  }
-  .switch input:focus-visible + .track {
-    outline: 2px solid #fff;
-    outline-offset: 2px;
-  }
-  .pick {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-  }
-  @keyframes card-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
   }
 </style>

@@ -105,10 +105,11 @@ test('совместный список: из фильма - в список с 
   await form.getByRole('button', { name: 'Создать' }).click();
   await expect(page.getByRole('menuitemcheckbox', { name: name })).toHaveAttribute('aria-checked', 'true');
 
-  await page.goto(url('/lists'));
+  await page.goto(url('/my'));
   await page.getByRole('link', { name: new RegExp(name) }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
-  await page.getByRole('button', { name: 'Посмотрели вместе' }).click();
+  await page.getByRole('button', { name: 'Посмотрели вместе', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Фильмы подборки' }).getByRole('button', { name: /Посмотрели вместе/ }).click();
   await expect(page.getByRole('button', { name: 'Не смотрели' })).toBeVisible();
   // «Плейлист»: голос «хочу смотреть», кнопка «Смотреть вместе».
   await page.getByRole('button', { name: 'Хочу смотреть: 0' }).click();
@@ -116,19 +117,22 @@ test('совместный список: из фильма - в список с 
   await expect(page.getByRole('button', { name: 'Смотреть вместе' })).toBeVisible();
   await expectClean(page, 'подборка-плейлист');
 
-  // Группы: создать и переложить фильм.
+  // Группы: создать и переложить фильм (группа - фильтр-капсула над списком).
+  await page.getByRole('button', { name: 'Ещё' }).click();
   await page.getByRole('button', { name: 'Новая группа' }).click();
   const g = page.getByRole('dialog', { name: 'Новая группа' });
   await g.getByLabel('Название группы').fill('На выходные');
   await g.getByRole('button', { name: 'Создать' }).click();
   await choose(page, 'Группа', 'На выходные');
-  await expect(page.getByRole('region', { name: 'На выходные' }).getByRole('link', { name: /Дюна/ })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('region', { name: 'На выходные' }).getByRole('link', { name: /Дюна/ })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Фильмы подборки' }).getByRole('button', { name: /Посмотрели вместе/ }).click();
+  await page.getByRole('group', { name: 'Порядок' }).getByRole('button', { name: 'На выходные' }).click();
+  await expect(page.locator('.list').getByRole('link', { name: /Дюна/ })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await page.getByRole('button', { name: 'Ещё' }).click();
+  await page.getByRole('button', { name: 'Удалить подборку' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Удалить', exact: true }).click();
-  await expect(page).toHaveURL(/\/lists$/);
+  await expect(page).toHaveURL(/\/my$/);
 });
 
 test('один аккаунт: без «Кто смотрит?», аватар меняется в аккаунте', async ({ page }) => {

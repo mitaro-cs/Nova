@@ -55,9 +55,7 @@ test('кнопка очистки кэша согласована с его ра
 
 test('разделы управления: у каждого шапка с подсказкой и вкладки', async ({ page }) => {
   await page.goto(url('/admin?tab=folders'));
-  const head = page.locator('.sec-h');
-  await expect(head.getByRole('heading', { name: 'Библиотека' })).toBeVisible();
-  await expect(head.locator('p').first()).toBeVisible();
-  await expect(head.getByRole('link', { name: 'Папки' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Разделы управления' }).getByRole('link', { name: /Библиотека/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: /Вкладки раздела/ }).getByRole('link', { name: 'Папки' })).toHaveAttribute('aria-current', 'page');
   await expectClean(page, 'папки');
 });

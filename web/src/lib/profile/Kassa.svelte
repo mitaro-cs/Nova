@@ -79,7 +79,7 @@
   const quick = $derived.by<Quick[]>(() => [
     { href: '/chats', icon: 'mail', label: 'Чаты', hint: 'Переписка с друзьями', count: unseen.unread },
     { href: '/people', icon: 'users', label: 'Друзья', hint: 'Найти и позвать', count: unseen.requests },
-    { href: '/lists', icon: 'grid', label: 'Подборки', hint: 'Общие списки фильмов' },
+    { href: '/my', icon: 'grid', label: 'Подборки', hint: 'Отметки и общие подборки' },
     { act: () => window.dispatchEvent(new Event('nova-room-link')), icon: 'party', label: 'Создать комнату', hint: 'Смотреть вместе' },
     ...(session.me?.manage ? [{ href: '/admin', icon: 'sliders' as IconName, label: 'Управление', hint: 'Карта дома и настройки' }] : []),
     { act: () => window.dispatchEvent(new Event('nova-tour')), icon: 'sparkle', label: 'Экскурсия', hint: 'Показать, что где' },

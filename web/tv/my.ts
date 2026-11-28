@@ -10,7 +10,7 @@ export const myScreen: Screen = async (root) => {
     ['watching', 'Смотрю'],
     ['watched', 'Просмотрено'],
   ];
-  let h = bar('my') + '<section class="page"><h1 class="title">Моё</h1></section><div class="rows">';
+  let h = bar('my') + '<section class="page"><h1 class="title">Подборки</h1></section><div class="rows">';
   let any = false;
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
