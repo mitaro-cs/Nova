@@ -456,8 +456,9 @@ pub fn store_link_progress(app: &App, me: i64, id: i64, position: f64, duration:
             c.execute(
                 "INSERT INTO ext_marks (profile_id, ext_id, status, at) VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(profile_id, ext_id) DO UPDATE SET status = ?3, at = ?4
-                 WHERE ext_marks.status != 'watched' OR ?3 = 'watched'",
-                params![me, e, status, now],
+                 WHERE ext_marks.status != 'watched' OR ?3 = 'watched' OR ?5",
+                // Сериал, отмеченный «Просмотрено», снова смотрят (новый сезон, пересмотр) - это «Смотрю».
+                params![me, e, status, now, series],
             )?;
             return Ok(status == "watched" && before.as_deref() != Some("watched"));
         }

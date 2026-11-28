@@ -192,11 +192,20 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
         r.collect()
     })?;
     for (e, ext_id) in ext {
-        let (added_at, watched_at, group, by): (i64, Option<i64>, Option<i64>, Option<i64>) = app.db.with(|c| {
+        // Кадр фильма ленты (если страница фильма уже открывалась) - для шапки подборки вместо постера с надписями.
+        #[allow(clippy::type_complexity)]
+        let (added_at, watched_at, group, by, backdrop): (
+            i64,
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+            Option<String>,
+        ) = app.db.with(|c| {
             c.query_row(
-                "SELECT added_at, watched_at, group_id, added_by FROM list_ext WHERE list_id = ? AND ext_id = ?",
+                "SELECT x.added_at, x.watched_at, x.group_id, x.added_by, NULLIF(e.backdrop, '')
+                     FROM list_ext x JOIN ext_titles e ON e.id = x.ext_id WHERE x.list_id = ? AND x.ext_id = ?",
                 params![id, ext_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
         })?;
         let added_by = match by {
@@ -207,7 +216,7 @@ pub async fn list(State(app): State<Arc<App>>, v: Viewer, Path(id): Path<i64>) -
             None => None,
         };
         items.push(
-            json!({"ext": e, "addedAt": added_at, "watchedAt": watched_at, "addedBy": added_by, "groupId": group}),
+            json!({"ext": e, "backdrop": backdrop, "addedAt": added_at, "watchedAt": watched_at, "addedBy": added_by, "groupId": group}),
         );
     }
     let groups: Vec<Value> = app.db.with(|c| {

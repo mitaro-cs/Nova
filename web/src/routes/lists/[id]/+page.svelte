@@ -171,15 +171,11 @@
   }
   const leader = $derived(want.slice().sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0) || b.addedAt - a.addedAt)[0] ?? null);
   const voters = (i: SharedItem) => (i.voters ?? []).map((v) => l?.members.find((m) => m.id === v)).filter((m): m is NonNullable<typeof m> => !!m);
-  // Кадры для шапки: широкие кадры своих фильмов, иначе постеры.
-  const shots = $derived(
-    (l?.items ?? [])
-      .slice()
-      .sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0))
-      .map((i) => i.card?.backdrop ?? i.card?.backdropSmall ?? poster(i))
-      .filter((x): x is string => !!x)
-      .slice(0, 4),
-  );
+  // Фон шапки (28.11, «задний фон плохой»): широкий кадр фильма-лидера на всю шапку. Постер растянутым фоном не ставим -
+  // на нём надписи и имена актёров; кадра нет ни у одного - справа ровный ряд постеров, уходящий в темноту.
+  const ranked = $derived((l?.items ?? []).slice().sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0) || b.addedAt - a.addedAt));
+  const shot = $derived(ranked.map((i) => i.card?.backdrop ?? i.card?.backdropSmall ?? i.backdrop ?? null).find((x) => !!x) ?? null);
+  const shelf = $derived(shot ? [] : ranked.map(poster).filter((x): x is string => !!x).slice(0, 5));
   // «Что нового» - из самих фильмов: кто что добавил и что посмотрели вместе.
   const feed = $derived.by(() => {
     const ev = (l?.items ?? []).flatMap((i) => {
@@ -237,9 +233,11 @@
          действия, справа лидер голосования; ниже вкладки «Хотим посмотреть / Посмотрели вместе», список по голосам с
          лицами проголосовавших, сбоку «Что нового» и участники. -->
     <section class="hero" aria-label="Подборка">
-      <div class="bgs" class:few={shots.length < 2} aria-hidden="true">
-        {#each shots as a, k (k)}<img src={artW(a, 960)} alt="" decoding="async" />{/each}
-      </div>
+      {#if shot}
+        <div class="bgs" aria-hidden="true"><img src={artW(shot, 1920)} alt="" decoding="async" /></div>
+      {:else if shelf.length}
+        <div class="shelf" aria-hidden="true">{#each shelf as a, k (k)}<img src={artW(a, 342)} alt="" decoding="async" />{/each}</div>
+      {/if}
       <div class="in">
         <div class="main">
           <a class="back" href="/my"><Icon name="back" size={16} /> Подборки</a>
@@ -378,8 +376,10 @@
 
   /* Шапка - кадры фильмов подборки, как герой страницы фильма. */
   .hero { position: relative; isolation: isolate; display: flex; align-items: flex-end; min-height: 460px; border-radius: 30px; overflow: hidden; background: #0b0b0c; }
-  .bgs { position: absolute; inset: 0; z-index: -2; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
-  .bgs img { width: 100%; max-width: none; height: 100%; object-fit: cover; }
+  .bgs { position: absolute; inset: 0; z-index: -2; }
+  .bgs img { width: 100%; max-width: none; height: 100%; object-fit: cover; object-position: center 30%; }
+  .shelf { position: absolute; z-index: -2; top: 28px; bottom: 28px; right: 28px; display: flex; gap: 14px; justify-content: flex-end; width: 62%; overflow: hidden; }
+  .shelf img { flex: none; height: 100%; width: auto; max-width: none; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 16px; opacity: 0.55; }
   .hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #000f 0%, #000c 38%, #0005 75%, #0008 100%), linear-gradient(0deg, #000 0%, #0000 50%); }
   .in { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 30px; align-items: end; width: 100%; padding: 32px 40px 40px; }
   .main { min-width: 0; }

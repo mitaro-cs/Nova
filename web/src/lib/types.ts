@@ -346,6 +346,8 @@ export interface SharedItem {
   voted?: boolean;
   /** Кто проголосовал - номера профилей участников. */
   voters?: number[];
+  /** Кадр фильма ленты, если уже скачан (у своих - `card.backdrop`). */
+  backdrop?: string | null;
 }
 
 export interface SharedListFull {

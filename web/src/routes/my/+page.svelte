@@ -224,6 +224,7 @@
   .stack :global(.ava) { margin-right: -8px; box-shadow: 0 0 0 2px #000; }
   .cover b { display: block; margin-top: 12px; font-size: 17px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cover small { display: block; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cover.add { align-self: start; }
   .add .art { place-items: center; grid-template-columns: 1fr; grid-template-rows: 1fr; border: 2px dashed #ffffff2e; background: none; }
   .add .art::after { content: none; }
   .add .art > span { display: grid; justify-items: center; gap: 10px; color: var(--muted); font-weight: 700; }

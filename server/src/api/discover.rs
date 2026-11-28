@@ -91,7 +91,7 @@ pub async fn feed(State(app): State<Arc<App>>, v: Viewer, Query(q): Query<FeedQu
 fn because(app: &App, v: &Viewer) -> ApiResult<Option<Value>> {
     let seed: Option<(String, String, String, String)> = app.db.with(|c| {
         c.query_row(
-            "SELECT e.id, e.title, e.kind, e.extra FROM ext_titles e
+            "SELECT e.id, COALESCE((SELECT title FROM title_localizations l WHERE l.id = e.id), e.title), e.kind, e.extra FROM ext_titles e
              WHERE e.extra IS NOT NULL AND json_array_length(json_extract(e.extra, '$.similar')) > 3 AND (
                e.id IN (SELECT ext_id FROM ext_marks WHERE profile_id = ?1 AND status IN ('watched', 'watching'))
                OR e.id IN (SELECT t.imdb_id FROM watched w JOIN titles t ON t.id = w.title_id WHERE w.profile_id = ?1)

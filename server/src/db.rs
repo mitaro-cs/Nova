@@ -769,6 +769,20 @@ CREATE TABLE list_votes (
   PRIMARY KEY (list_id, item, profile_id)
 );
 "#,
+    // 44 (28.11): «смотрю „Клан Сопрано“, а в „Смотрю“ его нет» - начатое по ссылке (не досмотренное) и сериалы с отмеченными
+    // сериями получают «Смотрю» сами, если статуса не было или стоял «Хочу». Брошенное не трогаем.
+    r#"
+INSERT INTO ext_marks (profile_id, ext_id, status, at)
+SELECT profile_id, ext_id, 'watching', MAX(at) FROM (
+  SELECT p.profile_id, l.ext_id, p.updated_at AS at FROM link_progress p JOIN links l ON l.id = p.link_id
+   WHERE l.ext_id IS NOT NULL AND (p.duration <= 0 OR p.position < p.duration * 0.92)
+  UNION ALL SELECT profile_id, ext_id, at FROM ext_seen
+) s
+WHERE ext_id IN (SELECT id FROM ext_titles)
+  AND NOT EXISTS (SELECT 1 FROM ext_dropped d WHERE d.profile_id = s.profile_id AND d.ext_id = s.ext_id)
+GROUP BY profile_id, ext_id
+ON CONFLICT(profile_id, ext_id) DO UPDATE SET status = 'watching', at = excluded.at WHERE ext_marks.status = 'want';
+"#,
 ];
 
 /// Сколько миграций должна знать версия Nova, чтобы работать с базой этой версии. Миграции
