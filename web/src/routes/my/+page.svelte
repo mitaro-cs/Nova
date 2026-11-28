@@ -205,7 +205,8 @@
   .chip[aria-pressed='true'] { background: #fff; color: #000; }
   .sp { flex: 1; }
   .find { width: 220px; min-height: 40px; height: 40px; border-radius: 99px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 24px 16px; }
+  /* Постер - `--pw`, растёт с шириной окна, как в рядах сайта. */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, var(--pw)); gap: 24px 16px; }
   .more { display: flex; justify-content: center; margin-top: 24px; }
 
   .row { display: flex; align-items: baseline; gap: 14px; margin: 52px 0 18px; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
@@ -234,7 +235,7 @@
     .n { font-size: 40px; }
     .tile b { font-size: 16px; }
     .fan { top: 12px; width: 50%; }
-    .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 10px; }
+    .grid { gap: 16px 10px; }
     .lists { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; }
     .find { flex: 1; width: auto; min-width: 0; }
   }

@@ -43,7 +43,7 @@ test('возврат на раздел вкладкой - на то же мес�
   const nav = page.getByRole('navigation', { name: 'Разделы кинотеатра' });
   await nav.getByRole('link', { name: 'Главная' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await nav.getByRole('link', { name: 'Подбор' }).click();
+  await nav.getByRole('link', { name: 'Подбор', exact: true }).click();
   await expect(page).toHaveURL(/\/feed$/);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(was - 60);
 });

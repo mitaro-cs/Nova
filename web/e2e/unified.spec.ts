@@ -17,9 +17,9 @@ const desk = (page: Page) => page.viewportSize()!.width > 1000;
 const top = (page: Page) => page.getByRole('navigation', { name: 'Разделы кинотеатра' });
 /** Перейти в раздел: на телефоне и планшете - нижней панелью, на компьютере - шапкой («Витрина»). */
 async function goTo(page: Page, name: 'Подборки' | 'Подбор' | 'Каталог' | 'Профиль') {
-  if (!desk(page)) return bar(page).getByRole('link', { name }).click();
+  if (!desk(page)) return bar(page).getByRole('link', { name, exact: name === 'Подбор' }).click();
   if (name === 'Профиль') return page.getByRole('link', { name: 'Мой профиль' }).click();
-  return top(page).getByRole('link', { name }).click();
+  return top(page).getByRole('link', { name, exact: name === 'Подбор' }).click();
 }
 
 test('разделы: внизу на телефоне и планшете, сверху на компьютере', async ({ page }) => {
@@ -47,7 +47,7 @@ test('разделы: внизу на телефоне и планшете, св
     await expect(bar(page)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const box = await bar(page).boundingBox();
     expect(box!.y + box!.height).toBeGreaterThan(height - 2);
-    for (const name of ['Главная', 'Подбор', 'Каталог', 'Подборки', 'Профиль']) await expect(bar(page).getByRole('link', { name })).toBeVisible();
+    for (const name of ['Главная', 'Подбор', 'Каталог', 'Подборки', 'Профиль']) await expect(bar(page).getByRole('link', { name, exact: name === 'Подбор' })).toBeVisible();
   }
   // Аватарного меню в шапке больше нет: профиль - ссылка.
   await expect(page.getByRole('button', { name: /^Меню/ })).toHaveCount(0);

@@ -296,7 +296,7 @@
   .facts { display: flex; flex-wrap: wrap; gap: 18px 0; }
   .facts div { padding: 0 32px; border-left: 1px solid var(--line); }
   .facts div:first-child { padding-left: 0; border-left: 0; }
-  .facts strong { display: block; font-size: 44px; font-weight: 900; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .facts strong { display: block; margin-bottom: 4px; font-size: 44px; font-weight: 900; letter-spacing: -0.04em; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .facts span { color: var(--muted); font-size: 14px; }
 
   .poster { flex: none; width: 168px; color: inherit; }
